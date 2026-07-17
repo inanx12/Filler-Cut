@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+.venv/
+# Üretilen analiz/çıktı dosyaları repo'ya girmez
+*.wav
+*_temiz.mp4
+rapor.json
