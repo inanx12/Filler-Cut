@@ -63,6 +63,9 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 - **Her modül ayrı commit** — Conventional Commits (`feat(audio): ...`,
   `test: ...`, `docs: ...`). Tek devasa commit yok.
 - **Push öncesi kullanıcı onayı şart** — commit serbest, push ancak onayla.
+- **Bilinen sınırlar `KNOWN_ISSUES.md`'de tutulur** — test geçse de bilinen
+  sınır varsa KI-N kimliğiyle oraya kaydedilir; testler ve kod yorumları bu
+  kimliğe referans verir. Sessizce workaround yazılmaz.
 - **v0.1 scope dışına çıkma:** `config.py`, `encoder.py` (HW detect),
   `wcpp_backend.py`, `html_report.py`, GUI, çoklu video → v0.2+ kapsamıdır.
   v0.1 bitmeden v0.2'ye geçilmez.
