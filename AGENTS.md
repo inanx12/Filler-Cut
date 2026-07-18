@@ -82,7 +82,7 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `detect/silence.py` (silence_min_ms filtresi) | `ff94193` |
 | `transcribe/base.py` + `fw_backend.py` (Transcriber ABC + faster-whisper) | `c92a766` |
 
-**Test sayısı:** 123 (`python -m pytest` → 123 passed).
+**Test sayısı:** 125 (`python -m pytest` → 125 passed).
 
 **Sıradaki modül:** `report/json_report.py` (CutPlan → rapor.json) — ardından
 `render/render.py` (CPU re-encode + concat), sonra `pipeline.py` + `cli.py`.
@@ -94,3 +94,7 @@ cache'le. Birim testlerde WhisperModel mock'lanır; gerçek model koşusu
 kullanıcı makinesinde yapılır. CUDA kurulumu `pip install -e ".[cuda]"`
 (cuBLAS/cuDNN pip paketleri); Windows'ta DLL dizini kaydı
 `fw_backend._register_nvidia_dll_dirs()` ile import öncesi otomatiktir.
+Gerçek donanımda doğrulanan tuzaklar: CTranslate2 DLL çözümlemesi process
+PATH'ini kullanır (`add_dll_directory` tek başına yetmez — dizinler PATH'in
+başına eklenir, çift ekleme yapılmaz) ve nvidia-* paketleri namespace
+package'tir (`__file__` None döner, dizin `__path__[0]`'dan bulunur).

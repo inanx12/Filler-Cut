@@ -4,9 +4,9 @@
 indirir (``MODEL_SIZE="small"`` için ~1 GB); sonraki çalıştırmalarda
 önbellekten yüklenir. CI'da cache'lenmelidir.
 
-Windows + CUDA: cuBLAS/cuDNN DLL'lerinin dizin kaydı (``os.add_dll_directory``)
-bu modülde, ``faster_whisper`` import'undan ÖNCE yapılır — bkz.
-``_register_nvidia_dll_dirs``.
+Windows + CUDA: cuBLAS/cuDNN DLL dizinlerinin kaydı (process PATH'i +
+``os.add_dll_directory``) bu modülde, ``faster_whisper`` import'undan ÖNCE
+yapılır — bkz. ``_register_nvidia_dll_dirs``.
 
 Çevrim sözleşmesi: Whisper saniye-float timestamp verir; ``list[Word]``
 dönülmeden önce ``int(round(sn * 1000))`` ile ms-int'e çevrilir. Bu çevrim
@@ -29,10 +29,14 @@ def _register_nvidia_dll_dirs() -> None:
     """pip ile kurulan ``nvidia-*`` paketlerinin ``bin/`` dizinlerini DLL yoluna ekler.
 
     Windows'ta CTranslate2 (faster-whisper'ın motoru) cuBLAS/cuDNN DLL'lerini
-    import anında yükler; bu DLL'ler ``nvidia/cublas/bin`` ve ``nvidia/cudnn/bin``
-    altında durur ve Windows site-packages alt dizinlerini kendiliğinden aramaz.
-    Paketler kuruluysa (``.[cuda]`` extra'sı) dizinler kaydedilir; kurulu değilse
-    (CPU-only kurulum) sessizce geçilir. Windows dışında no-op.
+    import anında yükler ve DLL çözümlemesi için process PATH'ine bakar —
+    ``os.add_dll_directory`` tek başına yetmez (gerçek donanımda doğrulandı).
+    Bu yüzden dizinler PATH'in **başına** eklenir; ``add_dll_directory`` ek
+    güvence olarak kalır. Dizin zaten PATH'teyse tekrar eklenmez.
+
+    nvidia-* paketleri namespace package'tir (``__file__`` None döner) — paket
+    dizini ``__path__[0]`` üzerinden bulunur. Paketler kurulu değilse (CPU-only
+    kurulum) sessizce geçilir. Windows dışında no-op.
     """
     if os.name != "nt":
         return
@@ -44,9 +48,14 @@ def _register_nvidia_dll_dirs() -> None:
         pkg_paths = getattr(mod, "__path__", None)
         if not pkg_paths:
             continue
-        bin_dir = Path(str(pkg_paths[0])) / "bin"
-        if bin_dir.is_dir():
-            os.add_dll_directory(str(bin_dir))
+        bin_dir = Path(str(pkg_paths[0])) / "bin"  # namespace package: __file__ None
+        if not bin_dir.is_dir():
+            continue
+        os.add_dll_directory(str(bin_dir))  # ek güvence; asıl çözüm PATH
+        # CTranslate2 DLL çözümlemesi process PATH'i kullanır (Windows, CUDA 12)
+        bin_str = str(bin_dir)
+        if bin_str not in os.environ.get("PATH", "").split(os.pathsep):
+            os.environ["PATH"] = bin_str + os.pathsep + os.environ.get("PATH", "")
 
 
 # DİKKAT: faster_whisper import'u CTranslate2'yi (ve CUDA DLL yüklemesini)
