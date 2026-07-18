@@ -107,7 +107,7 @@ class CutPlan(BaseModel):
                 raise ValueError("cut listesinde kind='keep' segment olamaz")
 
         tumu = sorted([*self.keep, *self.cut], key=lambda s: (s.start_ms, s.end_ms))
-        for onceki, sonraki in zip(tumu, tumu[1:]):
+        for onceki, sonraki in zip(tumu, tumu[1:], strict=False):
             if sonraki.start_ms < onceki.end_ms:
                 raise ValueError(
                     f"çakışan segmentler: [{onceki.start_ms},{onceki.end_ms}) ile "

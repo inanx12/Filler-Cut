@@ -35,7 +35,9 @@ class TestMerge:
 
     def test_ardisik_fillerlar_padding_değince_birlesir(self) -> None:
         # "eee ııı" iç içe/overlap'li kelimeler: [1000,1400]→[1080,1280], [1200,1600]→[1280,1480]
-        plan = build_cutplan([_filler(1000, 1400), _filler(1200, 1600, "ııı")], total_duration_ms=5_000)
+        plan = build_cutplan(
+            [_filler(1000, 1400), _filler(1200, 1600, "ııı")], total_duration_ms=5_000
+        )
         assert _araliklar(plan, "cut") == [(1_080, 1_480)]
 
     def test_eee_iii_sey_zinciri(self) -> None:
@@ -119,7 +121,9 @@ class TestUcSenaryolar:
             araliklar = _araliklar(plan, liste)
             assert araliklar == sorted(araliklar)
         assert _araliklar(plan, "cut") == [(1_080, 1_280), (2_200, 3_000), (3_600, 4_000)]
-        assert _araliklar(plan, "keep") == [(0, 1_080), (1_280, 2_200), (3_000, 3_600), (4_000, 5_000)]
+        assert _araliklar(plan, "keep") == [
+            (0, 1_080), (1_280, 2_200), (3_000, 3_600), (4_000, 5_000)
+        ]
 
     def test_gecersiz_parametreler(self) -> None:
         with pytest.raises(ValueError):
