@@ -8,6 +8,7 @@ eder (`.word`, `.start`/`.end` saniye-float, `.probability`).
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -22,6 +23,7 @@ from fillercut.transcribe.fw_backend import (
     LANGUAGE,
     MODEL_SIZE,
     FasterWhisperTranscriber,
+    _register_nvidia_dll_dirs,
     _sn_to_ms,
     _words_from_segments,
 )
@@ -169,3 +171,58 @@ class TestFasterWhisperTranscriber:
             with pytest.raises(FileNotFoundError):
                 FasterWhisperTranscriber().transcribe(tmp_path / "yok.wav")
             wm.assert_not_called()  # ~1 GB indirme boşa tetiklenmez
+
+
+class TestRegisterNvidiaDllDirs:
+    """os.add_dll_directory her platformda yok — monkeypatch ile sahte eklenir."""
+
+    def test_windows_degilse_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        eklendi: list[str] = []
+        monkeypatch.setattr(os, "name", "posix")
+        monkeypatch.setattr(os, "add_dll_directory", eklendi.append, raising=False)
+        with patch("importlib.import_module") as mi:
+            _register_nvidia_dll_dirs()
+        mi.assert_not_called()  # paket import'u bile denenmez
+        assert eklendi == []
+
+    def test_paketler_bulunursa_bin_dizinleri_kaydedilir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cublas = tmp_path / "nvidia" / "cublas"
+        cudnn = tmp_path / "nvidia" / "cudnn"
+        (cublas / "bin").mkdir(parents=True)
+        (cudnn / "bin").mkdir(parents=True)
+        sahte_paketler = {
+            "nvidia.cublas": SimpleNamespace(__path__=[str(cublas)]),
+            "nvidia.cudnn": SimpleNamespace(__path__=[str(cudnn)]),
+        }
+        eklendi: list[str] = []
+        monkeypatch.setattr(os, "name", "nt")
+        monkeypatch.setattr(os, "add_dll_directory", eklendi.append, raising=False)
+        with patch("importlib.import_module", side_effect=lambda ad: sahte_paketler[ad]):
+            _register_nvidia_dll_dirs()
+        assert eklendi == [str(cublas / "bin"), str(cudnn / "bin")]
+
+    def test_paket_yoksa_sessizce_gecer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """CPU-only kurulum: ImportError patlamamalı, kayıt yapılmamalı."""
+        eklendi: list[str] = []
+        monkeypatch.setattr(os, "name", "nt")
+        monkeypatch.setattr(os, "add_dll_directory", eklendi.append, raising=False)
+        with patch("importlib.import_module", side_effect=ImportError("yok")):
+            _register_nvidia_dll_dirs()
+        assert eklendi == []
+
+    def test_bin_dizini_yoksa_kaydedilmez(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cublas = tmp_path / "nvidia" / "cublas"
+        cublas.mkdir(parents=True)  # bin/ OLUŞTURULMUYOR
+        eklendi: list[str] = []
+        monkeypatch.setattr(os, "name", "nt")
+        monkeypatch.setattr(os, "add_dll_directory", eklendi.append, raising=False)
+        with patch(
+            "importlib.import_module",
+            return_value=SimpleNamespace(__path__=[str(cublas)]),
+        ):
+            _register_nvidia_dll_dirs()
+        assert eklendi == []

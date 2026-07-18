@@ -4,6 +4,10 @@
 indirir (``MODEL_SIZE="small"`` için ~1 GB); sonraki çalıştırmalarda
 önbellekten yüklenir. CI'da cache'lenmelidir.
 
+Windows + CUDA: cuBLAS/cuDNN DLL'lerinin dizin kaydı (``os.add_dll_directory``)
+bu modülde, ``faster_whisper`` import'undan ÖNCE yapılır — bkz.
+``_register_nvidia_dll_dirs``.
+
 Çevrim sözleşmesi: Whisper saniye-float timestamp verir; ``list[Word]``
 dönülmeden önce ``int(round(sn * 1000))`` ile ms-int'e çevrilir. Bu çevrim
 backend'in (bu modülün) işidir — üst katmanlar saniye görmez.
@@ -11,16 +15,47 @@ backend'in (bu modülün) işidir — üst katmanlar saniye görmez.
 
 from __future__ import annotations
 
+import importlib
+import os
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-# py.typed marker'ı olmayan paket — mypy strict'te import-untyped uyarısını
-# bilinçli olarak susturuyoruz (WhisperModel Any olarak ele alınır).
-from faster_whisper import WhisperModel  # type: ignore[import-untyped]
-
 from fillercut.models import Word
 from fillercut.transcribe.base import Transcriber
+
+
+def _register_nvidia_dll_dirs() -> None:
+    """pip ile kurulan ``nvidia-*`` paketlerinin ``bin/`` dizinlerini DLL yoluna ekler.
+
+    Windows'ta CTranslate2 (faster-whisper'ın motoru) cuBLAS/cuDNN DLL'lerini
+    import anında yükler; bu DLL'ler ``nvidia/cublas/bin`` ve ``nvidia/cudnn/bin``
+    altında durur ve Windows site-packages alt dizinlerini kendiliğinden aramaz.
+    Paketler kuruluysa (``.[cuda]`` extra'sı) dizinler kaydedilir; kurulu değilse
+    (CPU-only kurulum) sessizce geçilir. Windows dışında no-op.
+    """
+    if os.name != "nt":
+        return
+    for pkg in ("nvidia.cublas", "nvidia.cudnn"):
+        try:
+            mod = importlib.import_module(pkg)
+        except ImportError:
+            continue  # CPU-only kurulum: paket yok — sorun değil
+        pkg_paths = getattr(mod, "__path__", None)
+        if not pkg_paths:
+            continue
+        bin_dir = Path(str(pkg_paths[0])) / "bin"
+        if bin_dir.is_dir():
+            os.add_dll_directory(str(bin_dir))
+
+
+# DİKKAT: faster_whisper import'u CTranslate2'yi (ve CUDA DLL yüklemesini)
+# tetikler — DLL dizini kaydı ondan ÖNCE çalışmalı.
+_register_nvidia_dll_dirs()
+
+# py.typed marker'ı olmayan paket — mypy strict'te import-untyped uyarısını
+# bilinçli olarak susturuyoruz (WhisperModel Any olarak ele alınır).
+from faster_whisper import WhisperModel  # type: ignore[import-untyped]  # noqa: E402
 
 #: Model ayarları — modül sabitleri. Hedef donanım RTX 4050 (CUDA + float16).
 #: CPU'ya düşmek gerekirse ``device="cpu", compute_type="int8"`` ile

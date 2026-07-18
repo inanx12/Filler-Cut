@@ -23,6 +23,12 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
 ]
+# CUDA (RTX 4050): CTranslate2'nin yüklediği cuBLAS/cuDNN DLL'leri bu pip
+# paketlerinden gelir — Windows'ta dizin kaydı fw_backend._register_nvidia_dll_dirs'de.
+cuda = [
+    "nvidia-cublas-cu12",
+    "nvidia-cudnn-cu12",
+]
 
 [project.scripts]
 fillercut = "fillercut.cli:app"

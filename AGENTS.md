@@ -82,7 +82,7 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `detect/silence.py` (silence_min_ms filtresi) | `ff94193` |
 | `transcribe/base.py` + `fw_backend.py` (Transcriber ABC + faster-whisper) | `c92a766` |
 
-**Test sayısı:** 119 (`python -m pytest` → 119 passed).
+**Test sayısı:** 123 (`python -m pytest` → 123 passed).
 
 **Sıradaki modül:** `report/json_report.py` (CutPlan → rapor.json) — ardından
 `render/render.py` (CPU re-encode + concat), sonra `pipeline.py` + `cli.py`.
@@ -91,4 +91,6 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 (`small` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile
 instantiate edilir). İlk gerçek çalıştırmada ~1 GB model iner — CI'da
 cache'le. Birim testlerde WhisperModel mock'lanır; gerçek model koşusu
-kullanıcı makinesinde yapılır.
+kullanıcı makinesinde yapılır. CUDA kurulumu `pip install -e ".[cuda]"`
+(cuBLAS/cuDNN pip paketleri); Windows'ta DLL dizini kaydı
+`fw_backend._register_nvidia_dll_dirs()` ile import öncesi otomatiktir.
