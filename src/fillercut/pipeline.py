@@ -1,6 +1,206 @@
 """Orkestratör: 6 katmanı sırayla çağırır (DESIGN.md §2).
 
 EXTRACT → TRANSCRIBE → DETECT → PLAN → REVIEW → RENDER
+
+Bu modülde İŞ MANTIĞI YOKTUR — her katman kendi modülündedir; burası yalnızca
+sırayı, veri akışını ve hata → kullanıcı mesajı çevirisini bilir. Katman
+hataları (ProbeError, ExtractionError, SilenceDetectionError, CutPlanError,
+RenderError) yakalanıp kırmızı mesaj + ``typer.Exit(1)`` ile temiz çıkışa
+çevrilir — kullanıcı traceback görmez.
+
+REVIEW (v0.1 hali): render'dan ÖNCE konsola özet tablosu (kesim sayısı,
+kademe dağılımı, kazanılan süre %, ilk 5 kesimin reason'ı) + ``[y/N]`` onayı;
+``yes=True`` ile atlanır.
+
+Ara WAV `tempfile.TemporaryDirectory`'ye çıkarılır — analiz artığı kullanıcının
+video klasöründe kalmaz; iş bitince/hata olursa temizlik otomatiktir.
 """
 
-# TODO(v0.1): run() iskeleti buraya.
+from __future__ import annotations
+
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import NoReturn
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+from fillercut.audio.extractor import ExtractionError, extract_audio
+from fillercut.audio.probe import ProbeError, probe_duration_ms
+from fillercut.audio.silence import SilenceDetectionError, detect_silence
+from fillercut.detect.fillers import detect_fillers
+from fillercut.detect.silence import filter_silence
+from fillercut.models import CutPlan
+from fillercut.plan.cutplan import build_cutplan
+from fillercut.render.render import RenderError, render
+from fillercut.report.json_report import Report, build_report, write_json_report
+from fillercut.transcribe.base import Transcriber
+
+_out = Console()
+_err = Console(stderr=True)
+
+
+@dataclass(frozen=True)
+class PipelineResult:
+    """`run()` çıktısı — CLI'nin son özeti basması için yollar + rapor."""
+
+    output_path: Path
+    report_path: Path
+    report: Report
+
+
+def default_output_path(input_path: Path) -> Path:
+    """Girdiyle aynı klasörde ``<ad>_temiz.mp4`` (DESIGN.md §2: video_temiz.mp4)."""
+    return input_path.with_name(f"{input_path.stem}_temiz.mp4")
+
+
+def _fail(mesaj: str) -> NoReturn:
+    """Kırmızı hata mesajı + temiz çıkış (kullanıcı traceback görmez)."""
+    _err.print(f"[bold red]Hata:[/bold red] {mesaj}")
+    raise typer.Exit(code=1)
+
+
+def _mm_ss(ms: int) -> str:
+    """ms → "mm:ss" (kırparak) — review tablosu görüntüsü."""
+    return f"{ms // 60_000:02d}:{(ms % 60_000) // 1_000:02d}"
+
+
+def _print_review(report: Report) -> None:
+    """REVIEW (v0.1): konsol özeti + ilk 5 kesimin reason tablosu."""
+    t = report.tiers
+    _out.print(f"[bold]Kesim sayısı:[/bold] {report.cut_count}")
+    _out.print(
+        "[bold]Kademe dağılımı:[/bold] "
+        f"{t.kesin_filler} kesin filler, {t.aday_filler} aday filler, {t.silence} sessizlik"
+    )
+    _out.print(
+        f"[bold]Kazanılan süre:[/bold] {report.cut_total.human} "
+        f"({report.original.human} → {report.remaining.human}), %{report.saved_percent}"
+    )
+
+    tablo = Table(title="İlk 5 kesim", show_lines=False)
+    tablo.add_column("#", justify="right")
+    tablo.add_column("Başlangıç")
+    tablo.add_column("Bitiş")
+    tablo.add_column("Tür")
+    tablo.add_column("Neden (reason)")
+    for i, kesim in enumerate(report.cuts[:5], start=1):
+        tablo.add_row(
+            str(i),
+            _mm_ss(kesim.start_ms),
+            _mm_ss(kesim.end_ms),
+            kesim.kind,
+            kesim.reason,
+        )
+    _out.print(tablo)
+    if report.cut_count > 5:
+        _out.print(f"… ve {report.cut_count - 5} kesim daha (rapor.json'da tamamı)")
+
+
+def run(
+    video_path: str | Path,
+    *,
+    output_path: str | Path | None = None,
+    aggressive: bool = False,
+    yes: bool = False,
+    transcriber: Transcriber | None = None,
+) -> PipelineResult:
+    """6 katmanı sırayla çalıştırır: video → temiz MP4 + rapor.json.
+
+    Args:
+        video_path: Kaynak video.
+        output_path: Hedef MP4; verilmezse ``<ad>_temiz.mp4``. Rapor her zaman
+            çıktının ``.json`` uzantılı eşidir (örn. ``video_temiz.json``).
+        aggressive: Aday filler'lar (şey, yani, hani, işte) da kesilir.
+        yes: REVIEW onayını atlar (onaysız render).
+        transcriber: ASR backend'i; verilmezse faster-whisper (CUDA) kurulur.
+            Enjekte edilebilirlik testleri ve CPU backend'i içindir.
+
+    Returns:
+        Üretilen video/rapor yolları ve rapor.
+
+    Raises:
+        typer.Exit: Herhangi bir katman patlarsa (kod 1) veya kullanıcı
+            review'da reddederse (kod 0).
+    """
+    src = Path(video_path)
+    if not src.is_file():
+        _fail(f"girdi dosyası bulunamadı: {src}")
+    dst = Path(output_path) if output_path is not None else default_output_path(src)
+    rapor_yolu = dst.with_suffix(".json")
+
+    # [1] EXTRACT öncesi süre — silence parse (kapanmamış sessizlik) ve
+    # json_report ikisi de total_ms ister; tek ffprobe ile alınır.
+    try:
+        total_ms = probe_duration_ms(src)
+    except (ProbeError, FileNotFoundError) as exc:
+        _fail(f"süre okunamadı (ffprobe): {exc}")
+
+    with tempfile.TemporaryDirectory(prefix="fillercut_") as tmp_str:
+        wav = Path(tmp_str) / "analiz.wav"
+
+        # [1] EXTRACT
+        _out.print("[cyan][1/6] EXTRACT[/cyan] — 16 kHz mono WAV çıkarılıyor…")
+        try:
+            extract_audio(src, wav)
+        except (ExtractionError, FileNotFoundError) as exc:
+            _fail(f"EXTRACT başarısız: {exc}")
+
+        # [2] TRANSCRIBE
+        if transcriber is None:
+            # Varsayılan backend tembel import: `--help`/hata yollarında
+            # faster-whisper (+CTranslate2) yüklenmez; model zaten tembel.
+            from fillercut.transcribe.fw_backend import FasterWhisperTranscriber
+
+            transcriber = FasterWhisperTranscriber()
+        _out.print("[cyan][2/6] TRANSCRIBE[/cyan] — transkript çıkarılıyor…")
+        try:
+            with _out.status("ASR çalışıyor (ilk çalıştırmada ~1 GB model iner)…"):
+                words = transcriber.transcribe(wav)
+        except Exception as exc:
+            # ASR backend'i keyfi hata üretebilir (CUDA/driver/model indirme)
+            _fail(f"TRANSCRIBE başarısız: {exc.__class__.__name__}: {exc}")
+
+        # [3] DETECT — filler (transkript) + sessizlik (dalga formu)
+        _out.print("[cyan][3/6] DETECT[/cyan] — filler ve sessizlikler tespit ediliyor…")
+        fillerlar = detect_fillers(words, aggressive=aggressive)
+        try:
+            sessizlikler = filter_silence(
+                detect_silence(wav, total_duration_ms=total_ms)
+            )
+        except (SilenceDetectionError, FileNotFoundError, ValueError) as exc:
+            _fail(f"DETECT (sessizlik) başarısız: {exc}")
+
+    # [4] PLAN — merge + padding + min-keep → saf veri CutPlan
+    _out.print("[cyan][4/6] PLAN[/cyan] — kesim planı kuruluyor…")
+    try:
+        plan: CutPlan = build_cutplan(
+            [*fillerlar, *sessizlikler], total_duration_ms=total_ms
+        )
+        report = build_report(plan, total_ms)
+    except ValueError as exc:
+        # CutPlanError (plan tüm videoyu kesiyor) + model/rapor validasyonu
+        _fail(f"PLAN başarısız: {exc}")
+
+    # [5] REVIEW — v0.1: konsol özeti + [y/N] onayı
+    if not yes:
+        _out.print("[cyan][5/6] REVIEW[/cyan]")
+        _print_review(report)
+        if not typer.confirm("Render edilsin mi?", default=False):
+            _out.print("[yellow]İptal edildi[/yellow] — video ve rapor yazılmadı.")
+            raise typer.Exit(code=0)
+
+    # [6] RENDER — keep segmentleri re-encode + concat; rapor.json yanına
+    _out.print("[cyan][6/6] RENDER[/cyan] — segmentler encode ediliyor…")
+    try:
+        render(src, plan, dst)
+    except (RenderError, FileNotFoundError) as exc:
+        _fail(f"RENDER başarısız: {exc}")
+    try:
+        rapor_dosyasi = write_json_report(plan, total_ms, rapor_yolu)
+    except OSError as exc:
+        _fail(f"rapor.json yazılamadı: {exc}")
+
+    return PipelineResult(output_path=dst, report_path=rapor_dosyasi, report=report)
