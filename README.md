@@ -33,6 +33,8 @@ Outputs, written next to the input (or to `--output`):
 
 - `video_temiz.mp4` — the cut video
 - `video_temiz.json` — the cut report (every cut with its `reason` chain)
+- `video_transkript.json` — the word-level transcript (kept even if you
+  decline at the review step)
 
 Options:
 
@@ -64,7 +66,9 @@ Kazanılan süre: 00:03 (00:14 → 00:11), %22.28
 └───┴───────────┴───────┴─────────┴─────────────────────────────────────┘
 Render edilsin mi? [y/N]:
 [6/6] RENDER — segmentler encode ediliyor…
-Bitti: konusma_temiz.mp4 (%22.28 kazanım) — rapor: konusma_temiz.json
+Bitti: konusma_temiz.mp4 (%22.28 kazanım)
+rapor: konusma_temiz.json
+transkript: konusma_transkript.json
 ```
 
 > The first run downloads the Whisper model (~1 GB); later runs use the cache.

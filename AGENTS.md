@@ -93,8 +93,9 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `report/json_report.py` (CutPlan → rapor.json, saf `build_report` + wrapper) | `37d1eeb` |
 | `render/render.py` (iki aşamalı: segment re-encode + concat demuxer, `ENCODE_TEMPLATE` tek şablon) + `tests/make_fixture.py` | `166178e` |
 | `audio/probe.py` (ffprobe → total_ms) + `pipeline.py` (6 katman orkestratörü + REVIEW özeti/onayı) + `cli.py` (tek komut: `--aggressive`, `--yes/-y`, `--output/-o`) | `5ea7aa9` |
+| `pipeline.py`: transkript kaydı (`<ad>_transkript.json`, saf `words_to_json` — `transcribe/base.py`) | `90877ae` |
 
-**Test sayısı:** 197 (`python -m pytest` → 197 passed; `ffmpeg` marker'lı
+**Test sayısı:** 203 (`python -m pytest` → 203 passed; `ffmpeg` marker'lı
 gerçek-ffmpeg testi dahil — CI `-m "not ffmpeg"` ile atlar).
 
 **Sıradaki:** v0.1 bitti — sıra v0.2'de (DESIGN.md §8): `render/encoder.py`

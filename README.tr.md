@@ -32,6 +32,8 @@ fillercut video.mp4
 
 - `video_temiz.mp4` — kesilmiş video
 - `video_temiz.json` — kesim raporu (her kesim `reason` zinciriyle)
+- `video_transkript.json` — kelime seviyesinde transkript (review'da
+  reddetseniz bile korunur)
 
 Opsiyonlar:
 
@@ -63,7 +65,9 @@ Kazanılan süre: 00:03 (00:14 → 00:11), %22.28
 └───┴───────────┴───────┴─────────┴─────────────────────────────────────┘
 Render edilsin mi? [y/N]:
 [6/6] RENDER — segmentler encode ediliyor…
-Bitti: konusma_temiz.mp4 (%22.28 kazanım) — rapor: konusma_temiz.json
+Bitti: konusma_temiz.mp4 (%22.28 kazanım)
+rapor: konusma_temiz.json
+transkript: konusma_transkript.json
 ```
 
 > İlk çalıştırmada Whisper modeli iner (~1 GB); sonrakilerde önbellekten yüklenir.
