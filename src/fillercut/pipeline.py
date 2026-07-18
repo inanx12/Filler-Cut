@@ -12,6 +12,10 @@ REVIEW (v0.1 hali): render'dan ÖNCE konsola özet tablosu (kesim sayısı,
 kademe dağılımı, kazanılan süre %, ilk 5 kesimin reason'ı) + ``[y/N]`` onayı;
 ``yes=True`` ile atlanır.
 
+TRANSCRIBE adımından sonra kelime listesi ``<ad>_transkript.json`` olarak
+kaydedilir (çıktıların yanına) — pahalı ASR çıktısı review'da ret edilse
+bile korunur.
+
 Ara WAV `tempfile.TemporaryDirectory`'ye çıkarılır — analiz artığı kullanıcının
 video klasöründe kalmaz; iş bitince/hata olursa temizlik otomatiktir.
 """
@@ -36,7 +40,7 @@ from fillercut.models import CutPlan
 from fillercut.plan.cutplan import build_cutplan
 from fillercut.render.render import RenderError, render
 from fillercut.report.json_report import Report, build_report, write_json_report
-from fillercut.transcribe.base import Transcriber
+from fillercut.transcribe.base import Transcriber, words_to_json
 
 _out = Console()
 _err = Console(stderr=True)
@@ -48,6 +52,7 @@ class PipelineResult:
 
     output_path: Path
     report_path: Path
+    transcript_path: Path
     report: Report
 
 
@@ -119,7 +124,7 @@ def run(
             Enjekte edilebilirlik testleri ve CPU backend'i içindir.
 
     Returns:
-        Üretilen video/rapor yolları ve rapor.
+        Üretilen video/rapor/transkript yolları ve rapor.
 
     Raises:
         typer.Exit: Herhangi bir katman patlarsa (kod 1) veya kullanıcı
@@ -163,6 +168,16 @@ def run(
             # ASR backend'i keyfi hata üretebilir (CUDA/driver/model indirme)
             _fail(f"TRANSCRIBE başarısız: {exc.__class__.__name__}: {exc}")
 
+        # Transkript kaydı — pahalı ASR çıktısı korunur: review'da ret edilse
+        # bile dosya kalır (hata ayıklama/fixture olarak kullanılabilir; biçim
+        # tests/data/transcript_sample.json ile aynı). İsim girdi stem'inden:
+        # <ad>_transkript.json, çıktıların yanına.
+        transkript_yolu = dst.parent / f"{src.stem}_transkript.json"
+        try:
+            transkript_yolu.write_text(words_to_json(words) + "\n", encoding="utf-8")
+        except OSError as exc:
+            _fail(f"transkript yazılamadı: {exc}")
+
         # [3] DETECT — filler (transkript) + sessizlik (dalga formu)
         _out.print("[cyan][3/6] DETECT[/cyan] — filler ve sessizlikler tespit ediliyor…")
         fillerlar = detect_fillers(words, aggressive=aggressive)
@@ -189,7 +204,10 @@ def run(
         _out.print("[cyan][5/6] REVIEW[/cyan]")
         _print_review(report)
         if not typer.confirm("Render edilsin mi?", default=False):
-            _out.print("[yellow]İptal edildi[/yellow] — video ve rapor yazılmadı.")
+            _out.print(
+                "[yellow]İptal edildi[/yellow] — video ve rapor yazılmadı; "
+                f"transkript korundu: {transkript_yolu}"
+            )
             raise typer.Exit(code=0)
 
     # [6] RENDER — keep segmentleri re-encode + concat; rapor.json yanına
@@ -203,4 +221,9 @@ def run(
     except OSError as exc:
         _fail(f"rapor.json yazılamadı: {exc}")
 
-    return PipelineResult(output_path=dst, report_path=rapor_dosyasi, report=report)
+    return PipelineResult(
+        output_path=dst,
+        report_path=rapor_dosyasi,
+        transcript_path=transkript_yolu,
+        report=report,
+    )

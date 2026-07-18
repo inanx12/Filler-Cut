@@ -38,6 +38,7 @@ def main(
     """VIDEO'daki filler'ları ve gereksiz sessizlikleri kes; temiz MP4 + rapor üret."""
     sonuc = run(video, output_path=output, aggressive=aggressive, yes=yes)
     typer.echo(
-        f"Bitti: {sonuc.output_path} "
-        f"(%{sonuc.report.saved_percent} kazanım) — rapor: {sonuc.report_path}"
+        f"Bitti: {sonuc.output_path} (%{sonuc.report.saved_percent} kazanım)\n"
+        f"rapor: {sonuc.report_path}\n"
+        f"transkript: {sonuc.transcript_path}"
     )

@@ -11,10 +11,23 @@ modül docstring'indeki zaman birimi kuralı).
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from pathlib import Path
 
 from fillercut.models import Word
+
+
+def words_to_json(words: list[Word]) -> str:
+    """Word listesini transkript JSON'una çevirir — saf fonksiyon.
+
+    Biçim `tests/data/transcript_sample.json` ile aynıdır (``{"words": [...]}``):
+    pipeline'ın kaydettiği transkript hata ayıklamada veya test fixture'ı
+    olarak doğrudan yeniden kullanılabilir. Türkçe karakterler `\\uXXXX`'e
+    kaçırılmaz (okunabilirlik).
+    """
+    veri = {"words": [w.model_dump(mode="json") for w in words]}
+    return json.dumps(veri, ensure_ascii=False, indent=2)
 
 
 class Transcriber(ABC):

@@ -49,7 +49,10 @@ def test_olmayan_dosya_temiz_hata() -> None:
 
 def test_opsiyonlar_pipelinea_aktarilir() -> None:
     sahte = PipelineResult(
-        output_path=Path("cikti.mp4"), report_path=Path("cikti.json"), report=_RAPOR
+        output_path=Path("cikti.mp4"),
+        report_path=Path("cikti.json"),
+        transcript_path=Path("video_transkript.json"),
+        report=_RAPOR,
     )
     with patch("fillercut.cli.run", return_value=sahte) as m:
         result = runner.invoke(app, ["video.mp4", "--aggressive", "-y", "-o", "cikti.mp4"])
@@ -60,11 +63,15 @@ def test_opsiyonlar_pipelinea_aktarilir() -> None:
     assert args[0] == Path("video.mp4")
     assert kwargs == {"output_path": Path("cikti.mp4"), "aggressive": True, "yes": True}
     assert "Bitti" in result.output
+    assert "transkript" in result.output
 
 
 def test_varsayilanlar_none_ve_false_iletir() -> None:
     sahte = PipelineResult(
-        output_path=Path("video_temiz.mp4"), report_path=Path("video_temiz.json"), report=_RAPOR
+        output_path=Path("video_temiz.mp4"),
+        report_path=Path("video_temiz.json"),
+        transcript_path=Path("video_transkript.json"),
+        report=_RAPOR,
     )
     with patch("fillercut.cli.run", return_value=sahte) as m:
         result = runner.invoke(app, ["video.mp4"])

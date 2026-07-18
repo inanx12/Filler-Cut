@@ -8,6 +8,7 @@ ad alanında mock'lanır, transcriber enjekte edilir.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from contextlib import ExitStack
 from pathlib import Path
@@ -178,7 +179,10 @@ class TestCagriSirasiVeVeriAkisi:
         assert katmanlar.render.call_args.args == (girdi, PLAN, dst)
         assert katmanlar.json.call_args.args == (PLAN, TOPLAM_MS, dst.with_suffix(".json"))
         assert sonuc == PipelineResult(
-            output_path=dst, report_path=dst.with_suffix(".json"), report=REPORT
+            output_path=dst,
+            report_path=dst.with_suffix(".json"),
+            transcript_path=girdi.parent / "video_transkript.json",
+            report=REPORT,
         )
 
     def test_aggressive_bayragi_detect_fillersa_akar(
@@ -192,10 +196,43 @@ class TestCagriSirasiVeVeriAkisi:
         self, girdi: Path, katmanlar: Any, tmp_path: Path
     ) -> None:
         hedef = tmp_path / "baska" / "cikti.mp4"
+        hedef.parent.mkdir()
         sonuc = run(girdi, output_path=hedef, yes=True,
                     transcriber=_SahteTranscriber(katmanlar.sira))
         assert katmanlar.render.call_args.args[2] == hedef
         assert sonuc.report_path == hedef.with_suffix(".json")
+
+
+class TestTranskriptKaydi:
+    def test_words_transkript_json_olarak_yazilir(self, girdi: Path, katmanlar: Any) -> None:
+        run(girdi, yes=True, transcriber=_SahteTranscriber(katmanlar.sira))
+        yol = girdi.parent / "video_transkript.json"
+        assert yol.is_file()
+        veri = json.loads(yol.read_text(encoding="utf-8"))
+        assert [w["text"] for w in veri["words"]] == ["merhaba", "Eee,"]
+        assert veri["words"][1]["start_ms"] == 3_320
+
+    def test_review_red_durumunda_bile_korunur(self, girdi: Path, katmanlar: Any) -> None:
+        katmanlar.confirm.return_value = False
+        with pytest.raises(typer.Exit):
+            run(girdi, yes=False, transcriber=_SahteTranscriber(katmanlar.sira))
+        assert (girdi.parent / "video_transkript.json").is_file()
+        katmanlar.render.assert_not_called()
+
+    def test_output_baska_dizinse_transkript_oraya(
+        self, girdi: Path, katmanlar: Any, tmp_path: Path
+    ) -> None:
+        hedef_dizin = tmp_path / "baska"
+        hedef_dizin.mkdir()
+        sonuc = run(
+            girdi,
+            output_path=hedef_dizin / "cikti.mp4",
+            yes=True,
+            transcriber=_SahteTranscriber(katmanlar.sira),
+        )
+        beklenen = hedef_dizin / "video_transkript.json"  # isim girdi stem'inden
+        assert beklenen.is_file()
+        assert sonuc.transcript_path == beklenen
 
 
 class TestReviewOnayi:

@@ -8,6 +8,7 @@ eder (`.word`, `.start`/`.end` saniye-float, `.probability`).
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from fillercut.models import Word
-from fillercut.transcribe.base import Transcriber
+from fillercut.transcribe.base import Transcriber, words_to_json
 from fillercut.transcribe.fw_backend import (
     COMPUTE_TYPE,
     DEVICE,
@@ -264,3 +265,31 @@ class TestRegisterNvidiaDllDirs:
             _register_nvidia_dll_dirs()
         assert eklendi == []
         assert os.environ["PATH"] == "C:\\Windows"
+
+
+class TestWordsToJson:
+    """words_to_json — pipeline'ın kaydettiği <ad>_transkript.json biçimi."""
+
+    def test_transkript_sample_ile_ayni_bicim(self) -> None:
+        # Biçim sözleşmesi: {"words": [...]} — kayıt fixture olarak yeniden kullanılabilir
+        words = [
+            Word(text="merhaba", start_ms=0, end_ms=500, confidence=0.9),
+            Word(text="Eee,", start_ms=3_320, end_ms=4_040, confidence=0.8),
+        ]
+        veri = json.loads(words_to_json(words))
+        assert [w["text"] for w in veri["words"]] == ["merhaba", "Eee,"]
+        assert veri["words"][0] == {
+            "text": "merhaba",
+            "start_ms": 0,
+            "end_ms": 500,
+            "confidence": 0.9,
+        }
+
+    def test_turkce_karakter_kacissiz(self) -> None:
+        words = [Word(text="ııı şey ğü", start_ms=0, end_ms=100, confidence=1.0)]
+        ham = words_to_json(words)
+        assert "ııı şey ğü" in ham  # ensure_ascii=False — \uXXXX kaçışı yok
+        assert json.loads(ham)["words"][0]["text"] == "ııı şey ğü"
+
+    def test_bos_liste_gecerli_json(self) -> None:
+        assert json.loads(words_to_json([])) == {"words": []}
