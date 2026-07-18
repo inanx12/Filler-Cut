@@ -11,3 +11,5 @@ build/
 *.wav
 *_temiz.mp4
 rapor.json
+# Kişisel not dosyaları
+Venv komutu.txt
