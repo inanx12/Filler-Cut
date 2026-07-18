@@ -1,0 +1,24 @@
+{
+  "kaynak": "test_konusma.wav",
+  "uretici": "faster-whisper (small / cuda / float16, language=tr, word_timestamps=true)",
+  "not": "Gerçek Whisper kelime çıktısı — 17 kelime, ms-int. Olasılık (confidence) kaydedilmedi; testler 1.0 varsayar. wav süresi: 14814 ms (ffprobe 14.814331 sn).",
+  "words": [
+    {"text": "Eee,", "start_ms": 3320, "end_ms": 4040},
+    {"text": "bugün", "start_ms": 4060, "end_ms": 4420},
+    {"text": "filler", "start_ms": 4420, "end_ms": 4700},
+    {"text": "cut", "start_ms": 4700, "end_ms": 4960},
+    {"text": "projesini", "start_ms": 4960, "end_ms": 5540},
+    {"text": "test", "start_ms": 5540, "end_ms": 5820},
+    {"text": "ediyorum,", "start_ms": 5820, "end_ms": 6220},
+    {"text": "şey,", "start_ms": 6540, "end_ms": 6740},
+    {"text": "bakalım", "start_ms": 7580, "end_ms": 7940},
+    {"text": "vişvırı", "start_ms": 7940, "end_ms": 8600},
+    {"text": "benim", "start_ms": 8600, "end_ms": 8740},
+    {"text": "ığlarımı", "start_ms": 8740, "end_ms": 9860},
+    {"text": "yakalayabilecek", "start_ms": 9860, "end_ms": 10660},
+    {"text": "mi,", "start_ms": 10660, "end_ms": 10920},
+    {"text": "yani", "start_ms": 11460, "end_ms": 11720},
+    {"text": "umarım", "start_ms": 11720, "end_ms": 13320},
+    {"text": "çalışır.", "start_ms": 13320, "end_ms": 13880}
+  ]
+}
