@@ -80,15 +80,15 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `audio/silence.py` (silencedetect parse) | `981923e` |
 | `plan/cutplan.py` (merge + padding + min-keep) | `ec29f07` |
 | `detect/silence.py` (silence_min_ms filtresi) | `ff94193` |
+| `transcribe/base.py` + `fw_backend.py` (Transcriber ABC + faster-whisper) | `c92a766` |
 
-**Test sayısı:** 103 (`python -m pytest` → 103 passed).
+**Test sayısı:** 119 (`python -m pytest` → 119 passed).
 
-**Sıradaki modül:** `transcribe/base.py` (Transcriber ABC) + `fw_backend.py`
-(faster-whisper backend'i).
+**Sıradaki modül:** `report/json_report.py` (CutPlan → rapor.json) — ardından
+`render/render.py` (CPU re-encode + concat), sonra `pipeline.py` + `cli.py`.
 
-**Bilinen tuzaklar (TRANSCRIBE):**
-- faster-whisper ilk çalıştırmada modeli indirir (~1 GB) — CI'da cache'le.
-- CUDA varsa float16, yoksa CPU int8 — cihaz seçimi backend'de yapılır,
-  üst katman bilmez.
-- Whisper saniye-float verir; `list[Word]` dönülmeden önce ms-int'e
-  çevrilir (`int(round(sn * 1000))`) — bu çevrim backend'in sözleşmesidir.
+**Not (TRANSCRIBE):** Model ayarları `fw_backend.py` modül sabitleridir
+(`small` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile
+instantiate edilir). İlk gerçek çalıştırmada ~1 GB model iner — CI'da
+cache'le. Birim testlerde WhisperModel mock'lanır; gerçek model koşusu
+kullanıcı makinesinde yapılır.
