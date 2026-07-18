@@ -32,3 +32,21 @@
 - **Olası iyileştirme:** v0.2 review/onay katmanı aday kesimleri kullanıcıya
   sorarak yumuşatacak.
 - **Referans:** `tests/test_integration.py::TestAgresifModZinciri`.
+
+## KI-3 — Kademe dağılımı reason zinciri ayrıştırmasına dayanır
+
+- **Belirti:** `report/json_report.py`'daki kademe sayıları (kesin / aday /
+  sessizlik), CutPlan kesimlerinin `reason` metinleri ayrıştırılarak üretilir.
+- **Neden:** v0.1'de `Segment` modeli kademe bilgisini yapısal alanda taşımaz;
+  tek kaynak reason zinciridir (AGENTS.md invariant 7). Ayrıca filler
+  reason'larındaki `[padding +80/-120ms]` eki `" + "` içerdiğinden naif
+  `split(" + ")` zinciri bozuk parçalar — ayıklama önce padding regex'iyle
+  yapılır. Sessizlik parçaları dışlayıcı sınıflandırmayla sayılır (bilinen
+  önek taşımayan her parça sessizliktir).
+- **Etki:** `detect/fillers.py` (`"kesin filler: …"` / `"aday filler: …"`)
+  veya `plan/cutplan.py` (`"min_keep: …"`, `"[padding +B/-Ams]"`) reason
+  formatı değişirse sayım sessizce bozulabilir.
+- **Olası iyileştirme:** v0.2+'da Segment'e yapısal kademe alanı (örn. `tier`)
+  eklenip sayımın metin ayrıştırmasından kurtarılması.
+- **Referans:** `tests/test_json_report.py` — reason formatları gerçek
+  transkript zinciriyle sabitlenmiştir; format değişikliği testleri kırar.

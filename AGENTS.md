@@ -71,7 +71,7 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
   v0.1 bitmeden v0.2'ye geçilmez.
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
-## Mevcut Durum (2026-07-17)
+## Mevcut Durum (2026-07-18)
 
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
@@ -86,11 +86,12 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `detect/silence.py` (silence_min_ms filtresi) | `ff94193` |
 | `transcribe/base.py` + `fw_backend.py` (Transcriber ABC + faster-whisper) | `c92a766` |
 | `KNOWN_ISSUES.md` (KI-1, KI-2) + `tests/test_integration.py` (gerçek transkript, DETECT→PLAN) | `3e2853e` |
+| `report/json_report.py` (CutPlan → rapor.json, saf `build_report` + wrapper) | `37d1eeb` |
 
-**Test sayısı:** 133 (`python -m pytest` → 133 passed).
+**Test sayısı:** 149 (`python -m pytest` → 149 passed).
 
-**Sıradaki modül:** `report/json_report.py` (CutPlan → rapor.json) — ardından
-`render/render.py` (CPU re-encode + concat), sonra `pipeline.py` + `cli.py`.
+**Sıradaki modül:** `render/render.py` (CPU re-encode + concat) — ardından
+`pipeline.py` + `cli.py`.
 
 **Not (TRANSCRIBE):** Model ayarları `fw_backend.py` modül sabitleridir
 (`small` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile
