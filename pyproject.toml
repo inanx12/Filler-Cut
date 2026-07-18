@@ -49,3 +49,6 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "ffmpeg: gerçek ffmpeg/ffprobe gerektirir — CI'da değil, kullanıcı makinesinde koşar (CI deselect: -m 'not ffmpeg')",
+]
