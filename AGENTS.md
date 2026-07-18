@@ -87,11 +87,12 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `transcribe/base.py` + `fw_backend.py` (Transcriber ABC + faster-whisper) | `c92a766` |
 | `KNOWN_ISSUES.md` (KI-1, KI-2) + `tests/test_integration.py` (gerçek transkript, DETECT→PLAN) | `3e2853e` |
 | `report/json_report.py` (CutPlan → rapor.json, saf `build_report` + wrapper) | `37d1eeb` |
+| `render/render.py` (iki aşamalı: segment re-encode + concat demuxer, `ENCODE_TEMPLATE` tek şablon) + `tests/make_fixture.py` | `166178e` |
 
-**Test sayısı:** 149 (`python -m pytest` → 149 passed).
+**Test sayısı:** 166 (`python -m pytest` → 166 passed; `ffmpeg` marker'lı
+gerçek-ffmpeg testi dahil — CI `-m "not ffmpeg"` ile atlar).
 
-**Sıradaki modül:** `render/render.py` (CPU re-encode + concat) — ardından
-`pipeline.py` + `cli.py`.
+**Sıradaki modül:** `pipeline.py` + `cli.py`.
 
 **Not (TRANSCRIBE):** Model ayarları `fw_backend.py` modül sabitleridir
 (`small` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile
