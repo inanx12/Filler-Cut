@@ -73,6 +73,10 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 
 ## Mevcut Durum (2026-07-18)
 
+**v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
+gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
+`rapor.json`'da reason zincirleri).
+
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
 | Modül | Commit |
@@ -88,11 +92,14 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `KNOWN_ISSUES.md` (KI-1, KI-2) + `tests/test_integration.py` (gerçek transkript, DETECT→PLAN) | `3e2853e` |
 | `report/json_report.py` (CutPlan → rapor.json, saf `build_report` + wrapper) | `37d1eeb` |
 | `render/render.py` (iki aşamalı: segment re-encode + concat demuxer, `ENCODE_TEMPLATE` tek şablon) + `tests/make_fixture.py` | `166178e` |
+| `audio/probe.py` (ffprobe → total_ms) + `pipeline.py` (6 katman orkestratörü + REVIEW özeti/onayı) + `cli.py` (tek komut: `--aggressive`, `--yes/-y`, `--output/-o`) | `5ea7aa9` |
 
-**Test sayısı:** 166 (`python -m pytest` → 166 passed; `ffmpeg` marker'lı
+**Test sayısı:** 197 (`python -m pytest` → 197 passed; `ffmpeg` marker'lı
 gerçek-ffmpeg testi dahil — CI `-m "not ffmpeg"` ile atlar).
 
-**Sıradaki modül:** `pipeline.py` + `cli.py`.
+**Sıradaki:** v0.1 bitti — sıra v0.2'de (DESIGN.md §8): `render/encoder.py`
+(probe'lu HW encoder tespiti: NVENC → AMF → QSV → libx264), `config.py`
+(YAML), konsol review/onay katmanının genişletilmesi.
 
 **Not (TRANSCRIBE):** Model ayarları `fw_backend.py` modül sabitleridir
 (`small` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile
