@@ -22,6 +22,7 @@ import typer
 from fillercut.audio.extractor import ExtractionError
 from fillercut.audio.probe import ProbeError
 from fillercut.audio.silence import SilenceDetectionError
+from fillercut.config import Config
 from fillercut.models import CutPlan, Segment, Word
 from fillercut.pipeline import PipelineResult, default_output_path, run
 from fillercut.plan.cutplan import CutPlanError
@@ -151,7 +152,7 @@ class TestDefaultOutputPath:
 
 class TestCagriSirasiVeVeriAkisi:
     def test_alti_katman_dogru_sirada(self, girdi: Path, katmanlar: Any) -> None:
-        run(girdi, yes=True, transcriber=_SahteTranscriber(katmanlar.sira))
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
         assert katmanlar.sira == [
             "probe",
             "extract",
@@ -167,7 +168,7 @@ class TestCagriSirasiVeVeriAkisi:
 
     def test_veri_akisi_katmanlar_arasi(self, girdi: Path, katmanlar: Any) -> None:
         transcribe = _SahteTranscriber(katmanlar.sira)
-        sonuc = run(girdi, yes=True, transcriber=transcribe)
+        sonuc = run(girdi, config=Config(yes=True), transcriber=transcribe)
 
         # extract → transcribe/detect_silence: aynı geçici WAV yolu akar
         extract_args = katmanlar.extract.call_args.args
@@ -199,7 +200,8 @@ class TestCagriSirasiVeVeriAkisi:
     def test_aggressive_bayragi_detect_fillersa_akar(
         self, girdi: Path, katmanlar: Any
     ) -> None:
-        run(girdi, yes=True, aggressive=True, transcriber=_SahteTranscriber(katmanlar.sira))
+        run(girdi, config=Config(yes=True, aggressive=True),
+            transcriber=_SahteTranscriber(katmanlar.sira))
         assert katmanlar.fillers.call_args.args[0] == WORDS
         assert katmanlar.fillers.call_args.kwargs["aggressive"] is True
 
@@ -208,7 +210,7 @@ class TestCagriSirasiVeVeriAkisi:
     ) -> None:
         hedef = tmp_path / "baska" / "cikti.mp4"
         hedef.parent.mkdir()
-        sonuc = run(girdi, output_path=hedef, yes=True,
+        sonuc = run(girdi, output_path=hedef, config=Config(yes=True),
                     transcriber=_SahteTranscriber(katmanlar.sira))
         assert katmanlar.render.call_args.args[2] == hedef
         assert sonuc.report_path == hedef.with_suffix(".json")
@@ -216,7 +218,7 @@ class TestCagriSirasiVeVeriAkisi:
 
 class TestTranskriptKaydi:
     def test_words_transkript_json_olarak_yazilir(self, girdi: Path, katmanlar: Any) -> None:
-        run(girdi, yes=True, transcriber=_SahteTranscriber(katmanlar.sira))
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
         yol = girdi.parent / "video_transkript.json"
         assert yol.is_file()
         veri = json.loads(yol.read_text(encoding="utf-8"))
@@ -226,7 +228,7 @@ class TestTranskriptKaydi:
     def test_review_red_durumunda_bile_korunur(self, girdi: Path, katmanlar: Any) -> None:
         katmanlar.confirm.return_value = False
         with pytest.raises(typer.Exit):
-            run(girdi, yes=False, transcriber=_SahteTranscriber(katmanlar.sira))
+            run(girdi, config=Config(yes=False), transcriber=_SahteTranscriber(katmanlar.sira))
         assert (girdi.parent / "video_transkript.json").is_file()
         katmanlar.render.assert_not_called()
 
@@ -238,7 +240,7 @@ class TestTranskriptKaydi:
         sonuc = run(
             girdi,
             output_path=hedef_dizin / "cikti.mp4",
-            yes=True,
+            config=Config(yes=True),
             transcriber=_SahteTranscriber(katmanlar.sira),
         )
         beklenen = hedef_dizin / "video_transkript.json"  # isim girdi stem'inden
@@ -250,13 +252,13 @@ class TestAtlananAdayBilgisi:
     """Kesilmeyen aday sayısı rapora akar; review özetinde uyarı satırı basılır."""
 
     def test_normal_modda_aday_sayisi_rapora_akar(self, girdi: Path, katmanlar: Any) -> None:
-        run(girdi, yes=True, transcriber=_AdayTranscriber())
+        run(girdi, config=Config(yes=True), transcriber=_AdayTranscriber())
         assert katmanlar.report.call_args.kwargs["skipped_aday_filler"] == 2
         assert katmanlar.json.call_args.kwargs["skipped_aday_filler"] == 2
 
     def test_aggressive_modda_atlanan_aday_sifir(self, girdi: Path, katmanlar: Any) -> None:
         # aggressive'de aday'lar kesimdedir — atlanan yok, uyarı yok
-        run(girdi, yes=True, aggressive=True, transcriber=_AdayTranscriber())
+        run(girdi, config=Config(yes=True, aggressive=True), transcriber=_AdayTranscriber())
         assert katmanlar.report.call_args.kwargs["skipped_aday_filler"] == 0
         assert katmanlar.json.call_args.kwargs["skipped_aday_filler"] == 0
 
@@ -265,7 +267,7 @@ class TestAtlananAdayBilgisi:
     ) -> None:
         rapor = build_report(PLAN, TOPLAM_MS, skipped_aday_filler=2)
         katmanlar.report.side_effect = lambda *a, **k: rapor
-        run(girdi, yes=False, transcriber=_SahteTranscriber(katmanlar.sira))
+        run(girdi, config=Config(yes=False), transcriber=_SahteTranscriber(katmanlar.sira))
         cikti = capsys.readouterr().out
         assert "2 aday filler tespit edildi" in cikti
         assert "--aggressive ile kesilir" in cikti
@@ -273,19 +275,19 @@ class TestAtlananAdayBilgisi:
 
 class TestReviewOnayi:
     def test_yes_true_onayi_atlar(self, girdi: Path, katmanlar: Any) -> None:
-        run(girdi, yes=True, transcriber=_SahteTranscriber(katmanlar.sira))
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
         katmanlar.confirm.assert_not_called()
         katmanlar.render.assert_called_once()
 
     def test_onay_verilirse_render_calisir(self, girdi: Path, katmanlar: Any) -> None:
-        run(girdi, yes=False, transcriber=_SahteTranscriber(katmanlar.sira))
+        run(girdi, config=Config(yes=False), transcriber=_SahteTranscriber(katmanlar.sira))
         katmanlar.confirm.assert_called_once()
         katmanlar.render.assert_called_once()
 
     def test_red_temiz_cikis_render_yok(self, girdi: Path, katmanlar: Any) -> None:
         katmanlar.confirm.return_value = False
         with pytest.raises(typer.Exit) as exc_info:
-            run(girdi, yes=False, transcriber=_SahteTranscriber(katmanlar.sira))
+            run(girdi, config=Config(yes=False), transcriber=_SahteTranscriber(katmanlar.sira))
         assert exc_info.value.exit_code == 0  # kullanıcı reddi hata değildir
         katmanlar.render.assert_not_called()
         katmanlar.json.assert_not_called()
@@ -294,7 +296,7 @@ class TestReviewOnayi:
 class TestHataYollari:
     def test_girdi_yoksa_exit_1(self, tmp_path: Path) -> None:
         with pytest.raises(typer.Exit) as exc_info:
-            run(tmp_path / "yok.mp4", yes=True, transcriber=Mock())
+            run(tmp_path / "yok.mp4", config=Config(yes=True), transcriber=Mock())
         assert exc_info.value.exit_code == 1
 
     @pytest.mark.parametrize(
@@ -313,7 +315,7 @@ class TestHataYollari:
     ) -> None:
         getattr(katmanlar, katman).side_effect = hata
         with pytest.raises(typer.Exit) as exc_info:
-            run(girdi, yes=True, transcriber=_SahteTranscriber(katmanlar.sira))
+            run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
         assert exc_info.value.exit_code == 1
 
     def test_transcribe_keyfi_hatasi_exit_1(self, girdi: Path, katmanlar: Any) -> None:
@@ -322,5 +324,5 @@ class TestHataYollari:
                 raise RuntimeError("CUDA kütüphaneleri yüklenemedi")
 
         with pytest.raises(typer.Exit) as exc_info:
-            run(girdi, yes=True, transcriber=_PatanTranscriber())
+            run(girdi, config=Config(yes=True), transcriber=_PatanTranscriber())
         assert exc_info.value.exit_code == 1

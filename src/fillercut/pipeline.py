@@ -34,6 +34,7 @@ from rich.table import Table
 from fillercut.audio.extractor import ExtractionError, extract_audio
 from fillercut.audio.probe import ProbeError, probe_duration_ms
 from fillercut.audio.silence import SilenceDetectionError, detect_silence
+from fillercut.config import Config
 from fillercut.detect.fillers import count_aday_fillers, detect_fillers
 from fillercut.detect.silence import filter_silence
 from fillercut.models import CutPlan
@@ -113,8 +114,7 @@ def run(
     video_path: str | Path,
     *,
     output_path: str | Path | None = None,
-    aggressive: bool = False,
-    yes: bool = False,
+    config: Config | None = None,
     transcriber: Transcriber | None = None,
 ) -> PipelineResult:
     """6 katmanı sırayla çalıştırır: video → temiz MP4 + rapor.json.
@@ -123,10 +123,10 @@ def run(
         video_path: Kaynak video.
         output_path: Hedef MP4; verilmezse ``<ad>_temiz.mp4``. Rapor her zaman
             çıktının ``.json`` uzantılı eşidir (örn. ``video_temiz.json``).
-        aggressive: Aday filler'lar (şey, yani, hani, işte) da kesilir.
-        yes: REVIEW onayını atlar (onaysız render).
-        transcriber: ASR backend'i; verilmezse faster-whisper (CUDA) kurulur.
-            Enjekte edilebilirlik testleri ve CPU backend'i içindir.
+        config: TOML'den yüklenmiş yapılandırma (CLI > config > default
+            zinciri ``cli.py``'de çözülür). Verilmezse default Config.
+        transcriber: ASR backend'i; verilmezse config.asr ayarlarıyla
+            faster-whisper kurulur. Enjekte edilebilirlik testleri içindir.
 
     Returns:
         Üretilen video/rapor/transkript yolları ve rapor.
@@ -135,6 +135,9 @@ def run(
         typer.Exit: Herhangi bir katman patlarsa (kod 1) veya kullanıcı
             review'da reddederse (kod 0).
     """
+    cfg = config if config is not None else Config()
+    aggressive = cfg.aggressive
+    yes = cfg.yes
     src = Path(video_path)
     if not src.is_file():
         _fail(f"girdi dosyası bulunamadı: {src}")
@@ -164,7 +167,12 @@ def run(
             # faster-whisper (+CTranslate2) yüklenmez; model zaten tembel.
             from fillercut.transcribe.fw_backend import FasterWhisperTranscriber
 
-            transcriber = FasterWhisperTranscriber()
+            transcriber = FasterWhisperTranscriber(
+                model_size=cfg.asr.model_size,
+                device=cfg.asr.device,
+                compute_type=cfg.asr.compute_type,
+                language=cfg.asr.language,
+            )
         _out.print("[cyan][2/6] TRANSCRIBE[/cyan] — transkript çıkarılıyor…")
         try:
             with _out.status("ASR çalışıyor (ilk çalıştırmada ~1 GB model iner)…"):
@@ -191,7 +199,8 @@ def run(
         atlanan_aday = 0 if aggressive else count_aday_fillers(words)
         try:
             sessizlikler = filter_silence(
-                detect_silence(wav, total_duration_ms=total_ms)
+                detect_silence(wav, total_duration_ms=total_ms),
+                min_silence_ms=cfg.detect.silence_min_ms,
             )
         except (SilenceDetectionError, FileNotFoundError, ValueError) as exc:
             _fail(f"DETECT (sessizlik) başarısız: {exc}")
@@ -200,7 +209,12 @@ def run(
     _out.print("[cyan][4/6] PLAN[/cyan] — kesim planı kuruluyor…")
     try:
         plan: CutPlan = build_cutplan(
-            [*fillerlar, *sessizlikler], total_duration_ms=total_ms
+            [*fillerlar, *sessizlikler],
+            total_duration_ms=total_ms,
+            filler_before_ms=cfg.padding.filler_before_ms,
+            filler_after_ms=cfg.padding.filler_after_ms,
+            min_keep_ms=cfg.padding.min_keep_ms,
+            filler_anomali_ms=cfg.padding.filler_anomali_ms,
         )
         report = build_report(plan, total_ms, skipped_aday_filler=atlanan_aday)
     except ValueError as exc:

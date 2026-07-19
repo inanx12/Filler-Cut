@@ -13,6 +13,7 @@ from click.testing import Result
 from typer.testing import CliRunner
 
 from fillercut.cli import app
+from fillercut.config import Config
 from fillercut.models import CutPlan, Segment
 from fillercut.pipeline import PipelineResult
 from fillercut.report.json_report import build_report
@@ -35,7 +36,7 @@ def _birlesik_cikti(result: Result) -> str:
 def test_help_opsiyonlari_listeler() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for opsiyon in ("--aggressive", "--yes", "--output"):
+    for opsiyon in ("--aggressive", "--yes", "--output", "--config"):
         assert opsiyon in result.output
 
 
@@ -61,7 +62,11 @@ def test_opsiyonlar_pipelinea_aktarilir() -> None:
     m.assert_called_once()
     args, kwargs = m.call_args
     assert args[0] == Path("video.mp4")
-    assert kwargs == {"output_path": Path("cikti.mp4"), "aggressive": True, "yes": True}
+    assert kwargs["output_path"] == Path("cikti.mp4")
+    cfg = kwargs["config"]
+    assert isinstance(cfg, Config)
+    assert cfg.aggressive is True
+    assert cfg.yes is True
     assert "Bitti" in result.output
     assert "transkript" in result.output
 
@@ -78,4 +83,8 @@ def test_varsayilanlar_none_ve_false_iletir() -> None:
 
     assert result.exit_code == 0
     _, kwargs = m.call_args
-    assert kwargs == {"output_path": None, "aggressive": False, "yes": False}
+    assert kwargs["output_path"] is None
+    cfg = kwargs["config"]
+    assert isinstance(cfg, Config)
+    assert cfg.aggressive is False
+    assert cfg.yes is False
