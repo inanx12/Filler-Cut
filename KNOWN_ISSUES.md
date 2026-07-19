@@ -50,3 +50,44 @@
   eklenip sayımın metin ayrıştırmasından kurtarılması.
 - **Referans:** `tests/test_json_report.py` — reason formatları gerçek
   transkript zinciriyle sabitlenmiştir; format değişikliği testleri kırar.
+
+## KI-4 — Whisper kısa filler'ı tek harfe indirgeyebilir (`eee` → `e`)
+
+- **Belirti:** Whisper kısa ünlü filler'ları kısaltarak yazabilir: "eee"
+  bazen "ee", hatta tek "e" olarak döner. Tek harfe inen biçim filler
+  listesiyle eşleşmez → kesilmez, videoda kalır.
+- **Neden:** Filler tespiti metin eşleşmesine dayalıdır (`detect/fillers.py`);
+  ASR'ın kısaltması normalizasyonla geri çevrilemez (KI-1'in kısa-filler hâli).
+- **Etki:** Tek harfli filler kaçağı (false negative). Plan tutarlı kalır.
+- **Alınan önlem:** `ee` kesin filler listesine eklendi — iki harfe inen
+  kısaltmalar artık yakalanır.
+- **Bilinçli alınmayan önlem:** tek `e` listeye GİRMEDİ. Türkçe'de tek harfli
+  ASR parçaları (ayrı yazılan "e" eki, harf okuma, kısaltma hecesi) false
+  positive riski taşır; risk değerlendirmesi tamamlanmadan eklenmez.
+- **Olası iyileştirme:** v0.2 review katmanında tek harfli adayları kullanıcıya
+  sormak veya süre/akustik tabanlı ek doğrulama.
+- **Referans:** `tests/test_fillers.py` — `ee` kesin, `e` eşleşmez
+  beklentileri bu kayıtla sabitlenmiştir.
+
+## KI-5 — Whisper word-timestamp şişirebilir (uzun kesim → veri kaybı riski)
+
+- **Belirti:** Whisper bir kelimenin timestamp'ini gerçek süresinden çok uzun
+  atayabilir. `deneme.mkv`'de `işte` kelimesine ~15 saniye atandığı gerçek
+  koşuda doğrulandı; kelime aralığın tamamını kaplıyor görünüyordu.
+- **Neden:** ASR word-timestamp güvenilirliği — kelime sonu takip eden
+  sessizliğe (veya konuşmaya) taşabiliyor.
+- **Etki:** Filler kesimi kelimenin kendi sınırını aşıp konuşmayı silebilir
+  (veri kaybı). deneme.mkv'de aralık gerçek sessizlikle çakıştığı için kesim
+  zararsızdı; kelime sonu KONUŞMAYA şişerse kayıp oluşur.
+- **Alınan önlem (savunma):** `plan/cutplan.py` timestamp-anomali koruması —
+  tek kelimeden gelen filler kesimi 3000 ms'den uzunsa aralık silencedetect
+  çıktısıyla çapraz doğrulanır; sessizlikle çakışmıyorsa kesim 3000 ms'e
+  indirgenir (padding bu aralığa uygulanır) ve reason'a
+  `timestamp-anomali koruması` notu düşülür. Sessizlikle çakışan uzun
+  kesimlere bilinçli dokunulmaz (sessiz bölge kesimi zararsızdır); değme
+  (uç uca) çakışma kanıt sayılmaz.
+- **Kalan risk:** İndirgenen 3000 ms'lik pencerede de konuşma olabilir
+  (sınırlı kayıp). Eşik modül sabitidir (`FILLER_ANOMALI_MS`).
+- **Olası iyileştirme:** v0.2 review katmanında indirgenen kesimlerin ayrıca
+  işaretlenip kullanıcı onayına sunulması.
+- **Referans:** `tests/test_cutplan.py::TestTimestampAnomaliKorumasi`.

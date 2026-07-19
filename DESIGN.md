@@ -126,7 +126,7 @@ Bu probe yaklaşımı, "donanım hızlandırma çalışıyor mu yoksa sessizce C
 
 **İncelik 1 — "şey" her zaman filler değildir.** "Bir şey söyleyeceğim" cümlesindeki "şey" gerçek kelimedir. Bu yüzden iki kademeli tespit:
 
-- **Kesin filler:** `ııı, eee, aa, hmm` → otomatik kesilir
+- **Kesin filler:** `ııı, eee, ee, aa, hmm` → otomatik kesilir
 - **Aday filler:** `şey, yani, hani, işte` → raporda "candidate" işaretlenir; `--aggressive` modda otomatik kesilir, normal modda kullanıcı onayı ister
 
 **İncelik 2 — padding.** Kelime sınırında kesmek robotik "klik" sesi yaratır. Config'den yönetilir:
@@ -138,6 +138,8 @@ padding:
   silence_min_ms: 400       # bundan kısa sessizliğe dokunma
   min_keep_ms: 300          # bundan kısa "keep" parçası bırakma
 ```
+
+**Timestamp-anomali koruması (KI-5).** Whisper word-timestamp şişirebilir (gerçek koşuda "işte"ye ~15 sn atandığı doğrulandı). PLAN katmanında tek kelimeden gelen filler kesimi 3000 ms'den uzunsa aralık silencedetect çıktısıyla çapraz doğrulanır; sessizlikle çakışmıyorsa kesim 3000 ms'e indirgenir ve reason'a not düşülür — konuşmaya taşan şişik kesim veri kaybıdır. Sessizlikle çakışan uzun kesimlere dokunulmaz (sessiz bölge kesimi zararsızdır).
 
 ## 7. Render Stratejisi
 

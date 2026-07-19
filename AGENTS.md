@@ -44,7 +44,7 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 2. **Padding = daraltma**, yalnızca `kind="filler"` segmentlere uygulanır:
    `[start + before, end - after]`. Ters dönen aralık (çok kısa filler)
    komple atılır. Sessizliğe padding yoktur.
-3. **Filler iki kademelidir:** kesin (`ııı`, `eee`, `aa`, `hmm`) her modda
+3. **Filler iki kademelidir:** kesin (`ııı`, `eee`, `ee`, `aa`, `hmm`) her modda
    kesilir; aday (`şey`, `yani`, `hani`, `işte`) yalnızca aggressive modda.
    Karşılaştırma formunda TR-safe lower (`İ→i`, `I→ı` elle) + `ı→i` katlaması
    + tekrar sıkıştırma (maks. 2) vardır; fuzzy yalnızca kesin listeye uygulanır.
@@ -57,6 +57,10 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 7. **`reason` alanları zincirlenerek debug izi tutar** — birleşen her
    segmentin tetikleyen kuralı `" + "` ile eklenir; "neden burayı kesti?"
    sorusunun cevabı `rapor.json`'da durur.
+8. **Timestamp-anomali koruması (KI-5):** tek kelimeden gelen filler kesimi
+   3000 ms'den uzunsa silencedetect çıktısıyla çapraz doğrulanır; sessizlikle
+   çakışmıyorsa kesim 3000 ms'e indirgenir ve reason'a not düşülür. Çakışan
+   uzun kesimlere (sessiz bölge) dokunulmaz; değme çakışma kanıt sayılmaz.
 
 ## İş Akışı
 
@@ -71,7 +75,7 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
   v0.1 bitmeden v0.2'ye geçilmez.
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
-## Mevcut Durum (2026-07-18)
+## Mevcut Durum (2026-07-19)
 
 **v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
 gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
@@ -94,8 +98,11 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `render/render.py` (iki aşamalı: segment re-encode + concat demuxer, `ENCODE_TEMPLATE` tek şablon) + `tests/make_fixture.py` | `166178e` |
 | `audio/probe.py` (ffprobe → total_ms) + `pipeline.py` (6 katman orkestratörü + REVIEW özeti/onayı) + `cli.py` (tek komut: `--aggressive`, `--yes/-y`, `--output/-o`) | `5ea7aa9` |
 | `pipeline.py`: transkript kaydı (`<ad>_transkript.json`, saf `words_to_json` — `transcribe/base.py`) | `90877ae` |
+| `detect/fillers.py`: kesin listeye `ee` (KI-4 kısmi önlem; tek `e` bilinçli dışarıda) | `e2c1341` |
+| `report/json_report.py` + `pipeline.py`: `skipped_aday_filler` alanı + review'da "X aday filler tespit edildi (kesilmedi — --aggressive ile kesilir)" satırı (`count_aday_fillers` — `detect/fillers.py`) | `5063197` |
+| `plan/cutplan.py`: KI-5 timestamp-anomali koruması (>3000ms tek-kelime filler, silencedetect çapraz doğrulaması) | `25bf5d0` |
 
-**Test sayısı:** 203 (`python -m pytest` → 203 passed; `ffmpeg` marker'lı
+**Test sayısı:** 225 (`python -m pytest` → 225 passed; `ffmpeg` marker'lı
 gerçek-ffmpeg testi dahil — CI `-m "not ffmpeg"` ile atlar).
 
 **Sıradaki:** v0.1 bitti — sıra v0.2'de (DESIGN.md §8): `render/encoder.py`
