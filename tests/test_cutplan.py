@@ -102,6 +102,61 @@ class TestMinKeep:
         assert _araliklar(plan, "keep") == [(0, 100), (200, 4_800), (4_900, 5_000)]
 
 
+class TestTimestampAnomaliKorumasi:
+    """KI-5 savunması: >3000ms tek-kelime filler, silencedetect'le çakışmıyorsa indirgenir."""
+
+    def test_uzun_filler_sessizliksiz_indirgenir(self) -> None:
+        # deneme.mkv vakasının tehlikeli hâli: 15sn'lik 'işte', sessizlik kanıtı YOK
+        # [2000,17000] → [2000,5000] → padding [2080,4880]
+        plan = build_cutplan([_filler(2_000, 17_000, "işte")], total_duration_ms=30_000)
+        assert _araliklar(plan, "cut") == [(2_080, 4_880)]
+        assert plan.cut[0].reason == (
+            "kesin filler: 'işte' [timestamp-anomali koruması: 15000ms → 3000ms]"
+            " [padding +80/-120ms]"
+        )
+
+    def test_sessizlikle_cakisiyorsa_dokunulmaz(self) -> None:
+        # deneme.mkv'deki gerçek vaka: aralık sessizlikle çakışıyor → kesim sessiz
+        # bölgede, zararsız — koruma tetiklenmez, tam aralık kesilir
+        plan = build_cutplan(
+            [_filler(2_000, 17_000, "işte"), _silence(10_000, 12_000)],
+            total_duration_ms=30_000,
+        )
+        assert _araliklar(plan, "cut") == [(2_080, 16_880)]
+        assert "timestamp-anomali" not in plan.cut[0].reason
+
+    def test_sinir_degeri_anomali_degil(self) -> None:
+        # tam 3000ms — kural "uzunsa" (katı >); sınır değer normal padding'e düşer
+        plan = build_cutplan([_filler(2_000, 5_000)], total_duration_ms=10_000)
+        assert _araliklar(plan, "cut") == [(2_080, 4_880)]
+        assert "timestamp-anomali" not in plan.cut[0].reason
+
+    def test_degme_cakisma_sayilmaz(self) -> None:
+        # sessizlik kelimeye DEĞİYOR ama İÇİNDE değil → aralık doğrulanamıyor → indirgenir
+        plan = build_cutplan(
+            [_filler(2_000, 17_000, "işte"), _silence(17_000, 18_000)],
+            total_duration_ms=30_000,
+        )
+        assert _araliklar(plan, "cut") == [(2_080, 4_880), (17_000, 18_000)]
+        assert "timestamp-anomali koruması" in plan.cut[0].reason
+
+    def test_sessizlik_segmentleri_etkilenmez(self) -> None:
+        # koruma yalnızca tek-kelime (filler) kesimlerine bakar; uzun sessizlik doğal
+        plan = build_cutplan([_silence(2_000, 17_000)], total_duration_ms=30_000)
+        assert _araliklar(plan, "cut") == [(2_000, 17_000)]
+
+    def test_ozel_esik_parametresi(self) -> None:
+        plan = build_cutplan(
+            [_filler(2_000, 4_000)], total_duration_ms=10_000, filler_anomali_ms=1_000
+        )
+        # 2000ms > 1000ms → [2000,3000] → padding [2080,2880]
+        assert _araliklar(plan, "cut") == [(2_080, 2_880)]
+
+    def test_gecersiz_esik_reddedilir(self) -> None:
+        with pytest.raises(ValueError, match="filler_anomali_ms"):
+            build_cutplan([], total_duration_ms=5_000, filler_anomali_ms=0)
+
+
 class TestUcSenaryolar:
     def test_hic_kesim_yoksa_tek_keep_tam_video(self) -> None:
         plan = build_cutplan([], total_duration_ms=5_000)

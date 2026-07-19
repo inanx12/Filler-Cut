@@ -21,6 +21,13 @@ alanlarında birikir (birleşmelerde reason'lar " + " ile zincirlenir).
    Kural yalnızca İKİ KESİM ARASINDAKİ keep'lere uygulanır; video başı/sonu
    kenar keep'leri konuşma içerdiğinden dokunulmaz.
 
+Ayrıca **timestamp-anomali koruması** (KNOWN_ISSUES.md KI-5): Whisper word-
+timestamp şişirebilir (gerçek koşuda "işte"ye ~15 sn atandığı doğrulandı).
+Tek kelimeden gelen filler kesimi ``filler_anomali_ms``'den uzunsa aralık
+silencedetect çıktısıyla çapraz doğrulanır; sessizlikle çakışmıyorsa kesim
+eşik değere indirgenir (padding o aralığa uygulanır) ve reason'a not düşülür.
+Sessizlikle çakışan uzun kesimlere dokunulmaz — sessiz bölge kesimi zararsızdır.
+
 Süre filtresi (``silence_min_ms``) burada uygulanmaz — o `detect/silence.py`'nin
 işi; bu fonksiyon kendisine verilen kesim adaylarına güvenir.
 """
@@ -36,6 +43,11 @@ from fillercut.models import CutPlan, Segment
 FILLER_BEFORE_MS = 80
 FILLER_AFTER_MS = 120
 MIN_KEEP_MS = 300
+
+#: KI-5 — tek kelimeden gelen filler kesimi bundan uzunsa timestamp şişirmesi
+#: şüphesi var: silencedetect ile çapraz doğrulanır, çakışma yoksa kesim bu
+#: değere indirgenir (konuşmaya taşan şişik kesim = veri kaybı).
+FILLER_ANOMALI_MS = 3_000
 
 
 class CutPlanError(ValueError):
@@ -62,6 +74,41 @@ def _padded(seg: Segment, before_ms: int, after_ms: int) -> _Aralik | None:
             start, end, True, [f"{seg.reason} [padding +{before_ms}/-{after_ms}ms]"]
         )
     return _Aralik(seg.start_ms, seg.end_ms, False, [seg.reason])
+
+
+def _anomali_korumasi(
+    seg: Segment, sessizlikler: list[Segment], *, anomali_esik_ms: int
+) -> Segment:
+    """KI-5 savunması: şişirilmiş word-timestamp'li filler kesimini sınırlar.
+
+    Tek kelimeden gelen (filler) kesim ``anomali_esik_ms``'den UZUNSA aralık
+    silencedetect çıktısıyla çapraz doğrulanır:
+
+    - Sessizlikle çakışıyorsa → kesim zaten sessiz bölgede, dokunulmaz
+      (deneme.mkv'deki 'işte' vakası bu yüzden zararsızdı).
+    - Çakışmıyorsa → kelime sonu konuşmaya şişmiş olabilir; kesim eşik değere
+      indirgenir ve reason'a "timestamp-anomali koruması" notu düşülür.
+      Padding bu indirgenmiş aralığa uygulanır (çağıranın işi).
+
+    Değme (uç uca) çakışma sayılmaz — aralığın İÇİNDE sessizlik kanıtı şart.
+    Sessizlik segmentleri hiçbir koşulda etkilenmez (silencedetect güvenilir).
+    """
+    if seg.kind != "filler" or seg.duration_ms <= anomali_esik_ms:
+        return seg
+    cakisiyor = any(
+        s.start_ms < seg.end_ms and seg.start_ms < s.end_ms for s in sessizlikler
+    )
+    if cakisiyor:
+        return seg
+    return Segment(
+        start_ms=seg.start_ms,
+        end_ms=seg.start_ms + anomali_esik_ms,
+        kind=seg.kind,
+        reason=(
+            f"{seg.reason} [timestamp-anomali koruması: "
+            f"{seg.duration_ms}ms → {anomali_esik_ms}ms]"
+        ),
+    )
 
 
 def _clamp(a: _Aralik, total_ms: int) -> _Aralik | None:
@@ -107,6 +154,7 @@ def build_cutplan(
     filler_before_ms: int = FILLER_BEFORE_MS,
     filler_after_ms: int = FILLER_AFTER_MS,
     min_keep_ms: int = MIN_KEEP_MS,
+    filler_anomali_ms: int = FILLER_ANOMALI_MS,
 ) -> CutPlan:
     """Kesim adaylarından (filler + sessizlik) deterministik CutPlan üretir.
 
@@ -117,6 +165,9 @@ def build_cutplan(
         total_duration_ms: Orijinal video süresi.
         filler_before_ms / filler_after_ms: Filler padding'i (daraltma).
         min_keep_ms: Bundan kısa iç keep parçası kesime katılır.
+        filler_anomali_ms: KI-5 koruması eşiği — tek kelimelik filler kesimi
+            bundan uzunsa silencedetect çıktısıyla çapraz doğrulanır;
+            çakışma yoksa kesim bu değere indirgenir.
 
     Raises:
         CutPlanError: Plan tüm videoyu kesiyorsa (boş video üretilmez).
@@ -126,10 +177,15 @@ def build_cutplan(
         raise ValueError(f"total_duration_ms pozitif olmalı: {total_duration_ms}")
     if filler_before_ms < 0 or filler_after_ms < 0 or min_keep_ms < 0:
         raise ValueError("padding ve min_keep negatif olamaz")
+    if filler_anomali_ms <= 0:
+        raise ValueError(f"filler_anomali_ms pozitif olmalı: {filler_anomali_ms}")
 
-    # 1) padding (daraltma) + [0, total] clamp + ilk merge
+    # 1) KI-5 anomali koruması → padding (daraltma) → [0, total] clamp → ilk merge
+    adaylar = list(kesim_adaylari)
+    sessizlikler = [s for s in adaylar if s.kind == "silence"]
     araliklar: list[_Aralik] = []
-    for seg in kesim_adaylari:
+    for seg in adaylar:
+        seg = _anomali_korumasi(seg, sessizlikler, anomali_esik_ms=filler_anomali_ms)
         a = _padded(seg, filler_before_ms, filler_after_ms)
         if a is not None:
             a = _clamp(a, total_duration_ms)

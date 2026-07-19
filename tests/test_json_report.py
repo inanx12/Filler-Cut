@@ -221,6 +221,30 @@ class TestKademeAyristirma:
         rapor = build_report(plan, 10_000)
         assert rapor.tiers == TierCounts(kesin_filler=2, aday_filler=0, silence=0)
 
+    def test_anomali_notu_kademe_sayimini_bozmaz_ki5(self) -> None:
+        # KI-5: "timestamp-anomali koruması" notu filler reason'ına eklenir;
+        # not " + " içermediğinden zincir parçalanması ve kademe sayımı etkilenmez.
+        plan = CutPlan(
+            original_duration_ms=20_000,
+            keep=[
+                Segment(start_ms=0, end_ms=2_080, kind="keep", reason="konuşma"),
+                Segment(start_ms=4_880, end_ms=20_000, kind="keep", reason="konuşma"),
+            ],
+            cut=[
+                Segment(
+                    start_ms=2_080,
+                    end_ms=4_880,
+                    kind="filler",
+                    reason=(
+                        "aday filler: 'işte' [timestamp-anomali koruması: 15000ms → 3000ms]"
+                        " [padding +80/-120ms]"
+                    ),
+                )
+            ],
+        )
+        rapor = build_report(plan, 20_000)
+        assert rapor.tiers == TierCounts(kesin_filler=0, aday_filler=1, silence=0)
+
 
 class TestWrapper:
     def test_dosyaya_yazar_ve_yol_doner(self, kelimeler: list[Word], tmp_path: Path) -> None:
