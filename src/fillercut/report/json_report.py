@@ -81,6 +81,9 @@ class Report(BaseModel):
     remaining: DurationStat
     saved_percent: float = Field(ge=0.0, le=100.0)
     cut_count: int = Field(ge=0)
+    #: Normal modda tespit edilip KESİLMEYEN aday filler sayısı (REVIEW bilgisi:
+    #: "--aggressive ile kesilir"). Aggressive modda 0'dır — aday'lar kesimdedir.
+    skipped_aday_filler: int = Field(ge=0, default=0)
     tiers: TierCounts
     cuts: list[ReportCut]
 
@@ -122,7 +125,12 @@ def _count_tiers(cuts: list[Segment]) -> TierCounts:
     return TierCounts(kesin_filler=kesin, aday_filler=aday, silence=sessizlik)
 
 
-def build_report(cutplan: CutPlan, total_ms: int) -> Report:
+def build_report(
+    cutplan: CutPlan,
+    total_ms: int,
+    *,
+    skipped_aday_filler: int = 0,
+) -> Report:
     """CutPlan'den Report üretir — saf fonksiyon (yan etki yok).
 
     Args:
@@ -130,10 +138,14 @@ def build_report(cutplan: CutPlan, total_ms: int) -> Report:
         total_ms: Orijinal video süresi — pipeline bunu ffprobe'dan bilir;
             `cutplan.original_duration_ms` ile uyuşmazsa plan/gerçeklik
             sapması vardır, sessizce geçilmez.
+        skipped_aday_filler: Normal modda tespit edilip kesilmeyen aday filler
+            sayısı; DETECT katmanı sayar (`detect/fillers.count_aday_fillers`),
+            pipeline aktarır. CutPlan'den türetilemez — kesilmeyen kelime
+            planda iz bırakmaz.
 
     Raises:
-        ValueError: `total_ms` pozitif değilse veya cutplan süresiyle
-            uyuşmuyorsa.
+        ValueError: `total_ms` pozitif değilse, cutplan süresiyle
+            uyuşmuyorsa veya `skipped_aday_filler` negatifse.
     """
     if total_ms <= 0:
         raise ValueError(f"total_ms pozitif olmalı: {total_ms}")
@@ -142,6 +154,8 @@ def build_report(cutplan: CutPlan, total_ms: int) -> Report:
             f"total_ms ({total_ms}) cutplan.original_duration_ms "
             f"({cutplan.original_duration_ms}) ile uyuşmuyor"
         )
+    if skipped_aday_filler < 0:
+        raise ValueError(f"skipped_aday_filler negatif olamaz: {skipped_aday_filler}")
     kesilen = cutplan.total_cut_ms
     return Report(
         original=DurationStat(ms=total_ms, human=_human(total_ms)),
@@ -151,6 +165,7 @@ def build_report(cutplan: CutPlan, total_ms: int) -> Report:
         ),
         saved_percent=round(kesilen / total_ms * 100, 2),
         cut_count=len(cutplan.cut),
+        skipped_aday_filler=skipped_aday_filler,
         tiers=_count_tiers(cutplan.cut),
         cuts=[
             ReportCut(
@@ -165,12 +180,18 @@ def build_report(cutplan: CutPlan, total_ms: int) -> Report:
     )
 
 
-def write_json_report(cutplan: CutPlan, total_ms: int, path: str | Path) -> Path:
+def write_json_report(
+    cutplan: CutPlan,
+    total_ms: int,
+    path: str | Path,
+    *,
+    skipped_aday_filler: int = 0,
+) -> Path:
     """`build_report` + dosyaya yazım wrapper'ı (I/O yalnız burada).
 
     UTF-8, girintili JSON yazar; yazılan dosyanın yolunu döner.
     """
-    report = build_report(cutplan, total_ms)
+    report = build_report(cutplan, total_ms, skipped_aday_filler=skipped_aday_filler)
     hedef = Path(path)
     hedef.write_text(report.to_json() + "\n", encoding="utf-8")
     return hedef

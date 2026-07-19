@@ -15,6 +15,7 @@ from fillercut.detect.fillers import (
     FUZZY_THRESHOLD,
     KESIN_FILLERS,
     classify_word,
+    count_aday_fillers,
     detect_fillers,
     normalize_word,
 )
@@ -141,3 +142,22 @@ class TestDetectFillers:
         for seg in detect_fillers(kelimeler, aggressive=True):
             assert seg.end_ms > seg.start_ms
             assert seg.reason.strip()
+
+
+class TestCountAdayFillers:
+    """REVIEW bilgisi: normal modda kesilMEYEN aday'ların sayımı."""
+
+    def test_yalniz_adaylar_sayilir(self) -> None:
+        kelimeler = [
+            _w("şey", 0, 200),
+            _w("ııı", 200, 500),  # kesin — sayılmaz
+            _w("yani", 500, 800),
+            _w("bugün", 800, 1_200),  # gerçek kelime — sayılmaz
+        ]
+        assert count_aday_fillers(kelimeler) == 2
+
+    def test_aday_yoksa_sifir(self) -> None:
+        assert count_aday_fillers([_w("merhaba"), _w("eee")]) == 0
+
+    def test_bos_liste(self) -> None:
+        assert count_aday_fillers([]) == 0

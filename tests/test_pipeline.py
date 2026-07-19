@@ -52,6 +52,17 @@ PLAN = CutPlan(
 REPORT: Report = build_report(PLAN, TOPLAM_MS)  # saf fonksiyon — gerçek rapor
 
 
+class _AdayTranscriber(Transcriber):
+    """İki aday filler'lı sahte ASR çıktısı (normal modda ikisi de atlanır)."""
+
+    def transcribe(self, wav_path: str | Path) -> list[Word]:
+        return [
+            Word(text="şey", start_ms=100, end_ms=300, confidence=0.9),
+            Word(text="yani", start_ms=400, end_ms=700, confidence=0.9),
+            Word(text="merhaba", start_ms=800, end_ms=1_200, confidence=0.9),
+        ]
+
+
 class _SahteTranscriber(Transcriber):
     """Enjekte edilen sahte ASR — aldığı WAV yolunu kaydeder."""
 
@@ -122,7 +133,7 @@ def katmanlar():
         )
         m.json = stack.enter_context(
             patch("fillercut.pipeline.write_json_report",
-                  side_effect=_izli(sira, "write_json_report", lambda plan, total, yol: yol))
+                  side_effect=_izli(sira, "write_json_report", lambda plan, total, yol, **kw: yol))
         )
         m.confirm = stack.enter_context(
             patch("fillercut.pipeline.typer.confirm", return_value=True)
@@ -233,6 +244,31 @@ class TestTranskriptKaydi:
         beklenen = hedef_dizin / "video_transkript.json"  # isim girdi stem'inden
         assert beklenen.is_file()
         assert sonuc.transcript_path == beklenen
+
+
+class TestAtlananAdayBilgisi:
+    """Kesilmeyen aday sayısı rapora akar; review özetinde uyarı satırı basılır."""
+
+    def test_normal_modda_aday_sayisi_rapora_akar(self, girdi: Path, katmanlar: Any) -> None:
+        run(girdi, yes=True, transcriber=_AdayTranscriber())
+        assert katmanlar.report.call_args.kwargs["skipped_aday_filler"] == 2
+        assert katmanlar.json.call_args.kwargs["skipped_aday_filler"] == 2
+
+    def test_aggressive_modda_atlanan_aday_sifir(self, girdi: Path, katmanlar: Any) -> None:
+        # aggressive'de aday'lar kesimdedir — atlanan yok, uyarı yok
+        run(girdi, yes=True, aggressive=True, transcriber=_AdayTranscriber())
+        assert katmanlar.report.call_args.kwargs["skipped_aday_filler"] == 0
+        assert katmanlar.json.call_args.kwargs["skipped_aday_filler"] == 0
+
+    def test_review_ozetinde_atlanan_aday_uyarisi(
+        self, girdi: Path, katmanlar: Any, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        rapor = build_report(PLAN, TOPLAM_MS, skipped_aday_filler=2)
+        katmanlar.report.side_effect = lambda *a, **k: rapor
+        run(girdi, yes=False, transcriber=_SahteTranscriber(katmanlar.sira))
+        cikti = capsys.readouterr().out
+        assert "2 aday filler tespit edildi" in cikti
+        assert "--aggressive ile kesilir" in cikti
 
 
 class TestReviewOnayi:

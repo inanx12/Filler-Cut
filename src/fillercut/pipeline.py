@@ -9,8 +9,8 @@ RenderError) yakalanıp kırmızı mesaj + ``typer.Exit(1)`` ile temiz çıkış
 çevrilir — kullanıcı traceback görmez.
 
 REVIEW (v0.1 hali): render'dan ÖNCE konsola özet tablosu (kesim sayısı,
-kademe dağılımı, kazanılan süre %, ilk 5 kesimin reason'ı) + ``[y/N]`` onayı;
-``yes=True`` ile atlanır.
+kademe dağılımı, kesilmeyen aday uyarısı, kazanılan süre %, ilk 5 kesimin
+reason'ı) + ``[y/N]`` onayı; ``yes=True`` ile atlanır.
 
 TRANSCRIBE adımından sonra kelime listesi ``<ad>_transkript.json`` olarak
 kaydedilir (çıktıların yanına) — pahalı ASR çıktısı review'da ret edilse
@@ -34,7 +34,7 @@ from rich.table import Table
 from fillercut.audio.extractor import ExtractionError, extract_audio
 from fillercut.audio.probe import ProbeError, probe_duration_ms
 from fillercut.audio.silence import SilenceDetectionError, detect_silence
-from fillercut.detect.fillers import detect_fillers
+from fillercut.detect.fillers import count_aday_fillers, detect_fillers
 from fillercut.detect.silence import filter_silence
 from fillercut.models import CutPlan
 from fillercut.plan.cutplan import build_cutplan
@@ -80,6 +80,11 @@ def _print_review(report: Report) -> None:
         "[bold]Kademe dağılımı:[/bold] "
         f"{t.kesin_filler} kesin filler, {t.aday_filler} aday filler, {t.silence} sessizlik"
     )
+    if report.skipped_aday_filler > 0:
+        _out.print(
+            f"[yellow]{report.skipped_aday_filler} aday filler tespit edildi "
+            "(kesilmedi — --aggressive ile kesilir)[/yellow]"
+        )
     _out.print(
         f"[bold]Kazanılan süre:[/bold] {report.cut_total.human} "
         f"({report.original.human} → {report.remaining.human}), %{report.saved_percent}"
@@ -181,6 +186,9 @@ def run(
         # [3] DETECT — filler (transkript) + sessizlik (dalga formu)
         _out.print("[cyan][3/6] DETECT[/cyan] — filler ve sessizlikler tespit ediliyor…")
         fillerlar = detect_fillers(words, aggressive=aggressive)
+        # KesilMEYEN aday sayısı REVIEW/rapora bilgi olarak akar; aggressive'de
+        # aday'lar zaten kesimdedir — atlanan yoktur.
+        atlanan_aday = 0 if aggressive else count_aday_fillers(words)
         try:
             sessizlikler = filter_silence(
                 detect_silence(wav, total_duration_ms=total_ms)
@@ -194,7 +202,7 @@ def run(
         plan: CutPlan = build_cutplan(
             [*fillerlar, *sessizlikler], total_duration_ms=total_ms
         )
-        report = build_report(plan, total_ms)
+        report = build_report(plan, total_ms, skipped_aday_filler=atlanan_aday)
     except ValueError as exc:
         # CutPlanError (plan tüm videoyu kesiyor) + model/rapor validasyonu
         _fail(f"PLAN başarısız: {exc}")
@@ -217,7 +225,9 @@ def run(
     except (RenderError, FileNotFoundError) as exc:
         _fail(f"RENDER başarısız: {exc}")
     try:
-        rapor_dosyasi = write_json_report(plan, total_ms, rapor_yolu)
+        rapor_dosyasi = write_json_report(
+            plan, total_ms, rapor_yolu, skipped_aday_filler=atlanan_aday
+        )
     except OSError as exc:
         _fail(f"rapor.json yazılamadı: {exc}")
 

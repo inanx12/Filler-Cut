@@ -172,6 +172,31 @@ class TestSafFonksiyonSozlesmesi:
             build_report(plan, 0)
 
 
+class TestAtlananAdayAlani:
+    """Normal modda kesilMEYEN aday filler sayısı rapora taşınır."""
+
+    def test_varsayilan_sifir(self, rapor_normal: Report) -> None:
+        assert rapor_normal.skipped_aday_filler == 0
+
+    def test_sayi_rapora_ve_jsona_yansir(
+        self, kelimeler: list[Word], tmp_path: Path
+    ) -> None:
+        plan = _zincir(kelimeler, agresif=False)
+        rapor = build_report(plan, TOPLAM_MS, skipped_aday_filler=2)
+        assert rapor.skipped_aday_filler == 2
+
+        hedef = write_json_report(
+            plan, TOPLAM_MS, tmp_path / "r.json", skipped_aday_filler=2
+        )
+        veri = json.loads(hedef.read_text(encoding="utf-8"))
+        assert veri["skipped_aday_filler"] == 2
+
+    def test_negatif_reddedilir(self, kelimeler: list[Word]) -> None:
+        plan = _zincir(kelimeler, agresif=False)
+        with pytest.raises(ValueError, match="negatif"):
+            build_report(plan, TOPLAM_MS, skipped_aday_filler=-1)
+
+
 class TestKademeAyristirma:
     """KI-3: reason formatı sözleşmesi — padding eki ' + ' içerir."""
 

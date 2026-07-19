@@ -125,3 +125,13 @@ def detect_fillers(words: Iterable[Word], *, aggressive: bool = False) -> list[S
             )
         )
     return segments
+
+
+def count_aday_fillers(words: Iterable[Word]) -> int:
+    """Aday kademedeki filler sayısı (tespit OLAYI sayısı; kesim değil).
+
+    Normal modda bu kelimeler kesilmez — REVIEW/rapor "X aday filler tespit
+    edildi (kesilmedi — --aggressive ile kesilir)" satırını bu sayıyla basar.
+    Aggressive modda çağrılmaz: aday'lar zaten kesimdedir, atlanan yoktur.
+    """
+    return sum(1 for w in words if classify_word(w.text) == "aday")
