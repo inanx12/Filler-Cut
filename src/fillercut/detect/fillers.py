@@ -2,7 +2,7 @@
 
 İki kademe (DESIGN.md §6, İncelik 1):
 
-- **Kesin filler** (`ııı`, `eee`, `aa`, `hmm`) → her modda kesilir.
+- **Kesin filler** (`ııı`, `eee`, `ee`, `aa`, `hmm`) → her modda kesilir.
 - **Aday filler** (`şey`, `yani`, `hani`, `işte`) → "şey" her zaman filler
   değildir ("bir şey söyleyeceğim"); normal modda kesilmez, sadece
   `aggressive=True` iken segment üretir. `reason` alanına kademe yazılır.
@@ -43,7 +43,9 @@ _MAX_REPEAT = 2
 _PUNCT = " \t\r\n.,!?;:\"'()[]{}<>…—–-«»/"
 
 #: Kullanıcıya dönük kanonik listeler (normalleşmiş hâlleri aşağıda üretilir).
-_KESIN_HAM = ("ııı", "eee", "aa", "hmm")
+#: 'ee' — KI-4: Whisper "eee"yi iki harfe indirgeyebilir; tek 'e' ise false
+#: positive riski nedeniyle bilinçli DIŞARIDA bırakıldı (KNOWN_ISSUES.md).
+_KESIN_HAM = ("ııı", "eee", "ee", "aa", "hmm")
 _ADAY_HAM = ("şey", "yani", "hani", "işte")
 
 

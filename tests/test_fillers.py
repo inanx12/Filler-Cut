@@ -56,7 +56,10 @@ class TestNormalizeWord:
 
 
 class TestClassifyWord:
-    @pytest.mark.parametrize("kelime", ["ııı", "eee", "aa", "hmm", "Eee,", "İİİ", "III", "ıııı"])
+    @pytest.mark.parametrize(
+        "kelime",
+        ["ııı", "eee", "ee", "EE", "Ee,", "aa", "hmm", "Eee,", "İİİ", "III", "ıııı"],
+    )
     def test_kesin_filler_yakalanir(self, kelime: str) -> None:
         assert classify_word(kelime) == "kesin"
 
@@ -73,6 +76,14 @@ class TestClassifyWord:
         assert classify_word("sey") is None
         # aynı şekilde "yani" ≈ "yeni" de eşleşmemeli
         assert classify_word("yeni") is None
+
+    def test_ee_kesin_listede_tek_e_degil_ki4(self) -> None:
+        # KI-4 (KNOWN_ISSUES.md): Whisper "eee"yi iki harfe indirgeyebilir —
+        # "ee" kesin listede; tek "e" false positive riskiyle bilinçli dışarıda.
+        assert "ee" in KESIN_FILLERS
+        assert classify_word("e") is None
+        assert classify_word("E") is None
+        assert classify_word("e.") is None
 
     def test_esik_modul_sabiti_makul_aralikta(self) -> None:
         assert 80.0 <= FUZZY_THRESHOLD <= 100.0
@@ -102,6 +113,13 @@ class TestDetectFillers:
         assert len(sonuc) == 1
         assert sonuc[0].reason.startswith("kesin filler")
         assert "Eee," in sonuc[0].reason
+
+    def test_ee_normal_modda_segment_olur(self) -> None:
+        # KI-4 önlemi: iki harfe inen kısaltma da normal modda kesilir
+        sonuc = detect_fillers([_w("ee", 1_000, 1_400)])
+        assert len(sonuc) == 1
+        assert sonuc[0].kind == "filler"
+        assert sonuc[0].reason.startswith("kesin filler")
 
     def test_karisik_cumlede_mod_ayrimi(self) -> None:
         kelimeler = [_w("şey", 0, 300), _w("ııı", 300, 700), _w("yani", 700, 1_000)]
