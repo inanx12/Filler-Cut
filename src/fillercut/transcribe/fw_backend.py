@@ -69,7 +69,7 @@ from faster_whisper import WhisperModel  # type: ignore[import-untyped]  # noqa:
 #: Model ayarları — modül sabitleri. Hedef donanım RTX 4050 (CUDA + float16).
 #: CPU'ya düşmek gerekirse ``device="cpu", compute_type="int8"`` ile
 #: instantiate edilir (DESIGN.md §5 Katman A).
-MODEL_SIZE = "small"
+MODEL_SIZE = "turbo"
 DEVICE = "cuda"
 COMPUTE_TYPE = "float16"
 
