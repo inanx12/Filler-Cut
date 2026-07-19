@@ -122,7 +122,7 @@ class TestWordsFromSegments:
 
 class TestFasterWhisperTranscriber:
     def test_model_ayarlari_modul_sabiti(self) -> None:
-        assert MODEL_SIZE == "small"
+        assert MODEL_SIZE == "turbo"
         assert DEVICE == "cuda"
         assert COMPUTE_TYPE == "float16"
         assert LANGUAGE == "tr"
@@ -138,7 +138,7 @@ class TestFasterWhisperTranscriber:
             t = FasterWhisperTranscriber()
             wm.assert_not_called()  # __init__ modeli kurmaz — indirme tetiklenmez
             t.transcribe(wav)
-            wm.assert_called_once_with("small", device="cuda", compute_type="float16")
+            wm.assert_called_once_with("turbo", device="cuda", compute_type="float16")
             t.transcribe(wav)
             wm.assert_called_once()  # ikinci çağrıda önbellekten — tekrar kurulmaz
 

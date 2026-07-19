@@ -1,7 +1,7 @@
 """faster-whisper backend'i — CUDA float16 (RTX 4050 hedefli).
 
 **NOT:** İlk gerçek çalıştırmada faster-whisper, modeli HuggingFace'den
-indirir (``MODEL_SIZE="small"`` için ~1 GB); sonraki çalıştırmalarda
+indirir (``MODEL_SIZE="turbo"`` için ~1.6 GB); sonraki çalıştırmalarda
 önbellekten yüklenir. CI'da cache'lenmelidir.
 
 Windows + CUDA: cuBLAS/cuDNN DLL dizinlerinin kaydı (process PATH'i +

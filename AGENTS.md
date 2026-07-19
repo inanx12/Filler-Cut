@@ -110,8 +110,8 @@ gerçek-ffmpeg testi dahil — CI `-m "not ffmpeg"` ile atlar).
 (YAML), konsol review/onay katmanının genişletilmesi.
 
 **Not (TRANSCRIBE):** Model ayarları `fw_backend.py` modül sabitleridir
-(`small` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile
-instantiate edilir). İlk gerçek çalıştırmada ~1 GB model iner — CI'da
+(`turbo` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile
+instantiate edilir). İlk gerçek çalıştırmada ~1.6 GB model iner — CI'da
 cache'le. Birim testlerde WhisperModel mock'lanır; gerçek model koşusu
 kullanıcı makinesinde yapılır. CUDA kurulumu `pip install -e ".[cuda]"`
 (cuBLAS/cuDNN pip paketleri); Windows'ta DLL dizini kaydı
