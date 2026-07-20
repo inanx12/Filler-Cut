@@ -91,3 +91,24 @@
 - **Olası iyileştirme:** v0.2 review katmanında indirgenen kesimlerin ayrıca
   işaretlenip kullanıcı onayına sunulması.
 - **Referans:** `tests/test_cutplan.py::TestTimestampAnomaliKorumasi`.
+
+## KI-6 — AMF ve QSV kalite argümanları kalibre edilmedi
+
+- **Belirti:** `render/encoder.py`'nin kalite tablosunda `h264_amf` ve
+  `h264_qsv` girişleri makul default'lardır; gerçek donanımda kalite/boyut
+  ölçümü YAPILMAMIŞTIR.
+- **Neden:** Geliştirme makinesi NVIDIA'dır (RTX 4050). AMD ve Intel donanımına
+  erişim yok; her iki encoder da bu makinede `-encoders` listesinde görünüyor
+  ama probe'da patlıyor (`amfrt64.dll failed to open`, `MFX session: -9`) —
+  yani arg setleri gerçek bir sürücüde hiç çalıştırılamadı.
+- **Etki:** AMD/Intel makinelerde çıktı kalitesi veya dosya boyutu beklenenden
+  sapabilir; en kötü durumda argüman reddi → o encoder'ın render'da patlaması
+  (probe geçse bile). NVENC ve libx264 yolları ölçüldü, etkilenmez.
+- **Alınan önlem:** Değerler crf'e bağlanıp tek tabloda toplandı
+  (`_KALITE_ARGS`) — kalibrasyon tek dosyada, tek fonksiyonda yapılabilir.
+  AMF'de rate control açıkça `cqp`'ye sabitlendi: AMF'nin varsayılan bitrate
+  hedefli modu düşük bitrate'te sessizce kalite düşürür.
+- **Kalan risk:** Kalibrasyon AMD/Intel donanımı bulunana kadar bekliyor.
+- **Referans:** `tests/test_encoder.py::TestBuildEncodeArgs` (değerleri
+  sabitler, kalitesini doğrulamaz); NVENC ölçümü
+  `TestGercekNvencProbe::test_uretilen_arglarla_gercek_encode_gecer`.
