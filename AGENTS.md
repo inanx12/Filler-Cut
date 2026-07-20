@@ -123,8 +123,8 @@ gerektirmez; 5'i `ffmpeg` marker'lıdır (gerçek ffmpeg/donanım) — CI
 skip eder.
 
 **Sıradaki:** v0.2'nin kalan işi **HTML review** (`report/html_report.py` —
-timeline görünümü, kesilecekler kırmızı). Not: DESIGN.md §8'in tablosunda HTML
-rapor hâlâ v0.3 satırındadır; review katmanının HTML'i v0.2'ye çekilmiştir.
+timeline görünümü, kesilecekler kırmızı; v0.3'ten v0.2'ye çekildi, DESIGN.md
+§8 tablosu buna göre güncellendi).
 
 **Not (TRANSCRIBE):** Model ayarları `fw_backend.py` modül sabitleridir
 (`turbo` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile

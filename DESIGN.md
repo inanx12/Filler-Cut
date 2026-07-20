@@ -157,8 +157,8 @@ silence_min_ms = 400       # bundan kısa sessizliğe dokunma
 | Sürüm | Kapsam |
 |---|---|
 | **v0.1** | CLI + extract + faster-whisper + filler/sessizlik tespiti + CPU render + JSON rapor. **Tek video, Türkçe.** |
-| **v0.2** | HW encoder auto-detect (probe'lu) + config.yaml + konsol review/onay |
-| **v0.3** | HTML rapor (timeline'da kesilecekler kırmızı) + whisper.cpp Vulkan backend |
+| **v0.2** | HW encoder auto-detect (probe'lu) + config.toml + HTML review (timeline'da kesilecekler kırmızı; v0.3'ten öne çekildi) |
+| **v0.3** | whisper.cpp Vulkan backend |
 | **v1.0** | pytest + ruff/mypy CI (GitHub Actions) + demo GIF'li README + duyuru |
 
 GUI, çoklu video, batch işleme → v1 sonrası. **v0.1 bitmeden v0.2'ye geçilmez.**
