@@ -46,6 +46,7 @@ from fillercut.models import CutPlan
 from fillercut.plan.cutplan import build_cutplan
 from fillercut.render.encoder import build_encode_args, select_encoder
 from fillercut.render.render import RenderError, render
+from fillercut.report.html_report import write_html_report
 from fillercut.report.json_report import (
     EncoderInfo,
     Report,
@@ -66,6 +67,9 @@ class PipelineResult:
     report_path: Path
     transcript_path: Path
     report: Report
+    #: REVIEW HTML'inin yolu — interaktif modda (``yes=False``) üretilir;
+    #: ``--yes`` (headless) akışında ``None``.
+    review_html_path: Path | None = None
 
 
 def default_output_path(input_path: Path) -> Path:
@@ -127,6 +131,7 @@ def run(
     output_path: str | Path | None = None,
     config: Config | None = None,
     transcriber: Transcriber | None = None,
+    open_review: bool = False,
 ) -> PipelineResult:
     """6 katmanı sırayla çalıştırır: video → temiz MP4 + rapor.json.
 
@@ -138,6 +143,9 @@ def run(
             zinciri ``cli.py``'de çözülür). Verilmezse default Config.
         transcriber: ASR backend'i; verilmezse config.asr ayarlarıyla
             faster-whisper kurulur. Enjekte edilebilirlik testleri içindir.
+        open_review: REVIEW HTML'ini üretimden sonra varsayılan tarayıcıda
+            açar (``--open``; stdlib ``webbrowser``). Yalnızca interaktif modda
+            (``yes=False``) anlam taşır — headless akışta HTML üretilmez.
 
     Returns:
         Üretilen video/rapor/transkript yolları ve rapor.
@@ -243,10 +251,23 @@ def run(
         # CutPlanError (plan tüm videoyu kesiyor) + model/rapor validasyonu
         _fail(f"PLAN başarısız: {exc}")
 
-    # [5] REVIEW — v0.1: konsol özeti + [y/N] onayı
+    # [5] REVIEW — v0.2: konsol özeti + statik HTML timeline + [y/N] onayı.
+    # HTML onaydan ÖNCE üretilir ki kullanıcı kesim planını görsel görsün;
+    # --yes (headless) akışında üretilmez (review_html_path None kalır).
+    review_html: Path | None = None
     if not yes:
         _out.print("[cyan][5/6] REVIEW[/cyan]")
         _print_review(report)
+        review_yolu = dst.with_name(f"{src.stem}_review.html")
+        try:
+            review_html = write_html_report(report, review_yolu)
+        except OSError as exc:
+            _fail(f"review HTML yazılamadı: {exc}")
+        _out.print(f"[bold]Review HTML:[/bold] {review_html}")
+        if open_review:
+            import webbrowser
+
+            webbrowser.open(review_html.as_uri())
         if not typer.confirm("Render edilsin mi?", default=False):
             _out.print(
                 "[yellow]İptal edildi[/yellow] — video ve rapor yazılmadı; "
@@ -279,4 +300,5 @@ def run(
         report_path=rapor_dosyasi,
         transcript_path=transkript_yolu,
         report=report,
+        review_html_path=review_html,
     )

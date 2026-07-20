@@ -24,7 +24,7 @@ video.mp4
 [4] PLAN         kesim planı: birleştir, padding uygula, çakışmaları çöz → CutPlan
    │
    ▼
-[5] REVIEW       rapor: konsol özeti + JSON/HTML → kullanıcı onayı (--yes ile atlanır)
+[5] REVIEW       rapor: konsol özeti + JSON + statik HTML (timeline, kesimler kırmızı, JS'siz) → kullanıcı onayı (--yes ile atlanır)
    │
    ▼
 [6] RENDER       keep segmentlerini re-encode (HW accel auto-detect) + concat
@@ -34,6 +34,8 @@ video_temiz.mp4  +  rapor.json
 ```
 
 **Kritik tasarım kararı:** `[4]`'ün çıktısı (CutPlan) saf veridir — JSON'a serileşebilen, deterministik bir kesim listesi. Render onu körlemesine uygular. Bu sayede "neden burayı kesti?" sorusunun cevabı her zaman bir dosyada durur. **Karar veren katman ile uygulayan katman asla iç içe geçmez.**
+
+**REVIEW HTML'i (v0.2):** `[5]` onaydan ÖNCE tek dosyalık, JS'siz, taşınabilir bir statik HTML üretir (`<ad>_review.html`): mini timeline şeridinde kesimler kırmızı, reason'lar `title` tooltip'inde; `--yes` (headless) akışında üretilmez. Rapor modelindeki `cuts[].approved` alanı (default `true`, eski JSON'larla geriye uyumlu) v0.3 interaktif review'un — kullanıcının kesimleri seçerek onaylaması — temelidir; v0.2'de yalnızca şemada durur.
 
 ## 3. Klasör Yapısı (src layout)
 

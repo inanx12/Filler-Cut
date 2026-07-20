@@ -48,6 +48,13 @@ def main(
         Path | None,
         typer.Option("--output", "-o", help="Çıktı MP4 yolu (varsayılan: <ad>_temiz.mp4)."),
     ] = None,
+    open_review: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help="Review HTML'ini üretimden sonra varsayılan tarayıcıda aç.",
+        ),
+    ] = False,
 ) -> None:
     """VIDEO'daki filler'ları ve gereksiz sessizlikleri kes; temiz MP4 + rapor üret."""
     try:
@@ -56,7 +63,7 @@ def main(
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     cfg = merge_config(cfg, aggressive=aggressive, yes=yes)
-    sonuc = run(video, output_path=output, config=cfg)
+    sonuc = run(video, output_path=output, config=cfg, open_review=open_review)
     typer.echo(
         f"Bitti: {sonuc.output_path} (%{sonuc.report.saved_percent} kazanım)\n"
         f"rapor: {sonuc.report_path}\n"

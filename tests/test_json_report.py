@@ -312,6 +312,32 @@ class TestEncoderAlani:
         assert json.loads(hedef.read_text(encoding="utf-8"))["encoder"] is None
 
 
+class TestApprovedAlani:
+    """v0.3 interaktif review temeli: ReportCut.approved (geriye uyumlu)."""
+
+    def test_varsayilan_true(self, rapor_normal: Report) -> None:
+        assert all(c.approved is True for c in rapor_normal.cuts)
+
+    def test_eski_json_alansiz_yuklenir(self) -> None:
+        # v0.1/v0.2 raporlarında approved alanı yoktu — default True ile yüklenir.
+        eski = (
+            '{"original": {"ms": 1000, "human": "00:01"},'
+            ' "cut_total": {"ms": 100, "human": "00:00"},'
+            ' "remaining": {"ms": 900, "human": "00:00"},'
+            ' "saved_percent": 10.0, "cut_count": 1, "skipped_aday_filler": 0,'
+            ' "tiers": {"kesin_filler": 1, "aday_filler": 0, "silence": 0},'
+            ' "encoder": null,'
+            ' "cuts": [{"start_ms": 0, "end_ms": 100, "duration_ms": 100,'
+            '           "kind": "filler", "reason": "kesin filler: \'eee\'"}]}'
+        )
+        rapor = Report.model_validate_json(eski)
+        assert rapor.cuts[0].approved is True
+
+    def test_jsona_yazilir(self, rapor_normal: Report) -> None:
+        veri = json.loads(rapor_normal.to_json())
+        assert all(c["approved"] is True for c in veri["cuts"])
+
+
 class TestWrapper:
     def test_dosyaya_yazar_ve_yol_doner(self, kelimeler: list[Word], tmp_path: Path) -> None:
         plan = _zincir(kelimeler, agresif=False)

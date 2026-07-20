@@ -69,6 +69,10 @@ class ReportCut(BaseModel):
     duration_ms: int = Field(gt=0)
     kind: CutKind
     reason: str
+    #: v0.3 interaktif review'un temeli: kullanıcı bu kesimi onaylıyor mu?
+    #: v0.2'de her zaman True (UI'da kullanılmaz); eski rapor JSON'ları alan
+    #: olmadan da yüklenir (default True — geriye uyumlu).
+    approved: bool = True
 
 
 class EncoderAttempt(BaseModel):

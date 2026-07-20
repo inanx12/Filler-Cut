@@ -352,6 +352,21 @@ class TestReviewOnayi:
         katmanlar.render.assert_not_called()
         katmanlar.json.assert_not_called()
 
+    def test_interaktif_modda_review_html_uretilir(self, girdi: Path, katmanlar: Any) -> None:
+        # v0.2: onaydan ÖNCE statik HTML üretilir + yolu PipelineResult'a girer.
+        sonuc = run(girdi, config=Config(yes=False), transcriber=_SahteTranscriber(katmanlar.sira))
+        assert sonuc.review_html_path is not None
+        assert sonuc.review_html_path.is_file()
+        assert sonuc.review_html_path.name == "video_review.html"
+        icerik = sonuc.review_html_path.read_text(encoding="utf-8")
+        assert "<!DOCTYPE html>" in icerik
+
+    def test_yes_modunda_html_uretilmez(self, girdi: Path, katmanlar: Any) -> None:
+        # --yes (headless) akışında HTML üretilmez.
+        sonuc = run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        assert sonuc.review_html_path is None
+        assert not (girdi.parent / "video_review.html").exists()
+
 
 class TestHataYollari:
     def test_girdi_yoksa_exit_1(self, tmp_path: Path) -> None:
