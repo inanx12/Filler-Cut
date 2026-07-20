@@ -29,6 +29,7 @@ from fillercut.plan.cutplan import CutPlanError
 from fillercut.render.encoder import EncoderSelection, ProbeAttempt, build_encode_args
 from fillercut.render.render import RenderError
 from fillercut.report.json_report import EncoderInfo, Report, build_report
+from fillercut.report.review_server import ReviewDecision
 from fillercut.transcribe.base import Transcriber
 
 TOPLAM_MS = 5_000
@@ -366,6 +367,61 @@ class TestReviewOnayi:
         sonuc = run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
         assert sonuc.review_html_path is None
         assert not (girdi.parent / "video_review.html").exists()
+
+
+class TestInteraktifReview:
+    """v0.3: --interactive lokal sunucu + plan filtresi (konsol onayı yok)."""
+
+    def test_sunucu_acilir_plan_suzulur(self, girdi: Path, katmanlar: Any) -> None:
+        karar = ReviewDecision(approved=[False], cancelled=False)
+        with (
+            patch("fillercut.pipeline.ReviewServer") as mock_sunucu,
+            patch("fillercut.pipeline.filter_cutplan", return_value=PLAN) as m_filtre,
+            patch("fillercut.pipeline.build_interactive_html", return_value="<html/>"),
+            patch("webbrowser.open"),
+        ):
+            mock_sunucu.return_value.wait.return_value = karar
+            run(
+                girdi,
+                config=Config(yes=False),
+                interactive=True,
+                transcriber=_SahteTranscriber(katmanlar.sira),
+            )
+        mock_sunucu.assert_called_once()
+        m_filtre.assert_called_once_with(PLAN, [False])
+        katmanlar.confirm.assert_not_called()  # interaktifte konsol onayı yok
+        katmanlar.render.assert_called_once()
+        # rapor orijinal plan + approved ile yazılır (reddedilen görünür)
+        assert katmanlar.json.call_args.kwargs["approved"] == [False]
+
+    def test_cancel_render_yok(self, girdi: Path, katmanlar: Any) -> None:
+        karar = ReviewDecision(approved=[], cancelled=True)
+        with (
+            patch("fillercut.pipeline.ReviewServer") as mock_sunucu,
+            patch("fillercut.pipeline.build_interactive_html", return_value="<html/>"),
+            patch("webbrowser.open"),
+        ):
+            mock_sunucu.return_value.wait.return_value = karar
+            with pytest.raises(typer.Exit) as exc_info:
+                run(
+                    girdi,
+                    config=Config(yes=False),
+                    interactive=True,
+                    transcriber=_SahteTranscriber(katmanlar.sira),
+                )
+        assert exc_info.value.exit_code == 0
+        katmanlar.render.assert_not_called()
+
+    def test_yes_interaktif_i_atlar(self, girdi: Path, katmanlar: Any) -> None:
+        # --yes headless: interactive=True olsa bile sunucu açılmaz.
+        with patch("fillercut.pipeline.ReviewServer") as mock_sunucu:
+            run(
+                girdi,
+                config=Config(yes=True),
+                interactive=True,
+                transcriber=_SahteTranscriber(katmanlar.sira),
+            )
+        mock_sunucu.assert_not_called()
 
 
 class TestHataYollari:

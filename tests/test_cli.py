@@ -36,7 +36,7 @@ def _birlesik_cikti(result: Result) -> str:
 def test_help_opsiyonlari_listeler() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for opsiyon in ("--aggressive", "--yes", "--output", "--config"):
+    for opsiyon in ("--aggressive", "--yes", "--output", "--config", "--interactive"):
         assert opsiyon in result.output
 
 
@@ -109,3 +109,31 @@ def test_no_aggressive_config_trueyu_ezer(tmp_path: Path) -> None:
     _, kwargs = m.call_args
     cfg = kwargs["config"]
     assert cfg.aggressive is False  # CLI --no-aggressive config'i ezdi
+
+
+def test_interactive_flagi_pipelinea_akar() -> None:
+    """--interactive run()'a interactive=True olarak geçer."""
+    sahte = PipelineResult(
+        output_path=Path("video_temiz.mp4"),
+        report_path=Path("video_temiz.json"),
+        transcript_path=Path("video_transkript.json"),
+        report=_RAPOR,
+    )
+    with patch("fillercut.cli.run", return_value=sahte) as m:
+        result = runner.invoke(app, ["video.mp4", "--interactive"])
+    assert result.exit_code == 0
+    _, kwargs = m.call_args
+    assert kwargs["interactive"] is True
+
+
+def test_interactive_varsayilan_false() -> None:
+    sahte = PipelineResult(
+        output_path=Path("video_temiz.mp4"),
+        report_path=Path("video_temiz.json"),
+        transcript_path=Path("video_transkript.json"),
+        report=_RAPOR,
+    )
+    with patch("fillercut.cli.run", return_value=sahte) as m:
+        runner.invoke(app, ["video.mp4"])
+    _, kwargs = m.call_args
+    assert kwargs["interactive"] is False

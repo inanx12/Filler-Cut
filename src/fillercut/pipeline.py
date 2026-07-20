@@ -43,16 +43,17 @@ from fillercut.config import Config
 from fillercut.detect.fillers import count_aday_fillers, detect_fillers
 from fillercut.detect.silence import filter_silence
 from fillercut.models import CutPlan
-from fillercut.plan.cutplan import build_cutplan
+from fillercut.plan.cutplan import build_cutplan, filter_cutplan
 from fillercut.render.encoder import build_encode_args, select_encoder
 from fillercut.render.render import RenderError, render
-from fillercut.report.html_report import write_html_report
+from fillercut.report.html_report import build_interactive_html, write_html_report
 from fillercut.report.json_report import (
     EncoderInfo,
     Report,
     build_report,
     write_json_report,
 )
+from fillercut.report.review_server import ReviewServer
 from fillercut.transcribe.base import Transcriber, words_to_json
 
 _out = Console()
@@ -132,6 +133,7 @@ def run(
     config: Config | None = None,
     transcriber: Transcriber | None = None,
     open_review: bool = False,
+    interactive: bool = False,
 ) -> PipelineResult:
     """6 katmanı sırayla çalıştırır: video → temiz MP4 + rapor.json.
 
@@ -144,8 +146,13 @@ def run(
         transcriber: ASR backend'i; verilmezse config.asr ayarlarıyla
             faster-whisper kurulur. Enjekte edilebilirlik testleri içindir.
         open_review: REVIEW HTML'ini üretimden sonra varsayılan tarayıcıda
-            açar (``--open``; stdlib ``webbrowser``). Yalnızca interaktif modda
-            (``yes=False``) anlam taşır — headless akışta HTML üretilmez.
+            açar (``--open``; stdlib ``webbrowser``). Yalnızca statik modda
+            (``interactive=False``, ``yes=False``) anlam taşır.
+        interactive: İnteraktif review (``--interactive``, v0.3) — lokal HTTP
+            sunucusu + tarayıcıda kesimleri tek tek onaylama. ``yes=False``
+            iken geçerlidir; konsol ``[y/N]`` akışının yerine geçer. Reddedilen
+            kesimler render'dan önce plandan düşülür, raporda ``approved:false``
+            olarak görünmeye devam eder.
 
     Returns:
         Üretilen video/rapor/transkript yolları ve rapor.
@@ -251,37 +258,74 @@ def run(
         # CutPlanError (plan tüm videoyu kesiyor) + model/rapor validasyonu
         _fail(f"PLAN başarısız: {exc}")
 
-    # [5] REVIEW — v0.2: konsol özeti + statik HTML timeline + [y/N] onayı.
-    # HTML onaydan ÖNCE üretilir ki kullanıcı kesim planını görsel görsün;
-    # --yes (headless) akışında üretilmez (review_html_path None kalır).
+    # [5] REVIEW — v0.3: interaktif mod (--interactive) lokal HTTP sunucusu +
+    # tarayıcıda tek tek onay; varsayılan konsol [y/N] + statik HTML akışı aynen
+    # korunur (regresyon kilidi). --yes (headless) ikisini de atlar.
     review_html: Path | None = None
+    approved_flags: list[bool] | None = None
+    render_plan = plan
     if not yes:
         _out.print("[cyan][5/6] REVIEW[/cyan]")
         _print_review(report)
-        review_yolu = dst.with_name(f"{src.stem}_review.html")
-        try:
-            review_html = write_html_report(report, review_yolu)
-        except OSError as exc:
-            _fail(f"review HTML yazılamadı: {exc}")
-        _out.print(f"[bold]Review HTML:[/bold] {review_html}")
-        if open_review:
+        if interactive:
+            # İnteraktif: sunucu karar gelene kadar pipeline'ı bekletir; tarayıcı
+            # otomatik açılır. Reddedilen kesimler plandan düşülür, raporda
+            # approved:false olarak görünmeye devam eder (şeffaflık).
+            sunucu = ReviewServer(report, build_interactive_html(report))
+            sunucu.start()
+            _out.print(f"[bold]İnteraktif review:[/bold] {sunucu.url}")
             import webbrowser
 
-            webbrowser.open(review_html.as_uri())
-        if not typer.confirm("Render edilsin mi?", default=False):
-            _out.print(
-                "[yellow]İptal edildi[/yellow] — video ve rapor yazılmadı; "
-                f"transkript korundu: {transkript_yolu}"
+            webbrowser.open(sunucu.url)
+            karar = sunucu.wait()
+            sunucu.shutdown()
+            if karar.cancelled:
+                _out.print(
+                    "[yellow]İptal edildi[/yellow] — video ve rapor yazılmadı; "
+                    f"transkript korundu: {transkript_yolu}"
+                )
+                raise typer.Exit(code=0)
+            approved_flags = karar.approved
+            render_plan = filter_cutplan(plan, karar.approved)
+            report = build_report(
+                plan,
+                total_ms,
+                skipped_aday_filler=atlanan_aday,
+                encoder=encoder_bilgisi,
+                approved=karar.approved,
             )
-            raise typer.Exit(code=0)
+            if report.rejected > 0:
+                _out.print(
+                    f"[yellow]{report.rejected} kesim reddedildi — plandan düşüldü.[/yellow]"
+                )
+        else:
+            # Statik (v0.2): HTML onaydan ÖNCE üretilir, konsol [y/N] onayı.
+            review_yolu = dst.with_name(f"{src.stem}_review.html")
+            try:
+                review_html = write_html_report(report, review_yolu)
+            except OSError as exc:
+                _fail(f"review HTML yazılamadı: {exc}")
+            _out.print(f"[bold]Review HTML:[/bold] {review_html}")
+            if open_review:
+                import webbrowser
 
-    # [6] RENDER — keep segmentleri re-encode + concat; rapor.json yanına
+                webbrowser.open(review_html.as_uri())
+            if not typer.confirm("Render edilsin mi?", default=False):
+                _out.print(
+                    "[yellow]İptal edildi[/yellow] — video ve rapor yazılmadı; "
+                    f"transkript korundu: {transkript_yolu}"
+                )
+                raise typer.Exit(code=0)
+
+    # [6] RENDER — render_plan (interaktif modda reddedilen kesimler düşmüş
+    # olabilir); rapor.json ORİJİNAL plandan yazılır ki reddedilen kesimler
+    # approved:false olarak görünmeye devam etsin (şeffaflık).
     _out.print(
         f"[cyan][6/6] RENDER[/cyan] — encoder: {encoder_secimi.ffmpeg_name} "
         f"(probe: {encoder_secimi.summary})"
     )
     try:
-        render(src, plan, dst, encode_args=build_encode_args(encoder_secimi, cfg.render))
+        render(src, render_plan, dst, encode_args=build_encode_args(encoder_secimi, cfg.render))
     except (RenderError, FileNotFoundError) as exc:
         _fail(f"RENDER başarısız: {exc}")
     try:
@@ -291,6 +335,7 @@ def run(
             rapor_yolu,
             skipped_aday_filler=atlanan_aday,
             encoder=encoder_bilgisi,
+            approved=approved_flags,
         )
     except OSError as exc:
         _fail(f"rapor.json yazılamadı: {exc}")

@@ -224,3 +224,182 @@ def write_html_report(report: Report, path: str | Path) -> Path:
     hedef = Path(path)
     hedef.write_text(build_html_report(report), encoding="utf-8")
     return hedef
+
+
+# ─── İnteraktif review (v0.3) ────────────────────────────────────────────────
+#
+# v0.2 statik HTML'inin üstüne inline vanilla JS ekler (harici CDN/build tool
+# YOK). JS yalnızca SABİT koddur — kullanıcı verisi (reason) HTML'e html.escape
+# ile girer, JS'e gömülmez (XSS kapalı). fetch() aynı kökenli sunucunun
+# /api/* endpoint'lerine vurur (report/review_server.py).
+
+_INTERAKTIF_CSS = _CSS + """\
+.actions { margin: 20px 0; display: flex; gap: 12px; align-items: center; }
+button {
+  padding: 10px 20px; border: 1px solid #30363d; border-radius: 6px;
+  font-size: 14px; cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+.btn-confirm { background: #238636; color: #fff; }
+.btn-cancel { background: #21262d; color: #e6edf3; }
+#durum { color: #8b949e; font-size: 13px; }
+input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+tr.row-rejected { opacity: 0.45; }
+tr.row-rejected td { text-decoration: line-through; }
+.seg-cut { cursor: pointer; }
+.seg-cut.rejected { background: #6e4040; }
+"""
+
+#: İnteraktif JS — kullanıcı verisi içermez (reason HTML tarafında escape'li).
+_JS = """\
+function setRow(i, approved) {
+  var row = document.getElementById('row-' + i);
+  if (!row) return;
+  row.className = approved ? '' : 'row-rejected';
+  var cb = row.querySelector('input');
+  if (cb) cb.checked = approved;
+  var seg = document.querySelector('.seg-cut[data-index="' + i + '"]');
+  if (seg) seg.classList.toggle('rejected', !approved);
+}
+function postToggle(i, approved) {
+  fetch('/api/toggle', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({index: i, approved: approved})
+  });
+}
+document.querySelectorAll('tbody input[type=checkbox]').forEach(function (cb) {
+  cb.addEventListener('change', function () {
+    var i = parseInt(this.dataset.index, 10);
+    setRow(i, this.checked);
+    postToggle(i, this.checked);
+  });
+});
+document.querySelectorAll('.seg-cut').forEach(function (seg) {
+  seg.addEventListener('click', function () {
+    var i = parseInt(this.dataset.index, 10);
+    var row = document.getElementById('row-' + i);
+    var cb = row.querySelector('input');
+    cb.checked = !cb.checked;
+    setRow(i, cb.checked);
+    postToggle(i, cb.checked);
+    row.scrollIntoView({behavior: 'smooth', block: 'center'});
+  });
+});
+function bitir(yol) {
+  document.getElementById('btn-confirm').disabled = true;
+  document.getElementById('btn-cancel').disabled = true;
+  fetch(yol, {method: 'POST'}).finally(function () {
+    document.getElementById('durum').textContent =
+      'Karar gönderildi — bu pencereyi kapatabilirsiniz.';
+  });
+}
+document.getElementById('btn-confirm').addEventListener('click', function () {
+  bitir('/api/confirm');
+});
+document.getElementById('btn-cancel').addEventListener('click', function () {
+  bitir('/api/cancel');
+});
+"""
+
+
+def _interaktif_timeline_html(report: Report) -> str:
+    """Timeline — kesim segmentleri ``data-index`` taşır ve tıklanabilir."""
+    toplam = report.original.ms
+    if toplam <= 0:
+        return '<div class="timeline"></div>'
+    bloklar: list[str] = []
+    cut_index = 0
+    for bas, bit, tur in _timeline_segments(report):
+        genislik = _yuzde(bit - bas, toplam)
+        stil = f' style="width:{genislik:.2f}%"'
+        if tur == "cut":
+            kesim = report.cuts[cut_index]
+            idx = cut_index
+            cut_index += 1
+            tooltip = html.escape(
+                f"{_mm_ss(bas)}–{_mm_ss(bit)} · {kesim.kind} · {kesim.reason}"
+            )
+            reddedildi = "" if kesim.approved else " rejected"
+            bloklar.append(
+                f'<div class="seg-cut{reddedildi}" data-index="{idx}"{stil} '
+                f'title="{tooltip}"></div>'
+            )
+        else:
+            bloklar.append(f'<div class="seg-keep"{stil}></div>')
+    return f'<div class="timeline">{"".join(bloklar)}</div>'
+
+
+def _interaktif_tablo_html(report: Report) -> str:
+    """Kesim tablosu — her satırda onay checkbox'ı (``data-index`` ile)."""
+    satirlar: list[str] = []
+    for i, kesim in enumerate(report.cuts):
+        tur = html.escape(_TUR_ETIKET.get(kesim.kind, kesim.kind))
+        reason = html.escape(kesim.reason)
+        checked = " checked" if kesim.approved else ""
+        sinif = "" if kesim.approved else ' class="row-rejected"'
+        satirlar.append(
+            f'<tr id="row-{i}"{sinif}>'
+            f'<td class="num">{i + 1}</td>'
+            f'<td><input type="checkbox" data-index="{i}"{checked}></td>'
+            f"<td>{_mm_ss(kesim.start_ms)}</td>"
+            f"<td>{_mm_ss(kesim.end_ms)}</td>"
+            f'<td class="kind-{html.escape(kesim.kind)}">{tur}</td>'
+            f'<td class="num">{kesim.duration_ms} ms</td>'
+            f"<td>{reason}</td>"
+            "</tr>"
+        )
+    return (
+        "<table>"
+        "<thead><tr>"
+        '<th class="num">#</th><th>Kes</th><th>Başlangıç</th><th>Bitiş</th>'
+        "<th>Tür</th><th>Süre</th><th>Neden (reason)</th>"
+        "</tr></thead>"
+        f"<tbody>{''.join(satirlar)}</tbody>"
+        "</table>"
+    )
+
+
+def build_interactive_html(report: Report) -> str:
+    """Report'tan interaktif review HTML'i üretir — saf fonksiyon (yan etki yok).
+
+    v0.2 statik HTML'inin (dark tema, özet, timeline, tablo) üstüne inline
+    vanilla JS ekler: her kesim satırında checkbox, kırmızı timeline segmentine
+    tıklayınca ilgili satıra scroll + toggle, "Onayla ve render'a geç" / "İptal"
+    butonları. JS aynı kökenli sunucunun ``/api/*`` endpoint'lerine ``fetch``
+    ile vurur (harici CDN/build tool YOK). Tüm metinler ``html.escape``'ten
+    geçer; JS'e kullanıcı verisi gömülmez.
+
+    Args:
+        report: REVIEW Report modeli; ``cuts[].approved`` başlangıç onay
+            durumlarını belirler.
+
+    Returns:
+        ``<!DOCTYPE html>`` ile başlayan, inline CSS + JS'li tam belge.
+    """
+    govde = (
+        "<h1>Filler-Cut — İnteraktif Kesim İncelemesi</h1>"
+        f'<div class="meta">Orijinal süre: {report.original.human} '
+        f"· {report.original.ms} ms · kesim: {report.cut_count} "
+        "· onaylamadığınız kesimlerin işaretini kaldırın</div>"
+        f"{_ozet_html(report)}"
+        '<div class="actions">'
+        '<button id="btn-confirm" class="btn-confirm">Onayla ve render\u2019a geç</button>'
+        '<button id="btn-cancel" class="btn-cancel">İptal</button>'
+        '<span id="durum"></span>'
+        "</div>"
+        "<h2>Zaman çizelgesi</h2>"
+        '<div class="legend">yeşil = kalacak · kırmızı = kesilecek '
+        "(kırmızı bölgeye tıklayınca ilgili satır açılır/kapanır)</div>"
+        f"{_interaktif_timeline_html(report)}"
+        "<h2>Kesim tablosu</h2>"
+        f"{_interaktif_tablo_html(report)}"
+    )
+    return (
+        "<!DOCTYPE html>\n"
+        '<html lang="tr">\n<head>\n<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        "<title>Filler-Cut — İnteraktif İnceleme</title>\n"
+        f"<style>\n{_INTERAKTIF_CSS}</style>\n</head>\n<body>\n{govde}\n"
+        f"<script>\n{_JS}</script>\n</body>\n</html>\n"
+    )

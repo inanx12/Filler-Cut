@@ -55,6 +55,13 @@ def main(
             help="Review HTML'ini üretimden sonra varsayılan tarayıcıda aç.",
         ),
     ] = False,
+    interactive: Annotated[
+        bool,
+        typer.Option(
+            "--interactive",
+            help="Kesimleri tarayıcıda tek tek onayla (lokal sunucu, v0.3).",
+        ),
+    ] = False,
 ) -> None:
     """VIDEO'daki filler'ları ve gereksiz sessizlikleri kes; temiz MP4 + rapor üret."""
     try:
@@ -63,7 +70,13 @@ def main(
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     cfg = merge_config(cfg, aggressive=aggressive, yes=yes)
-    sonuc = run(video, output_path=output, config=cfg, open_review=open_review)
+    sonuc = run(
+        video,
+        output_path=output,
+        config=cfg,
+        open_review=open_review,
+        interactive=interactive,
+    )
     typer.echo(
         f"Bitti: {sonuc.output_path} (%{sonuc.report.saved_percent} kazanım)\n"
         f"rapor: {sonuc.report_path}\n"

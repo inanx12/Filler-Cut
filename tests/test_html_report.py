@@ -12,7 +12,11 @@ import re
 import pytest
 
 from fillercut.models import CutPlan, Segment
-from fillercut.report.html_report import build_html_report, write_html_report
+from fillercut.report.html_report import (
+    build_html_report,
+    build_interactive_html,
+    write_html_report,
+)
 from fillercut.report.json_report import (
     EncoderAttempt,
     EncoderInfo,
@@ -166,3 +170,64 @@ class TestSafFonksiyonVeWrapper:
         assert donen == hedef
         assert hedef.is_file()
         assert hedef.read_text(encoding="utf-8") == build_html_report(rapor)
+
+
+class TestInteraktifHtml:
+    """v0.3: build_interactive_html — v0.2 statik + inline vanilla JS."""
+
+    def test_js_ve_kontroller_var(self, rapor: Report) -> None:
+        html = build_interactive_html(rapor)
+        assert "<script>" in html
+        assert 'id="btn-confirm"' in html
+        assert 'id="btn-cancel"' in html
+        assert "bitir('/api/confirm')" in html
+        assert "bitir('/api/cancel')" in html
+        assert "fetch('/api/toggle'" in html  # toggle doğrudan fetch
+
+    def test_her_satirda_checkbox(self, rapor: Report) -> None:
+        html = build_interactive_html(rapor)
+        assert html.count('type="checkbox"') == rapor.cut_count
+        assert 'data-index="0"' in html
+        assert 'data-index="1"' in html
+
+    def test_timeline_segmentleri_data_index_tasir(self, rapor: Report) -> None:
+        html = build_interactive_html(rapor)
+        assert 'class="seg-cut" data-index="0"' in html or 'seg-cut" data-index' in html
+        assert "scrollIntoView" in html  # timeline tıklaması satıra kaydırır
+
+    def test_reason_escape_interaktif(self) -> None:
+        # XSS: reason interaktif HTML'de de escape'li (JS'e gömülmez).
+        plan = CutPlan(
+            original_duration_ms=5_000,
+            keep=[Segment(start_ms=0, end_ms=4_000, kind="keep", reason="konuşma")],
+            cut=[
+                Segment(
+                    start_ms=4_000,
+                    end_ms=5_000,
+                    kind="filler",
+                    reason="<script>alert(1)</script>",
+                )
+            ],
+        )
+        rapor = build_report(plan, 5_000)
+        html = build_interactive_html(rapor)
+        assert "<script>alert(1)</script>" not in html
+        assert "&lt;script&gt;" in html
+
+    def test_statik_html_js_icermez_regresyon(self, rapor: Report) -> None:
+        # v0.2 statik üretici değişmedi — hâlâ JS'siz.
+        assert "<script" not in build_html_report(rapor).lower()
+
+    def test_onayli_kesim_checked(self) -> None:
+        plan = CutPlan(
+            original_duration_ms=5_000,
+            keep=[Segment(start_ms=0, end_ms=4_000, kind="keep", reason="konuşma")],
+            cut=[
+                Segment(start_ms=4_000, end_ms=5_000, kind="filler", reason="x")
+            ],
+        )
+        # approved=False ile başlangıçta işaretsiz + row-rejected
+        rapor = build_report(plan, 5_000, approved=[False])
+        html = build_interactive_html(rapor)
+        assert 'class="row-rejected"' in html
+        assert "checked" not in html.split("tbody")[1]
