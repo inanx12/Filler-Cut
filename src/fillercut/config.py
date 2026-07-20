@@ -41,8 +41,8 @@ class AsrConfig:
     """ASR (TRANSCRIBE katmanı) ayarları."""
 
     model_size: str = "turbo"
-    device: str = "cuda"
-    compute_type: str = "float16"
+    device: str = "auto"
+    compute_type: str = "default"
     language: str = "tr"
 
 
@@ -104,22 +104,19 @@ class Config:
 
 def _tip_kontrol(anahtar: str, deger: object, beklenen: type | tuple[type, ...]) -> None:
     """Tip uyuşmazlığında ConfigError fırlatır (anlaşılır mesaj)."""
-    if not isinstance(deger, beklenen):
-        # bool int'in alt tipi — bool beklenmiyorsa int kontrolünde bool'u dışla
-        if beklenen is int and isinstance(deger, bool):
-            pass  # TOML'da bool ayrı; int alanında bool kabul etme
-        else:
-            isim = (
-                beklenen.__name__
-                if isinstance(beklenen, type)
-                else "/".join(t.__name__ for t in beklenen)
-            )
-            raise ConfigError(
-                f"'{anahtar}' için {isim} bekleniyordu, "
-                f"{type(deger).__name__} verildi: {deger!r}"
-            )
+    # bool int'in alt tipi — int beklenen alanda bool kabul edilmez (TOML ayrımı)
     if beklenen is int and isinstance(deger, bool):
         raise ConfigError(f"'{anahtar}' için int bekleniyordu, bool verildi: {deger!r}")
+    if not isinstance(deger, beklenen):
+        isim = (
+            beklenen.__name__
+            if isinstance(beklenen, type)
+            else "/".join(t.__name__ for t in beklenen)
+        )
+        raise ConfigError(
+            f"'{anahtar}' için {isim} bekleniyordu, "
+            f"{type(deger).__name__} verildi: {deger!r}"
+        )
 
 
 def _bolum_anahtarlari(
@@ -263,7 +260,12 @@ def load_config(config_path: str | Path | None = None) -> Config:
         raise ConfigError(f"config dosyası okunamadı: {path} ({exc})") from exc
 
     try:
-        data: dict[str, object] = tomllib.loads(raw_bytes.decode("utf-8"))
+        metin = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ConfigError(f"config dosyası UTF-8 değil — {path}: {exc}") from exc
+
+    try:
+        data: dict[str, object] = tomllib.loads(metin)
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"bozuk TOML — {path}: {exc}") from exc
 

@@ -88,3 +88,24 @@ def test_varsayilanlar_none_ve_false_iletir() -> None:
     assert isinstance(cfg, Config)
     assert cfg.aggressive is False
     assert cfg.yes is False
+
+
+def test_no_aggressive_config_trueyu_ezer(tmp_path: Path) -> None:
+    """--no-aggressive, config'deki aggressive=true'yu CLI'dan kapatır."""
+    cfg_file = tmp_path / "fc.toml"
+    cfg_file.write_text("config_version = 1\naggressive = true\n", encoding="utf-8")
+    sahte = PipelineResult(
+        output_path=Path("video_temiz.mp4"),
+        report_path=Path("video_temiz.json"),
+        transcript_path=Path("video_transkript.json"),
+        report=_RAPOR,
+    )
+    with patch("fillercut.cli.run", return_value=sahte) as m:
+        result = runner.invoke(
+            app, ["video.mp4", "--config", str(cfg_file), "--no-aggressive"]
+        )
+
+    assert result.exit_code == 0
+    _, kwargs = m.call_args
+    cfg = kwargs["config"]
+    assert cfg.aggressive is False  # CLI --no-aggressive config'i ezdi

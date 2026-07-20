@@ -35,8 +35,8 @@ class TestDefaults:
         assert cfg.yes is False
         # ASR
         assert cfg.asr.model_size == "turbo"
-        assert cfg.asr.device == "cuda"
-        assert cfg.asr.compute_type == "float16"
+        assert cfg.asr.device == "auto"
+        assert cfg.asr.compute_type == "default"
         assert cfg.asr.language == "tr"
         # Detect
         assert cfg.detect.fuzzy_threshold == 85.0
@@ -220,8 +220,9 @@ class TestBilinmeyenAnahtar:
         # Config geçerli değerlerle döner
         assert cfg.config_version == 1
         # stderr'de uyarı var
-        assert "bilinmeyen config anahtarı" in capsys.readouterr().err
-        assert "gelecek_ozellik" in capsys.readouterr().err or True  # ilk assert yeterli
+        err = capsys.readouterr().err
+        assert "bilinmeyen config anahtarı" in err
+        assert "gelecek_ozellik" in err
 
     def test_bolum_ici_bilinmeyen_anahtar_uyari(
         self,
@@ -308,6 +309,16 @@ class TestBozukToml:
         cfg_file.write_text("config_version = ===\n", encoding="utf-8")
         with pytest.raises(ConfigError, match="bozuk TOML"):
             load_config(cfg_file)
+
+    def test_utf8_olmayan_dosya_config_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """UTF-8 olmayan bayt dizisi ConfigError'a sarılır (UnicodeDecodeError sızmaz)."""
+        monkeypatch.chdir(tmp_path)
+        toml = tmp_path / "filler-cut.toml"
+        toml.write_bytes(b"config_version = 1\n# \xff\xfe ge\xe7ersiz")
+        with pytest.raises(ConfigError, match="UTF-8"):
+            load_config()
 
 
 # ─── --config ile açık yol ────────────────────────────────────────────────────

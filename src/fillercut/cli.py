@@ -31,13 +31,19 @@ def main(
         typer.Option("--config", help="TOML config dosyası (varsayılan: filler-cut.toml)."),
     ] = None,
     aggressive: Annotated[
-        bool,
-        typer.Option("--aggressive", help="Aday filler'ları (şey, yani, hani, işte) da kes."),
-    ] = False,
+        bool | None,
+        typer.Option(
+            "--aggressive/--no-aggressive",
+            help="Aday filler'ları (şey, yani, hani, işte) da kes.",
+        ),
+    ] = None,
     yes: Annotated[
-        bool,
-        typer.Option("--yes", "-y", help="Review onayını atla (onaysız render)."),
-    ] = False,
+        bool | None,
+        typer.Option(
+            "--yes/--no-yes", "-y",
+            help="Review onayını atla (onaysız render).",
+        ),
+    ] = None,
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Çıktı MP4 yolu (varsayılan: <ad>_temiz.mp4)."),
@@ -49,11 +55,7 @@ def main(
     except ConfigError as exc:
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    cfg = merge_config(
-        cfg,
-        aggressive=True if aggressive else None,
-        yes=True if yes else None,
-    )
+    cfg = merge_config(cfg, aggressive=aggressive, yes=yes)
     sonuc = run(video, output_path=output, config=cfg)
     typer.echo(
         f"Bitti: {sonuc.output_path} (%{sonuc.report.saved_percent} kazanım)\n"
