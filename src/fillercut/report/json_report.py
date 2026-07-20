@@ -137,6 +137,11 @@ class Report(BaseModel):
     #: RENDER'da kullanılan encoder + probe özeti. Geriye uyumlu: v0.1
     #: raporlarında ve encoder bilgisi verilmeyen çağrılarda `None`.
     encoder: EncoderInfo | None = None
+    #: İnteraktif review'da (v0.3) kullanıcının REDDETTİĞİ kesim sayısı.
+    #: Reddedilen kesimler ``approved:false`` olarak raporda GÖRÜNMEYE devam
+    #: eder (şeffaflık); bu alan reddin de kayıt altında olduğunu gösterir.
+    #: Geriye uyumlu default 0 (v0.1/v0.2 raporlarında alan yoktu).
+    rejected: int = Field(ge=0, default=0)
     cuts: list[ReportCut]
 
     def to_json(self) -> str:
@@ -183,6 +188,7 @@ def build_report(
     *,
     skipped_aday_filler: int = 0,
     encoder: EncoderInfo | None = None,
+    approved: list[bool] | None = None,
 ) -> Report:
     """CutPlan'den Report üretir — saf fonksiyon (yan etki yok).
 
@@ -198,10 +204,15 @@ def build_report(
         encoder: RENDER'da kullanılan encoder + probe özeti
             (`EncoderInfo.from_selection`); verilmezse alan `None` kalır
             (geriye uyumluluk).
+        approved: İnteraktif review (v0.3) kararı — ``cutplan.cut`` ile birebir
+            hizalı onay listesi. Verilirse her ``ReportCut.approved`` alanına
+            işlenir ve ``rejected`` sayısı türetilir; verilmezse tüm kesimler
+            onaylı sayılır (v0.2 davranışı, geriye uyumlu).
 
     Raises:
         ValueError: `total_ms` pozitif değilse, cutplan süresiyle
-            uyuşmuyorsa veya `skipped_aday_filler` negatifse.
+            uyuşmuyorsa, `skipped_aday_filler` negatifse veya `approved`
+            uzunluğu kesim sayısıyla uyuşmuyorsa.
     """
     if total_ms <= 0:
         raise ValueError(f"total_ms pozitif olmalı: {total_ms}")
@@ -212,7 +223,24 @@ def build_report(
         )
     if skipped_aday_filler < 0:
         raise ValueError(f"skipped_aday_filler negatif olamaz: {skipped_aday_filler}")
+    if approved is not None and len(approved) != len(cutplan.cut):
+        raise ValueError(
+            f"approved uzunluğu ({len(approved)}) kesim sayısıyla "
+            f"({len(cutplan.cut)}) uyuşmuyor"
+        )
     kesilen = cutplan.total_cut_ms
+    cuts = [
+        ReportCut(
+            start_ms=s.start_ms,
+            end_ms=s.end_ms,
+            duration_ms=s.duration_ms,
+            kind=cast(CutKind, s.kind),  # CutPlan validasyonu: cut'ta "keep" olamaz
+            reason=s.reason,
+            approved=approved[i] if approved is not None else True,
+        )
+        for i, s in enumerate(cutplan.cut)
+    ]
+    rejected = sum(1 for ok in approved if not ok) if approved is not None else 0
     return Report(
         original=DurationStat(ms=total_ms, human=_human(total_ms)),
         cut_total=DurationStat(ms=kesilen, human=_human(kesilen)),
@@ -224,16 +252,8 @@ def build_report(
         skipped_aday_filler=skipped_aday_filler,
         tiers=_count_tiers(cutplan.cut),
         encoder=encoder,
-        cuts=[
-            ReportCut(
-                start_ms=s.start_ms,
-                end_ms=s.end_ms,
-                duration_ms=s.duration_ms,
-                kind=cast(CutKind, s.kind),  # CutPlan validasyonu: cut'ta "keep" olamaz
-                reason=s.reason,
-            )
-            for s in cutplan.cut
-        ],
+        rejected=rejected,
+        cuts=cuts,
     )
 
 
@@ -244,6 +264,7 @@ def write_json_report(
     *,
     skipped_aday_filler: int = 0,
     encoder: EncoderInfo | None = None,
+    approved: list[bool] | None = None,
 ) -> Path:
     """`build_report` + dosyaya yazım wrapper'ı (I/O yalnız burada).
 
@@ -254,6 +275,7 @@ def write_json_report(
         total_ms,
         skipped_aday_filler=skipped_aday_filler,
         encoder=encoder,
+        approved=approved,
     )
     hedef = Path(path)
     hedef.write_text(report.to_json() + "\n", encoding="utf-8")

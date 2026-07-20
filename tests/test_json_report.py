@@ -338,6 +338,63 @@ class TestApprovedAlani:
         assert all(c["approved"] is True for c in veri["cuts"])
 
 
+class TestInteraktifReviewRaporu:
+    """v0.3: build_report(approved=...) kesimleri işaretler + rejected sayar."""
+
+    def test_approved_listesi_kesimlere_islenir(self, kelimeler: list[Word]) -> None:
+        plan = _zincir(kelimeler, agresif=False)  # 3 kesim
+        rapor = build_report(plan, TOPLAM_MS, approved=[True, False, True])
+        assert [c.approved for c in rapor.cuts] == [True, False, True]
+
+    def test_rejected_sayisi_turetilir(self, kelimeler: list[Word]) -> None:
+        plan = _zincir(kelimeler, agresif=False)
+        rapor = build_report(plan, TOPLAM_MS, approved=[True, False, False])
+        assert rapor.rejected == 2
+
+    def test_verilmezse_rejected_sifir(self, rapor_normal: Report) -> None:
+        # v0.2 davranışı: approved verilmezse tümü onaylı, rejected 0.
+        assert rapor_normal.rejected == 0
+
+    def test_rededilen_kesim_raporda_gorunur(self, kelimeler: list[Word]) -> None:
+        # Şeffaflık: reddedilen kesim rapordan DÜŞMEZ, approved:false kalır.
+        plan = _zincir(kelimeler, agresif=False)
+        rapor = build_report(plan, TOPLAM_MS, approved=[False, True, True])
+        assert rapor.cut_count == 3  # hepsi duruyor
+        assert rapor.cuts[0].approved is False
+
+    def test_approved_uzunluk_uyusmazligi_hata(self, kelimeler: list[Word]) -> None:
+        plan = _zincir(kelimeler, agresif=False)
+        with pytest.raises(ValueError, match="uyuşmuyor"):
+            build_report(plan, TOPLAM_MS, approved=[True])
+
+    def test_eski_json_rejected_alansiz_yuklenir(self) -> None:
+        # v0.1/v0.2 raporlarında rejected alanı yoktu — default 0.
+        eski = (
+            '{"original": {"ms": 1000, "human": "00:01"},'
+            ' "cut_total": {"ms": 100, "human": "00:00"},'
+            ' "remaining": {"ms": 900, "human": "00:00"},'
+            ' "saved_percent": 10.0, "cut_count": 1, "skipped_aday_filler": 0,'
+            ' "tiers": {"kesin_filler": 1, "aday_filler": 0, "silence": 0},'
+            ' "encoder": null,'
+            ' "cuts": [{"start_ms": 0, "end_ms": 100, "duration_ms": 100,'
+            '           "kind": "filler", "reason": "x", "approved": false}]}'
+        )
+        rapor = Report.model_validate_json(eski)
+        assert rapor.rejected == 0  # alan yoktu → default
+        assert rapor.cuts[0].approved is False
+
+    def test_write_json_approved_ve_rejected(
+        self, kelimeler: list[Word], tmp_path: Path
+    ) -> None:
+        plan = _zincir(kelimeler, agresif=False)
+        hedef = write_json_report(
+            plan, TOPLAM_MS, tmp_path / "r.json", approved=[True, False, True]
+        )
+        veri = json.loads(hedef.read_text(encoding="utf-8"))
+        assert veri["rejected"] == 1
+        assert [c["approved"] for c in veri["cuts"]] == [True, False, True]
+
+
 class TestWrapper:
     def test_dosyaya_yazar_ve_yol_doner(self, kelimeler: list[Word], tmp_path: Path) -> None:
         plan = _zincir(kelimeler, agresif=False)

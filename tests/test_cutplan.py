@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from fillercut.models import CutPlan, Segment
-from fillercut.plan.cutplan import CutPlanError, build_cutplan
+from fillercut.plan.cutplan import CutPlanError, build_cutplan, filter_cutplan
 
 
 def _filler(start: int, end: int, text: str = "eee") -> Segment:
@@ -192,3 +192,57 @@ class TestJsonRoundTrip:
         adaylar = [_filler(1000, 1500), _silence(6_000, 7_200)]
         plan = build_cutplan(adaylar, total_duration_ms=10_000)
         assert CutPlan.from_json(plan.to_json()) == plan
+
+
+class TestFilterCutplan:
+    """İnteraktif review (v0.3): reddedilen kesimler keep'e döner."""
+
+    def _plan(self) -> CutPlan:
+        # iki kesim: filler [1080,1380] + sessizlik [6000,7000]
+        return build_cutplan(
+            [_filler(1000, 1500), _silence(6_000, 7_000)], total_duration_ms=10_000
+        )
+
+    def test_tumu_onayli_plan_degismez(self) -> None:
+        plan = self._plan()
+        sonuc = filter_cutplan(plan, [True, True])
+        assert _araliklar(sonuc, "cut") == _araliklar(plan, "cut")
+        assert _araliklar(sonuc, "keep") == _araliklar(plan, "keep")
+
+    def test_rededilen_kesim_keep_olur(self) -> None:
+        plan = self._plan()
+        # sessizlik kesimini reddet → bölgesi keep'e döner
+        sonuc = filter_cutplan(plan, [True, False])
+        assert _araliklar(sonuc, "cut") == [(1_080, 1_380)]
+        # reddedilen [6000,7000] bölgesi artık keep içinde; reason "kullanıcı reddi" taşır
+        kapsayan = [s for s in sonuc.keep if s.start_ms <= 6_000 < s.end_ms]
+        assert len(kapsayan) == 1
+        assert "kullanıcı reddi" in kapsayan[0].reason
+
+    def test_rededilen_kesim_komsu_keep_le_birlesir(self) -> None:
+        plan = self._plan()
+        # filler kesimini reddet → [1080,1380] keep olur, komşu keep'lerle birleşir
+        sonuc = filter_cutplan(plan, [False, True])
+        assert _araliklar(sonuc, "cut") == [(6_000, 7_000)]
+        # [0,1080] + [1080,1380] + [1380,6000] tek keep olur
+        assert (0, 6_000) in _araliklar(sonuc, "keep")
+
+    def test_tumu_rededilirse_tam_keep(self) -> None:
+        plan = self._plan()
+        sonuc = filter_cutplan(plan, [False, False])
+        assert sonuc.cut == []
+        assert _araliklar(sonuc, "keep") == [(0, 10_000)]
+
+    def test_invariant_korunur_ms_int_sirali_cakismasiz(self) -> None:
+        plan = self._plan()
+        sonuc = filter_cutplan(plan, [False, True])
+        # CutPlan validatörü zaten geçer; ek olarak sıralama + ms-int doğrula
+        tumu = sorted([*sonuc.keep, *sonuc.cut], key=lambda s: s.start_ms)
+        for onceki, sonraki in zip(tumu, tumu[1:], strict=False):
+            assert sonraki.start_ms >= onceki.end_ms
+        assert all(isinstance(s.start_ms, int) for s in tumu)
+
+    def test_uzunluk_uyusmazligi_hata(self) -> None:
+        plan = self._plan()
+        with pytest.raises(ValueError, match="uyuşmuyor"):
+            filter_cutplan(plan, [True])  # 2 kesim, 1 approved

@@ -253,3 +253,63 @@ def build_cutplan(
         for a in cuts
     ]
     return CutPlan(original_duration_ms=total_duration_ms, keep=keep, cut=cut)
+
+
+def _keep_birlestir(segments: list[Segment]) -> list[Segment]:
+    """Keep segmentlerini sıralar; değen/çakışanları reason zincirleyerek birleştirir.
+
+    İnteraktif review'da reddedilen kesimler keep'e dönünce komşu keep'lerle
+    birleşebilir; reason'lar invariant 7 gereği ``" + "`` ile zincirlenir.
+    """
+    sirali = sorted(segments, key=lambda s: (s.start_ms, s.end_ms))
+    birlesik: list[Segment] = []
+    for seg in sirali:
+        if birlesik and seg.start_ms <= birlesik[-1].end_ms:
+            son = birlesik[-1]
+            birlesik[-1] = Segment(
+                start_ms=son.start_ms,
+                end_ms=max(son.end_ms, seg.end_ms),
+                kind="keep",
+                reason=f"{son.reason} + {seg.reason}",
+            )
+        else:
+            birlesik.append(seg)
+    return birlesik
+
+
+def filter_cutplan(plan: CutPlan, approved: list[bool]) -> CutPlan:
+    """Kullanıcı onayına göre planı süzer — reddedilen kesimler keep'e döner.
+
+    İnteraktif review (v0.3) kararıdır: ``approved[i]`` değeri ``False`` olan
+    kesim render'dan ÖNCE plandan düşülür ve bölgesi keep olur (konuşma
+    korunur). Çıktı geçerli bir CutPlan'dır — ms-int, sıralı, çakışmasız
+    olduğunu model validatörü sağlama alır.
+
+    Args:
+        plan: PLAN katmanının çıktısı.
+        approved: ``plan.cut`` ile birebir hizalı onay listesi (True = kesilir).
+
+    Raises:
+        ValueError: ``approved`` uzunluğu kesim sayısıyla uyuşmuyorsa.
+    """
+    if len(approved) != len(plan.cut):
+        raise ValueError(
+            f"approved uzunluğu ({len(approved)}) kesim sayısıyla "
+            f"({len(plan.cut)}) uyuşmuyor"
+        )
+    new_cut = [seg for seg, ok in zip(plan.cut, approved, strict=True) if ok]
+    keep_parcalari = list(plan.keep)
+    for seg, ok in zip(plan.cut, approved, strict=True):
+        if not ok:
+            keep_parcalari.append(
+                Segment(
+                    start_ms=seg.start_ms,
+                    end_ms=seg.end_ms,
+                    kind="keep",
+                    reason=f"kullanıcı reddi: {seg.reason}",
+                )
+            )
+    new_keep = _keep_birlestir(keep_parcalari)
+    return CutPlan(
+        original_duration_ms=plan.original_duration_ms, keep=new_keep, cut=new_cut
+    )
