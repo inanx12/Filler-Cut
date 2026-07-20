@@ -45,7 +45,7 @@ filler-cut/
 ├── LICENSE                    # MIT
 ├── src/fillercut/
 │   ├── cli.py                 # typer — tek giriş noktası
-│   ├── config.py              # pydantic-settings, YAML'dan yüklenir
+│   ├── config.py              # tomllib, filler-cut.toml'dan yüklenir
 │   ├── models.py              # Word, Segment, CutPlan (pydantic)
 │   ├── pipeline.py            # orkestratör: 6 katmanı sırayla çağırır
 │   ├── audio/
@@ -72,7 +72,7 @@ filler-cut/
 │   ├── test_encoder.py        # detect sıralaması (mock'lu)
 │   └── make_fixture.py        # sentetik test videosu ÜRETİR (binary repo'ya girmez)
 └── examples/
-    └── config.yaml
+    └── filler-cut.toml
 ```
 
 ## 4. Kütüphane Seçimleri — Ne, Neden, Trade-off
@@ -84,7 +84,7 @@ filler-cut/
 | Video/ses işleme | **ffmpeg** (subprocess) | Endüstri standardı, HW encode'un tek kapısı | Sistem bağımlılığı — README'de kurulum şart |
 | CLI | **typer** | Tip güvenli, otomatik `--help`, test edilebilir | argparse daha "std-lib" ama okunabilirlik kazanır |
 | Veri modelleri | **pydantic** | CutPlan/Segment validasyonu + bedava JSON serileştirme | dataclass daha hafif ama validasyonu sen yazarsın — yazma |
-| Config | **PyYAML** | İnsan okur/yazar, herkes bilir | TOML da olurdu; YAML iç içe yapılarda daha rahat |
+| Config | **tomllib** (stdlib, TOML) | Python 3.11+ ile hazır gelir → ek bağımlılık yok; `pyproject.toml` ile aynı dil, tek doğru okuma | v0.2'de PyYAML yerine seçildi. YAML iç içe yapılarda daha rahattı ama bağımlılık + girinti tuzağı getiriyordu; tomllib yalnız OKUR (yazma yok — config'i araç üretmiyor) |
 | Fuzzy match | **rapidfuzz** | "eee", "Eee", "ee." varyantlarını yakalamak için | Saf `in` kontrolü Türkçe varyantlarda patlar |
 | Terminal UI | **rich** | Progress bar + renkli rapor, profesyonel his | — |
 | Test | **pytest** | Standart | — |
@@ -133,12 +133,15 @@ Bu probe yaklaşımı, "donanım hızlandırma çalışıyor mu yoksa sessizce C
 
 **İncelik 2 — padding.** Kelime sınırında kesmek robotik "klik" sesi yaratır. Config'den yönetilir:
 
-```yaml
-padding:
-  filler_before_ms: 80      # nefes payı
-  filler_after_ms: 120
-  silence_min_ms: 400       # bundan kısa sessizliğe dokunma
-  min_keep_ms: 300          # bundan kısa "keep" parçası bırakma
+```toml
+[padding]
+filler_before_ms = 80      # nefes payı
+filler_after_ms = 120
+min_keep_ms = 300          # bundan kısa "keep" parçası bırakma
+filler_anomali_ms = 3000   # KI-5 eşiği (aşağıya bkz.)
+
+[detect]
+silence_min_ms = 400       # bundan kısa sessizliğe dokunma
 ```
 
 **Timestamp-anomali koruması (KI-5).** Whisper word-timestamp şişirebilir (gerçek koşuda "işte"ye ~15 sn atandığı doğrulandı). PLAN katmanında tek kelimeden gelen filler kesimi 3000 ms'den uzunsa aralık silencedetect çıktısıyla çapraz doğrulanır; sessizlikle çakışmıyorsa kesim 3000 ms'e indirgenir ve reason'a not düşülür — konuşmaya taşan şişik kesim veri kaybıdır. Sessizlikle çakışan uzun kesimlere dokunulmaz (sessiz bölge kesimi zararsızdır).

@@ -70,18 +70,23 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 - **Bilinen sınırlar `KNOWN_ISSUES.md`'de tutulur** — test geçse de bilinen
   sınır varsa KI-N kimliğiyle oraya kaydedilir; testler ve kod yorumları bu
   kimliğe referans verir. Sessizce workaround yazılmaz.
-- **v0.1 scope dışına çıkma:** `config.py`, `encoder.py` (HW detect),
-  `wcpp_backend.py`, `html_report.py`, GUI, çoklu video → v0.2+ kapsamıdır.
-  v0.1 bitmeden v0.2'ye geçilmez.
+- **v0.2 scope dışına çıkma:** `wcpp_backend.py` (whisper.cpp / Vulkan), GUI,
+  çoklu video / batch işleme, CI → v0.3+ kapsamıdır. v0.2 bitmeden v0.3'e
+  geçilmez.
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
-## Mevcut Durum (2026-07-19)
+## Mevcut Durum (2026-07-20)
 
 **v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
 gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
 `rapor.json`'da reason zincirleri).
 
+**v0.2 SÜRÜYOR** — TOML config + donanım encoder tespiti bitti (DESIGN.md §8);
+kalan iş HTML review.
+
 Tamamlanan modüller (hepsi `main` dalında, testli):
+
+**v0.1**
 
 | Modül | Commit |
 |---|---|
@@ -102,12 +107,24 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `report/json_report.py` + `pipeline.py`: `skipped_aday_filler` alanı + review'da "X aday filler tespit edildi (kesilmedi — --aggressive ile kesilir)" satırı (`count_aday_fillers` — `detect/fillers.py`) | `5063197` |
 | `plan/cutplan.py`: KI-5 timestamp-anomali koruması (>3000ms tek-kelime filler, silencedetect çapraz doğrulaması) | `25bf5d0` |
 
-**Test sayısı:** 225 (`python -m pytest` → 225 passed; `ffmpeg` marker'lı
-gerçek-ffmpeg testi dahil — CI `-m "not ffmpeg"` ile atlar).
+**v0.2**
 
-**Sıradaki:** v0.1 bitti — sıra v0.2'de (DESIGN.md §8): `render/encoder.py`
-(probe'lu HW encoder tespiti: NVENC → AMF → QSV → libx264), `config.py`
-(YAML), konsol review/onay katmanının genişletilmesi.
+| Modül | Commit |
+|---|---|
+| `config.py` (TOML şema: `config_version=1`, bölüm bölüm doğrulama, bilinmeyen anahtar → uyarı; saf `load_config` + `merge_config`) | `4057f3e` |
+| `cli.py`: `--config PATH` bayrağı + öncelik zinciri (CLI > config > default) | `01f6473` |
+| `config.py` + `cli.py` düzeltmeleri (AsrConfig auto-default, UTF-8 hata sarma, ölü dal temizliği, çift flag) | `03bdf7f` |
+| `render/encoder.py` (probe'lu HW encoder tespiti + codec başına kalite arg tablosu) + `KNOWN_ISSUES.md` (KI-6) | `eed9446` |
+| `render/render.py`: `ENCODE_TEMPLATE` düştü, arg'lar `encoder.py` + `config.render`'dan; `pipeline.py` tek probe + konsol satırı; `report/json_report.py`'ye `encoder` alanı | `4518b0f` |
+
+**Test sayısı:** 306 (`python -m pytest` → 306 passed). Bunun 301'i ffmpeg
+gerektirmez; 5'i `ffmpeg` marker'lıdır (gerçek ffmpeg/donanım) — CI
+`-m "not ffmpeg"` ile atlar, donanımsız makinede NVENC testleri kendi kendine
+skip eder.
+
+**Sıradaki:** v0.2'nin kalan işi **HTML review** (`report/html_report.py` —
+timeline görünümü, kesilecekler kırmızı). Not: DESIGN.md §8'in tablosunda HTML
+rapor hâlâ v0.3 satırındadır; review katmanının HTML'i v0.2'ye çekilmiştir.
 
 **Not (TRANSCRIBE):** Model ayarları `fw_backend.py` modül sabitleridir
 (`turbo` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile
@@ -120,3 +137,15 @@ Gerçek donanımda doğrulanan tuzaklar: CTranslate2 DLL çözümlemesi process
 PATH'ini kullanır (`add_dll_directory` tek başına yetmez — dizinler PATH'in
 başına eklenir, çift ekleme yapılmaz) ve nvidia-* paketleri namespace
 package'tir (`__file__` None döner, dizin `__path__[0]`'dan bulunur).
+
+**Not (RENDER encoder):** `render/encoder.py`, `config.encoder.preference`
+sırasındaki her aday için 0.2 saniyelik gerçek probe encode'u çalıştırıp ilk
+çalışanı seçer ve o encoder'ın ffmpeg arg setini üretir; seçim
+`pipeline.run()` başında BİR KEZ yapılır (diske cache yok — sürücü
+değişebilir), konsola tek satır düşer ve `rapor.json`'un `encoder` alanına
+girer. `ffmpeg -encoders` listesi YETMEZ: geliştirme makinesinde `h264_amf` ve
+`h264_qsv` listede görünüp sürücüde patlıyor (`amfrt64.dll failed to open`,
+`MFX session: -9`) — DESIGN.md §5'in probe gerekçesi birebir doğrulandı. NVENC
+değerleri (`-preset p5 -cq {crf-2}`) RTX 4050'de gerçek encode'la ölçüldü;
+**AMF/QSV kalite argümanları kalibre EDİLMEDİ — AMD/Intel donanımı bulunana
+kadar bekliyor (KI-6)**.
