@@ -70,9 +70,8 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 - **Bilinen sınırlar `KNOWN_ISSUES.md`'de tutulur** — test geçse de bilinen
   sınır varsa KI-N kimliğiyle oraya kaydedilir; testler ve kod yorumları bu
   kimliğe referans verir. Sessizce workaround yazılmaz.
-- **v0.2 scope dışına çıkma:** `wcpp_backend.py` (whisper.cpp / Vulkan), GUI,
-  çoklu video / batch işleme, CI → v0.3+ kapsamıdır. v0.2 bitmeden v0.3'e
-  geçilmez.
+- **v0.3 scope dışına çıkma:** GUI, çoklu video / batch işleme, CI → v1+
+  kapsamıdır. v0.3 bitmeden v1'e geçilmez.
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
 ## Mevcut Durum (2026-07-20)
@@ -81,8 +80,9 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
 `rapor.json`'da reason zincirleri).
 
-**v0.2 SÜRÜYOR** — TOML config + donanım encoder tespiti bitti (DESIGN.md §8);
-kalan iş HTML review.
+**v0.2 TAMAMLANDI** — TOML config + donanım encoder tespiti + statik HTML review
+bitti (DESIGN.md §8): `fillercut video.mp4` interaktif modda onaydan ÖNCE
+`<ad>_review.html` üretiyor (timeline + kesim tablosu, JS'siz/taşınabilir).
 
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
@@ -116,15 +116,16 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `config.py` + `cli.py` düzeltmeleri (AsrConfig auto-default, UTF-8 hata sarma, ölü dal temizliği, çift flag) | `03bdf7f` |
 | `render/encoder.py` (probe'lu HW encoder tespiti + codec başına kalite arg tablosu) + `KNOWN_ISSUES.md` (KI-6) | `eed9446` |
 | `render/render.py`: `ENCODE_TEMPLATE` düştü, arg'lar `encoder.py` + `config.render`'dan; `pipeline.py` tek probe + konsol satırı; `report/json_report.py`'ye `encoder` alanı | `4518b0f` |
+| `report/html_report.py` (statik HTML review: timeline + TAM kesim tablosu, inline CSS/JS'siz, `html.escape`) + `ReportCut.approved` alanı (v0.3 interaktif review temeli, geriye uyumlu) + `cli.py` `--open`; `pipeline.py` REVIEW wiring'i (`--yes`'te HTML yok) | `dff36e9` |
 
-**Test sayısı:** 306 (`python -m pytest` → 306 passed). Bunun 301'i ffmpeg
+**Test sayısı:** 323 (`python -m pytest` → 323 passed). Bunun 318'i ffmpeg
 gerektirmez; 5'i `ffmpeg` marker'lıdır (gerçek ffmpeg/donanım) — CI
 `-m "not ffmpeg"` ile atlar, donanımsız makinede NVENC testleri kendi kendine
 skip eder.
 
-**Sıradaki:** v0.2'nin kalan işi **HTML review** (`report/html_report.py` —
-timeline görünümü, kesilecekler kırmızı; v0.3'ten v0.2'ye çekildi, DESIGN.md
-§8 tablosu buna göre güncellendi).
+**Sıradaki:** v0.3 — **interaktif review** (HTML'de kesimleri seçerek onay;
+`ReportCut.approved` alanı tüketilir, JS/sunucu katmanı) + **`wcpp_backend.py`**
+(whisper.cpp / Vulkan — AMD/Intel GPU ASR backend'i).
 
 **Not (TRANSCRIBE):** Model ayarları `fw_backend.py` modül sabitleridir
 (`turbo` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile
