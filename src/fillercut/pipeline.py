@@ -16,6 +16,11 @@ TRANSCRIBE adımından sonra kelime listesi ``<ad>_transkript.json`` olarak
 kaydedilir (çıktıların yanına) — pahalı ASR çıktısı review'da ret edilse
 bile korunur.
 
+RENDER'ın encoder'ı ``run()`` başında BİR KEZ probe'lanır
+(``render/encoder.py``): seçim RENDER adımında konsola tek satır olarak düşer
+ve rapor.json'un ``encoder`` alanına girer — "HW hızlandırma çalıştı mı yoksa
+sessizce CPU'ya mı düşüldü" sorusunun cevabı dosyada durur.
+
 Ara WAV `tempfile.TemporaryDirectory`'ye çıkarılır — analiz artığı kullanıcının
 video klasöründe kalmaz; iş bitince/hata olursa temizlik otomatiktir.
 """
@@ -39,8 +44,14 @@ from fillercut.detect.fillers import count_aday_fillers, detect_fillers
 from fillercut.detect.silence import filter_silence
 from fillercut.models import CutPlan
 from fillercut.plan.cutplan import build_cutplan
+from fillercut.render.encoder import build_encode_args, select_encoder
 from fillercut.render.render import RenderError, render
-from fillercut.report.json_report import Report, build_report, write_json_report
+from fillercut.report.json_report import (
+    EncoderInfo,
+    Report,
+    build_report,
+    write_json_report,
+)
 from fillercut.transcribe.base import Transcriber, words_to_json
 
 _out = Console()
@@ -144,6 +155,12 @@ def run(
     dst = Path(output_path) if output_path is not None else default_output_path(src)
     rapor_yolu = dst.with_suffix(".json")
 
+    # Encoder probe'u run() başında BİR KEZ (render/encoder.py): sonuç hem
+    # RENDER'ın arg setini hem raporun "encoder" alanını besler. Aday başına
+    # ~0.1-0.4 sn; diske cache yoktur (sürücü değişebilir).
+    encoder_secimi = select_encoder(cfg.encoder)
+    encoder_bilgisi = EncoderInfo.from_selection(encoder_secimi)
+
     # [1] EXTRACT öncesi süre — silence parse (kapanmamış sessizlik) ve
     # json_report ikisi de total_ms ister; tek ffprobe ile alınır.
     try:
@@ -216,7 +233,12 @@ def run(
             min_keep_ms=cfg.padding.min_keep_ms,
             filler_anomali_ms=cfg.padding.filler_anomali_ms,
         )
-        report = build_report(plan, total_ms, skipped_aday_filler=atlanan_aday)
+        report = build_report(
+            plan,
+            total_ms,
+            skipped_aday_filler=atlanan_aday,
+            encoder=encoder_bilgisi,
+        )
     except ValueError as exc:
         # CutPlanError (plan tüm videoyu kesiyor) + model/rapor validasyonu
         _fail(f"PLAN başarısız: {exc}")
@@ -233,14 +255,21 @@ def run(
             raise typer.Exit(code=0)
 
     # [6] RENDER — keep segmentleri re-encode + concat; rapor.json yanına
-    _out.print("[cyan][6/6] RENDER[/cyan] — segmentler encode ediliyor…")
+    _out.print(
+        f"[cyan][6/6] RENDER[/cyan] — encoder: {encoder_secimi.ffmpeg_name} "
+        f"(probe: {encoder_secimi.summary})"
+    )
     try:
-        render(src, plan, dst)
+        render(src, plan, dst, encode_args=build_encode_args(encoder_secimi, cfg.render))
     except (RenderError, FileNotFoundError) as exc:
         _fail(f"RENDER başarısız: {exc}")
     try:
         rapor_dosyasi = write_json_report(
-            plan, total_ms, rapor_yolu, skipped_aday_filler=atlanan_aday
+            plan,
+            total_ms,
+            rapor_yolu,
+            skipped_aday_filler=atlanan_aday,
+            encoder=encoder_bilgisi,
         )
     except OSError as exc:
         _fail(f"rapor.json yazılamadı: {exc}")

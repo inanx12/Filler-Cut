@@ -120,7 +120,9 @@ Kaliteli işin detayı: **`ffmpeg -encoders` listesine bakmak yetmez.** Encoder 
 ffmpeg -f lavfi -i color=black:s=64x64:d=1 -c:v hevc_amf -f null -
 ```
 
-Bu probe yaklaşımı, "donanım hızlandırma çalışıyor mu yoksa sessizce CPU'ya mı düşüyor" problemini araca en baştan gömer.
+Bu probe yaklaşımı, "donanım hızlandırma çalışıyor mu yoksa sessizce CPU'ya mı düşüyor" problemini araca en baştan gömer. Seçim ve probe özeti `rapor.json`'un `encoder` alanına yazılır — cevap her zaman bir dosyada durur.
+
+**Not (v0.2) — `[render].video_codec` gerilimi.** `preference` zinciri auto modda çalışırken video encoder'ını probe seçer ve **codec ailesi h264'te sabittir** (`nvenc→h264_nvenc`, `amf→h264_amf`, `qsv→h264_qsv`, `libx264`). Bu yüzden config'deki `[render].video_codec` alanı bu yolda tüketilmez; yalnızca yazılım senaryosunun encoder adını tekrarlar. Aynı codec'i dört ayrı encoder'da anlatmanın tek yolu aile bazlı bir seçim alanıdır (`h264` / `hevc`) — `hevc_nvenc`, `hevc_amf`, `hevc_qsv` varyantları ve buna bağlı şema değişikliği **v0.3+ konusudur**; v0.2'de şema değiştirilmedi, gerilim bilinçli olarak kayda geçirildi.
 
 ## 6. Tespit Mantığı — İki İncelik
 

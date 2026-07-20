@@ -9,8 +9,10 @@ segment-segment ilerlemek hatayı lokalize eder ve debug edilebilir kalır.
 **Concat tuzağı (tek parametre şablonu):** concat demuxer birleştirirken
 yeniden encode ETMEZ — bu yüzden tüm segmentlerin BİREBİR aynı encode
 parametreleriyle üretilmesi şarttır. Tek bir farklı parametre concat'ı bozar
-veya A/V senkronunu sessizce kaydırır. Şablon `ENCODE_TEMPLATE` modül sabiti
-olarak tek yerde durur ve her segmentte aynen kullanılır.
+veya A/V senkronunu sessizce kaydırır. Bu yüzden arg seti burada ÜRETİLMEZ:
+çalıştırma başına bir kez `render/encoder.py` tarafından (seçilen encoder +
+config) üretilir, `encode_args` olarak verilir ve her segmentte aynen
+kullanılır. Render karar vermez, uygular (DESIGN.md §2).
 
 **Kesim:** input seeking (`-ss` `-i`'den ÖNCE) + `-t` + re-encode. Modern
 ffmpeg'de re-encode ile input seeking frame-accurate'tir — akış seek
@@ -34,32 +36,12 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 
 from rich.progress import Progress
 
 from fillercut.models import CutPlan, Segment
-
-#: Encode şablonu — concat tuzağı yüzünden TEK KAYNAK olarak burada durur ve
-#: her segment komutuna aynen kopyalanır (modül docstring'ine bkz). v0.1
-#: CPU-only'dir (libx264); HW auto-detect v0.2 kapsamıdır (DESIGN.md §5) —
-#: encoder değişse bile kural aynı kalır: her segmentte BİREBİR aynı parametreler.
-ENCODE_TEMPLATE: tuple[str, ...] = (
-    "-c:v",
-    "libx264",
-    "-preset",
-    "medium",
-    "-crf",
-    "20",
-    "-pix_fmt",
-    "yuv420p",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
-    "-ar",
-    "48000",
-)
 
 #: Hata mesajında gösterilecek maksimum stderr uzunluğu.
 _STDERR_TAIL = 400
@@ -80,14 +62,20 @@ def _segment_name(index: int) -> str:
 
 
 def build_segment_command(
-    input_path: Path, keep_segment: Segment, workdir: Path, index: int
+    input_path: Path,
+    keep_segment: Segment,
+    workdir: Path,
+    index: int,
+    *,
+    encode_args: Sequence[str],
 ) -> list[str]:
     """Tek keep segmentinin ffmpeg encode komutu — saf fonksiyon.
 
     `-ss` `-i`'den öncedir (input seeking) ve re-encode ile frame-accurate'tir.
     `-fps_mode:v cfr` VFR kaynağı sabit fps'e çeker (VFR notu, modül
-    docstring'i). Encode parametreleri her segmentte aynı `ENCODE_TEMPLATE`'ten
-    gelir — concat tutarlılığının tek garantisi budur.
+    docstring'i). `encode_args` çağrı başına bir kez üretilir
+    (`render/encoder.py`) ve her segmentte aynen geçer — concat tutarlılığının
+    tek garantisi budur.
     """
     return [
         "ffmpeg",
@@ -100,7 +88,7 @@ def build_segment_command(
         _ms_to_sn(keep_segment.duration_ms),
         "-fps_mode:v",
         "cfr",
-        *ENCODE_TEMPLATE,
+        *encode_args,
         str(workdir / _segment_name(index)),
     ]
 
@@ -119,8 +107,8 @@ def build_concat_list(segment_paths: list[Path]) -> str:
 def build_concat_command(list_path: Path, output_path: Path) -> list[str]:
     """concat demuxer birleştirme komutu — saf fonksiyon.
 
-    `-c copy`: segmentler zaten ENCODE_TEMPLATE ile encode edildi; birleştirme
-    yeniden encode ETMEZ (hız + kalite kaybı yok).
+    `-c copy`: segmentler zaten aynı `encode_args` ile encode edildi;
+    birleştirme yeniden encode ETMEZ (hız + kalite kaybı yok).
     """
     return [
         "ffmpeg",
@@ -160,6 +148,7 @@ def render(
     cutplan: CutPlan,
     output_path: str | Path,
     *,
+    encode_args: Sequence[str],
     timeout: float = 3600.0,
 ) -> Path:
     """CutPlan'i uygular: keep segmentlerini encode edip tek MP4'te birleştirir.
@@ -169,6 +158,9 @@ def render(
         cutplan: PLAN katmanının çıktısı; yalnız `keep` listesi kullanılır
             (render karar vermez, planı körlemesine uygular — DESIGN.md §2).
         output_path: Hedef MP4.
+        encode_args: Segment encode argümanları (codec + kalite + ses);
+            `render/encoder.build_encode_args` üretir, pipeline aktarır.
+            Zorunludur — sessizce CPU encode'a düşen bir default yoktur.
         timeout: Her ffmpeg çağrısı için saniye cinsinden üst sınır.
 
     Returns:
@@ -202,7 +194,7 @@ def render(
                 adim = f"segment {i}/{toplam} ({_segment_name(i)})"
                 progress.update(task, description=f"{adim} encode ediliyor")
                 _run_ffmpeg(
-                    build_segment_command(src, keep, workdir, i),
+                    build_segment_command(src, keep, workdir, i, encode_args=encode_args),
                     adim=adim,
                     timeout=timeout,
                 )

@@ -22,15 +22,27 @@ import typer
 from fillercut.audio.extractor import ExtractionError
 from fillercut.audio.probe import ProbeError
 from fillercut.audio.silence import SilenceDetectionError
-from fillercut.config import Config
+from fillercut.config import Config, RenderConfig
 from fillercut.models import CutPlan, Segment, Word
 from fillercut.pipeline import PipelineResult, default_output_path, run
 from fillercut.plan.cutplan import CutPlanError
+from fillercut.render.encoder import EncoderSelection, ProbeAttempt, build_encode_args
 from fillercut.render.render import RenderError
-from fillercut.report.json_report import Report, build_report
+from fillercut.report.json_report import EncoderInfo, Report, build_report
 from fillercut.transcribe.base import Transcriber
 
 TOPLAM_MS = 5_000
+
+#: Sahte probe sonucu — pipeline testleri ffmpeg çalıştırmaz; encoder seçimi
+#: de mock'lanır (aksi halde her test gerçek probe encode'u koşardı).
+SECIM = EncoderSelection(
+    name="nvenc",
+    ffmpeg_name="h264_nvenc",
+    attempts=(
+        ProbeAttempt("amf", "h264_amf", False, "amfrt64.dll failed to open"),
+        ProbeAttempt("nvenc", "h264_nvenc", True),
+    ),
+)
 
 WORDS = [
     Word(text="merhaba", start_ms=0, end_ms=500, confidence=0.9),
@@ -100,6 +112,10 @@ def katmanlar():
     sira: list[str] = []
     with ExitStack() as stack:
         m = SimpleNamespace(sira=sira)
+        m.select_encoder = stack.enter_context(
+            patch("fillercut.pipeline.select_encoder",
+                  side_effect=_izli(sira, "select_encoder", SECIM))
+        )
         m.probe = stack.enter_context(
             patch("fillercut.pipeline.probe_duration_ms",
                   side_effect=_izli(sira, "probe", TOPLAM_MS))
@@ -130,7 +146,7 @@ def katmanlar():
         )
         m.render = stack.enter_context(
             patch("fillercut.pipeline.render",
-                  side_effect=_izli(sira, "render", lambda src, plan, out: out))
+                  side_effect=_izli(sira, "render", lambda src, plan, out, **kw: out))
         )
         m.json = stack.enter_context(
             patch("fillercut.pipeline.write_json_report",
@@ -154,6 +170,7 @@ class TestCagriSirasiVeVeriAkisi:
     def test_alti_katman_dogru_sirada(self, girdi: Path, katmanlar: Any) -> None:
         run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
         assert katmanlar.sira == [
+            "select_encoder",  # probe run() başında, tek sefer (v0.2)
             "probe",
             "extract",
             "transcribe",
@@ -271,6 +288,49 @@ class TestAtlananAdayBilgisi:
         cikti = capsys.readouterr().out
         assert "2 aday filler tespit edildi" in cikti
         assert "--aggressive ile kesilir" in cikti
+
+
+class TestEncoderSecimi:
+    """Probe run() başında BİR KEZ; seçim render'a, rapora ve konsola akar."""
+
+    def test_probe_bir_kez_ve_config_encoder_ile(self, girdi: Path, katmanlar: Any) -> None:
+        cfg = Config(yes=True)
+        run(girdi, config=cfg, transcriber=_SahteTranscriber(katmanlar.sira))
+        katmanlar.select_encoder.assert_called_once_with(cfg.encoder)
+
+    def test_encode_arglari_rendera_akar(self, girdi: Path, katmanlar: Any) -> None:
+        cfg = Config(yes=True)
+        run(girdi, config=cfg, transcriber=_SahteTranscriber(katmanlar.sira))
+        args = katmanlar.render.call_args.kwargs["encode_args"]
+        assert args == build_encode_args(SECIM, cfg.render)
+        assert "h264_nvenc" in args  # seçilen encoder komuta giriyor
+
+    def test_render_configu_encode_arglarina_yansir(self, girdi: Path, katmanlar: Any) -> None:
+        cfg = Config(
+            yes=True,
+            render=RenderConfig(crf=23, audio_bitrate="256k", audio_sample_rate=44_100),
+        )
+        run(girdi, config=cfg, transcriber=_SahteTranscriber(katmanlar.sira))
+        args = katmanlar.render.call_args.kwargs["encode_args"]
+        assert args[args.index("-cq") + 1] == "21"  # crf 23 → nvenc cq (crf-2)
+        assert args[args.index("-b:a") + 1] == "256k"
+        assert args[args.index("-ar") + 1] == "44100"
+
+    def test_secim_rapora_ve_json_yazimina_girer(self, girdi: Path, katmanlar: Any) -> None:
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        bilgi = katmanlar.report.call_args.kwargs["encoder"]
+        assert bilgi == EncoderInfo.from_selection(SECIM)
+        assert bilgi.ffmpeg_name == "h264_nvenc"
+        assert [(a.name, a.ok) for a in bilgi.attempts] == [("amf", False), ("nvenc", True)]
+        assert katmanlar.json.call_args.kwargs["encoder"] == bilgi
+
+    def test_konsola_tek_satir_dusulur(
+        self, girdi: Path, katmanlar: Any, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        cikti = capsys.readouterr().out
+        assert "encoder: h264_nvenc" in cikti
+        assert "probe: amf ✗; nvenc ✓" in cikti
 
 
 class TestReviewOnayi:

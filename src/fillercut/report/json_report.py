@@ -10,6 +10,9 @@ Rapor iki soruya cevap verir:
    süre aynı niceliktir — kesim, izleyiciye kazandıran süredir.
 2. **"Neden burayı kesti?"** — kesim listesindeki `reason` zincirleri CutPlan
    ile BİREBİR korunur (AGENTS.md invariant 7).
+3. **"Neyle encode edildi?"** (v0.2) — `encoder` alanı seçilen encoder'ı ve
+   probe denemelerini taşır: donanım hızlandırma çalıştı mı, yoksa sessizce
+   CPU'ya mı düşüldü (DESIGN.md §5). v0.1 raporlarıyla uyum için default `None`.
 
 Zaman birimi ms-int disiplininde kalır; her sürenin yanındaki `human` alanı
 (mm:ss, kırparak) yalnızca görüntü kolaylığıdır — gerçek her zaman `ms`'tir.
@@ -29,6 +32,7 @@ from typing import cast
 from pydantic import BaseModel, ConfigDict, Field
 
 from fillercut.models import CutKind, CutPlan, Segment
+from fillercut.render.encoder import EncoderSelection
 
 
 class DurationStat(BaseModel):
@@ -67,6 +71,47 @@ class ReportCut(BaseModel):
     reason: str
 
 
+class EncoderAttempt(BaseModel):
+    """Tek encoder adayının probe sonucu (rapor kopyası)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    ffmpeg_name: str
+    ok: bool
+    error: str = ""
+
+
+class EncoderInfo(BaseModel):
+    """RENDER'da kullanılan encoder + probe özeti (v0.2).
+
+    "Donanım hızlandırma çalıştı mı yoksa sessizce CPU'ya mı düştü?" sorusunun
+    cevabı burada durur (DESIGN.md §5) — `attempts` denenen her adayı ve
+    başarısızsa kök nedenini taşır.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    ffmpeg_name: str
+    #: Tercih zinciri boş kaldı ve yazılım encoder'ına zorlandı mı?
+    fallback: bool = False
+    attempts: list[EncoderAttempt] = Field(default_factory=list)
+
+    @classmethod
+    def from_selection(cls, selection: EncoderSelection) -> EncoderInfo:
+        """`render/encoder.py`'nin probe sonucunu rapor modeline çevirir."""
+        return cls(
+            name=selection.name,
+            ffmpeg_name=selection.ffmpeg_name,
+            fallback=selection.fallback,
+            attempts=[
+                EncoderAttempt(name=a.name, ffmpeg_name=a.ffmpeg_name, ok=a.ok, error=a.error)
+                for a in selection.attempts
+            ],
+        )
+
+
 class Report(BaseModel):
     """rapor.json modeli — REVIEW katmanının çıktısı.
 
@@ -85,6 +130,9 @@ class Report(BaseModel):
     #: "--aggressive ile kesilir"). Aggressive modda 0'dır — aday'lar kesimdedir.
     skipped_aday_filler: int = Field(ge=0, default=0)
     tiers: TierCounts
+    #: RENDER'da kullanılan encoder + probe özeti. Geriye uyumlu: v0.1
+    #: raporlarında ve encoder bilgisi verilmeyen çağrılarda `None`.
+    encoder: EncoderInfo | None = None
     cuts: list[ReportCut]
 
     def to_json(self) -> str:
@@ -130,6 +178,7 @@ def build_report(
     total_ms: int,
     *,
     skipped_aday_filler: int = 0,
+    encoder: EncoderInfo | None = None,
 ) -> Report:
     """CutPlan'den Report üretir — saf fonksiyon (yan etki yok).
 
@@ -142,6 +191,9 @@ def build_report(
             sayısı; DETECT katmanı sayar (`detect/fillers.count_aday_fillers`),
             pipeline aktarır. CutPlan'den türetilemez — kesilmeyen kelime
             planda iz bırakmaz.
+        encoder: RENDER'da kullanılan encoder + probe özeti
+            (`EncoderInfo.from_selection`); verilmezse alan `None` kalır
+            (geriye uyumluluk).
 
     Raises:
         ValueError: `total_ms` pozitif değilse, cutplan süresiyle
@@ -167,6 +219,7 @@ def build_report(
         cut_count=len(cutplan.cut),
         skipped_aday_filler=skipped_aday_filler,
         tiers=_count_tiers(cutplan.cut),
+        encoder=encoder,
         cuts=[
             ReportCut(
                 start_ms=s.start_ms,
@@ -186,12 +239,18 @@ def write_json_report(
     path: str | Path,
     *,
     skipped_aday_filler: int = 0,
+    encoder: EncoderInfo | None = None,
 ) -> Path:
     """`build_report` + dosyaya yazım wrapper'ı (I/O yalnız burada).
 
     UTF-8, girintili JSON yazar; yazılan dosyanın yolunu döner.
     """
-    report = build_report(cutplan, total_ms, skipped_aday_filler=skipped_aday_filler)
+    report = build_report(
+        cutplan,
+        total_ms,
+        skipped_aday_filler=skipped_aday_filler,
+        encoder=encoder,
+    )
     hedef = Path(path)
     hedef.write_text(report.to_json() + "\n", encoding="utf-8")
     return hedef

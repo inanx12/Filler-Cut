@@ -27,7 +27,9 @@ from fillercut.detect.fillers import detect_fillers
 from fillercut.detect.silence import filter_silence
 from fillercut.models import CutPlan, Segment, Word
 from fillercut.plan.cutplan import build_cutplan
+from fillercut.render.encoder import EncoderSelection, ProbeAttempt
 from fillercut.report.json_report import (
+    EncoderInfo,
     Report,
     TierCounts,
     build_report,
@@ -244,6 +246,70 @@ class TestKademeAyristirma:
         )
         rapor = build_report(plan, 20_000)
         assert rapor.tiers == TierCounts(kesin_filler=0, aday_filler=1, silence=0)
+
+
+class TestEncoderAlani:
+    """v0.2: seçilen encoder + probe özeti rapora girer (geriye uyumlu alan)."""
+
+    @staticmethod
+    def _secim() -> EncoderSelection:
+        return EncoderSelection(
+            name="nvenc",
+            ffmpeg_name="h264_nvenc",
+            attempts=(ProbeAttempt("nvenc", "h264_nvenc", True),),
+        )
+
+    def test_verilmezse_none_kalir(self, kelimeler: list[Word]) -> None:
+        # v0.1 çağrıları (encoder bilgisi olmayan) aynen çalışmalı.
+        assert build_report(_zincir(kelimeler, agresif=False), TOPLAM_MS).encoder is None
+
+    def test_secim_alana_donusur(self, kelimeler: list[Word]) -> None:
+        rapor = build_report(
+            _zincir(kelimeler, agresif=False),
+            TOPLAM_MS,
+            encoder=EncoderInfo.from_selection(self._secim()),
+        )
+        assert rapor.encoder is not None
+        assert (rapor.encoder.name, rapor.encoder.ffmpeg_name) == ("nvenc", "h264_nvenc")
+        assert rapor.encoder.fallback is False
+        assert [(a.name, a.ok) for a in rapor.encoder.attempts] == [("nvenc", True)]
+
+    def test_basarisiz_denemeler_kok_nedeniyle_saklanir(self) -> None:
+        # "HW çalıştı mı, yoksa sessizce CPU'ya mı düşüldü" sorusunun cevabı.
+        secim = EncoderSelection(
+            name="libx264",
+            ffmpeg_name="libx264",
+            attempts=(
+                ProbeAttempt("nvenc", "h264_nvenc", False, "Cannot load nvcuda.dll"),
+                ProbeAttempt("libx264", "libx264", True),
+            ),
+            fallback=True,
+        )
+        bilgi = EncoderInfo.from_selection(secim)
+        assert bilgi.fallback is True
+        assert bilgi.attempts[0].error == "Cannot load nvcuda.dll"
+        assert bilgi.attempts[1].error == ""
+
+    def test_jsona_yazilir(self, kelimeler: list[Word], tmp_path: Path) -> None:
+        hedef = write_json_report(
+            _zincir(kelimeler, agresif=False),
+            TOPLAM_MS,
+            tmp_path / "r.json",
+            encoder=EncoderInfo.from_selection(self._secim()),
+        )
+        veri = json.loads(hedef.read_text(encoding="utf-8"))
+        assert veri["encoder"] == {
+            "name": "nvenc",
+            "ffmpeg_name": "h264_nvenc",
+            "fallback": False,
+            "attempts": [
+                {"name": "nvenc", "ffmpeg_name": "h264_nvenc", "ok": True, "error": ""}
+            ],
+        }
+
+    def test_verilmezse_jsonda_null(self, kelimeler: list[Word], tmp_path: Path) -> None:
+        hedef = write_json_report(_zincir(kelimeler, agresif=False), TOPLAM_MS, tmp_path / "r.json")
+        assert json.loads(hedef.read_text(encoding="utf-8"))["encoder"] is None
 
 
 class TestWrapper:
