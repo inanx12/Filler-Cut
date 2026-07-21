@@ -8,6 +8,7 @@ sabitlerdir (json_report testleriyle aynı mantık).
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
@@ -164,7 +165,7 @@ class TestSafFonksiyonVeWrapper:
         assert isinstance(html, str)
         assert "<script" not in html.lower()
 
-    def test_write_dosyaya_yazar(self, rapor: Report, tmp_path: pytest.TempPath) -> None:
+    def test_write_dosyaya_yazar(self, rapor: Report, tmp_path: Path) -> None:
         hedef = tmp_path / "review.html"
         donen = write_html_report(rapor, hedef)
         assert donen == hedef

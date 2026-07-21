@@ -9,7 +9,7 @@ ad alanında mock'lanır, transcriber enjekte edilir.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
@@ -108,7 +108,7 @@ def girdi(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def katmanlar():
+def katmanlar() -> Iterator[SimpleNamespace]:
     """Tüm katmanları mock'lar; mock'lara ve çağrı sırasına erişim sağlar."""
     sira: list[str] = []
     with ExitStack() as stack:

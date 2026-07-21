@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import http.client
 import json
+from collections.abc import Iterator
 
 import pytest
 
@@ -57,7 +58,7 @@ def _post(port: int, path: str, payload: dict[str, object] | None = None) -> tup
 
 
 @pytest.fixture()
-def server() -> ReviewServer:
+def server() -> Iterator[ReviewServer]:
     """Başlatılmış sunucu; test bitince kapatılır."""
     srv = ReviewServer(_rapor(), "<html>review</html>")
     srv.start()
