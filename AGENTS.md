@@ -26,11 +26,19 @@ pip install -e ".[dev]"          # proje + pytest, ruff, mypy
 
 ## Komutlar — Üçü Yeşil Olmadan Commit Yok
 
+Üçü de **repo kökünden**, **venv aktifken** çalıştırılır. Kapsam TAM'dır
+(`.`) — daraltma yok:
+
 ```bash
-python -m pytest -v
-python -m ruff check src tests
-python -m mypy src
+python -m pytest -x --tb=short
+ruff check .
+mypy .
 ```
+
+**Temiz raporu = üç komutun exit code 0 ile bitmesi; kapsam kısaltması
+(`mypy src` vb.) sayılmaz.** — bir sonraki agent "bende temizdi" diyemesin:
+`tests/` altındaki hatalar yalnızca `.` kapsamında görünür (bkz. tarihsel
+mypy temizliği, `a787ab4`).
 
 Tek modül testi: `python -m pytest tests/test_fillers.py -v`
 
