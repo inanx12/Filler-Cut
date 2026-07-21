@@ -1,0 +1,60 @@
+{
+  "systeminfo": "AVX = 1 | AVX2 = 1 | ...",
+  "model": {
+    "type": "large",
+    "multilingual": true
+  },
+  "params": {
+    "model": "ggml-large-v3-turbo-q5_0.bin",
+    "language": "tr"
+  },
+  "result": {
+    "language": "tr"
+  },
+  "transcription": [
+    {
+      "timestamps": { "from": "00:00:00,000", "to": "00:00:00,500" },
+      "offsets": { "from": 0, "to": 500 },
+      "text": " merhaba",
+      "tokens": [
+        {
+          "text": "[_BEG_]",
+          "offsets": { "from": 0, "to": 0 },
+          "id": 50365,
+          "p": 0.995
+        },
+        {
+          "text": " mer",
+          "offsets": { "from": 0, "to": 220 },
+          "id": 2131,
+          "p": 0.91
+        },
+        {
+          "text": "haba",
+          "offsets": { "from": 220, "to": 500 },
+          "id": 5544,
+          "p": 0.83
+        }
+      ]
+    },
+    {
+      "timestamps": { "from": "00:00:03,320", "to": "00:00:04,040" },
+      "offsets": { "from": 3320, "to": 4040 },
+      "text": " Eee,",
+      "tokens": [
+        {
+          "text": " Eee",
+          "offsets": { "from": 3320, "to": 3900 },
+          "id": 4324,
+          "p": 0.70
+        },
+        {
+          "text": ",",
+          "offsets": { "from": 3900, "to": 4040 },
+          "id": 11,
+          "p": 0.60
+        }
+      ]
+    }
+  ]
+}

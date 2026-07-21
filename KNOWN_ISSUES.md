@@ -21,6 +21,49 @@
 - **Referans:** `tests/test_integration.py` — `ığlarımı` / `vişvırı` keep
   beklentileri bu kayıtla belgelenmiştir.
 
+### KI-1 backend karşılaştırması (faster-whisper vs whisper.cpp)
+
+v0.3 whisper.cpp backend'i (`transcribe/wcpp_backend.py`) eklendi; ASR
+kaynaklı kaçak/anomalinin backend'e göre değişip değişmediği aynı kayıtta
+(`test_konusma.wav`) ölçülecektir.
+
+**DTW notu (mimari gerçek — koşu gerektirmez):** whisper.cpp'nin DTW tabanlı
+token-timestamp hizalaması **`large-v3-turbo` modellerini DESTEKLEMEZ** (turbo
+mimarisinde gereken cross-attention katmanları budanmıştır). Dolayısıyla wcpp
+turbo koşusunda `-ml 1 -sow` kelime sınırları Whisper'ın **ham token-olasılık**
+tahmininden gelir — faster-whisper turbo'daki KI-5 timestamp şişmesinin
+muadili beklenir. DTW hizası isteniyorsa **non-turbo `large-v3`** gerekir
+(daha yavaş, daha büyük). Bu yüzden karşılaştırmaya mümkünse `large-v3`
+(non-turbo) koşusu da eklenir.
+
+**Sabitlenen koşu parametreleri:**
+
+| Backend | Model | compute/quant | Not |
+|---|---|---|---|
+| whisper.cpp | `ggml-large-v3-turbo-q5_0.bin` | q5_0 (GGML quant) | **ana koşu** — düşük RAM |
+| whisper.cpp | `ggml-large-v3-turbo-f16.bin` | f16 | opsiyonel 2. koşu (quant etkisi) |
+| whisper.cpp | `ggml-large-v3.bin` (non-turbo) | q5_0/f16 | opsiyonel — DTW hizası bu modelde çalışır |
+| faster-whisper | `turbo` (= large-v3-turbo) | `device=auto`→cuda, `compute_type=default`→float16 | mevcut fw davranışı (`fw_backend.py` sabitleri) |
+
+**Ölçülecek metrikler (kullanıcı donanımında — RTX 4050 + Vulkan):**
+- **Uydurma kelime sayısı** (false negative kaynağı): fw'de `ığlarımı`,
+  `vişvırı` gibi; wcpp aynı bölgeleri nasıl yazıyor?
+- **Timestamp anomalisi sayısı**: tek kelimeden gelen >3000 ms kesim (KI-5
+  eşiği `FILLER_ANOMALI_MS`); turbo DTW yokluğunda wcpp'de artması beklenir.
+
+| Metrik | fw (turbo/float16) | wcpp (turbo/q5_0) | wcpp (large-v3, DTW) |
+|---|---|---|---|
+| Uydurma kelime | _(bekliyor)_ | _(bekliyor)_ | _(bekliyor)_ |
+| Timestamp anomalisi | _(bekliyor)_ | _(bekliyor)_ | _(bekliyor)_ |
+
+- **Durum:** Karşılaştırma, whisper.cpp binary + GGML model erişimi olan
+  kullanıcı donanımında koşulmayı bekliyor (KI-6 deseni). Kod + test hazır;
+  gerçek koşu binary/model indirmesi (kapsam dışı) gerektirir.
+- **Referans:** `tests/test_wcpp.py::TestGercekModel` (`@pytest.mark.wcpp`) —
+  `-ml 1 -sow` kelime sınırlarını elle doğrulanmış referansla
+  (`tests/data/wcpp_reference_tr.json`, template) kıyaslar; binary/model/kayıt
+  yoksa skip.
+
 ## KI-2 — Aggressive mod gerçek kelimeyi kesebilir (false positive)
 
 - **Belirti:** `aggressive=True` iken "bir şey söyleyeceğim" gibi gerçek

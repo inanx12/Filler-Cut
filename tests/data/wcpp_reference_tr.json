@@ -1,0 +1,6 @@
+{
+  "_template": true,
+  "_aciklama": "GERÇEK whisper-cli '-ml 1 -sow' çıktısının kelime SINIRLARINI elle doğrulamak için referans. Ses (test_konusma.wav) dinlenerek doldurulur — sadece bir insan yapabilir. Model: ggml-large-v3-turbo-q5_0.bin (KI-1 ana koşu). Doldurunca '_template' -> false; o zaman @pytest.mark.wcpp testi her kelimeyi ±tolerance_ms karşılaştırır. Boş/template kaldıkça test yapısal doğrulama yapar, sınır karşılaştırmasını atlar.",
+  "tolerance_ms": 300,
+  "words": []
+}

@@ -22,7 +22,7 @@ import typer
 from fillercut.audio.extractor import ExtractionError
 from fillercut.audio.probe import ProbeError
 from fillercut.audio.silence import SilenceDetectionError
-from fillercut.config import Config, RenderConfig
+from fillercut.config import AsrConfig, Config, RenderConfig
 from fillercut.models import CutPlan, Segment, Word
 from fillercut.pipeline import PipelineResult, default_output_path, run
 from fillercut.plan.cutplan import CutPlanError
@@ -332,6 +332,46 @@ class TestEncoderSecimi:
         cikti = capsys.readouterr().out
         assert "encoder: h264_nvenc" in cikti
         assert "probe: amf ✗; nvenc ✓" in cikti
+
+
+class TestBackendSecimi:
+    """_make_transcriber: [asr].backend'e göre ASR backend'ini kurar (tembel import)."""
+
+    def test_faster_whisper_default(self) -> None:
+        from fillercut.pipeline import _make_transcriber
+        from fillercut.transcribe.fw_backend import FasterWhisperTranscriber
+
+        t = _make_transcriber(AsrConfig())
+        assert isinstance(t, FasterWhisperTranscriber)
+        assert t.language == "tr"
+
+    def test_whispercpp_alanlari_baglanir(self) -> None:
+        from fillercut.pipeline import _make_transcriber
+        from fillercut.transcribe.wcpp_backend import WhisperCppTranscriber
+
+        asr = AsrConfig(
+            backend="whispercpp",
+            whispercpp_binary="/opt/whisper-cli",
+            whispercpp_model="/models/m.bin",
+            language="tr",
+        )
+        t = _make_transcriber(asr)
+        assert isinstance(t, WhisperCppTranscriber)
+        assert (t.model_path, t.binary, t.language) == ("/models/m.bin", "/opt/whisper-cli", "tr")
+
+    def test_bilinmeyen_backend_valueerror(self) -> None:
+        from fillercut.pipeline import _make_transcriber
+
+        with pytest.raises(ValueError, match="bilinmeyen ASR backend"):
+            _make_transcriber(AsrConfig(backend="whisperx"))
+
+    def test_run_bilinmeyen_backend_temiz_cikis(self, girdi: Path, katmanlar: Any) -> None:
+        # transcriber enjekte edilmezse backend config'den seçilir; hatalı ad
+        # traceback değil temiz çıkış (kod 1) vermeli — model yüklenmeden.
+        with pytest.raises(typer.Exit) as exc_info:
+            run(girdi, config=Config(yes=True, asr=AsrConfig(backend="whisperx")), transcriber=None)
+        assert exc_info.value.exit_code == 1
+        katmanlar.render.assert_not_called()
 
 
 class TestReviewOnayi:

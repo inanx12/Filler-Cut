@@ -39,7 +39,7 @@ from rich.table import Table
 from fillercut.audio.extractor import ExtractionError, extract_audio
 from fillercut.audio.probe import ProbeError, probe_duration_ms
 from fillercut.audio.silence import SilenceDetectionError, detect_silence
-from fillercut.config import Config
+from fillercut.config import AsrConfig, Config
 from fillercut.detect.fillers import count_aday_fillers, detect_fillers
 from fillercut.detect.silence import filter_silence
 from fillercut.models import CutPlan
@@ -76,6 +76,39 @@ class PipelineResult:
 def default_output_path(input_path: Path) -> Path:
     """Girdiyle aynı klasörde ``<ad>_temiz.mp4`` (DESIGN.md §2: video_temiz.mp4)."""
     return input_path.with_name(f"{input_path.stem}_temiz.mp4")
+
+
+def _make_transcriber(asr: AsrConfig) -> Transcriber:
+    """``[asr].backend``'e göre ASR backend'ini kurar (DESIGN.md §5 Katman A).
+
+    Import'lar dal içinde TEMBEL'dir: whispercpp seçiliyken faster-whisper
+    (+CTranslate2/CUDA DLL) hiç yüklenmez ve tersi. fw modeli zaten lazy;
+    wcpp modeli yerel dosyadır (indirme yok).
+
+    Raises:
+        ValueError: Bilinmeyen backend adı (pipeline bunu temiz çıkışa çevirir).
+    """
+    if asr.backend == "faster-whisper":
+        from fillercut.transcribe.fw_backend import FasterWhisperTranscriber
+
+        return FasterWhisperTranscriber(
+            model_size=asr.model_size,
+            device=asr.device,
+            compute_type=asr.compute_type,
+            language=asr.language,
+        )
+    if asr.backend == "whispercpp":
+        from fillercut.transcribe.wcpp_backend import WhisperCppTranscriber
+
+        return WhisperCppTranscriber(
+            asr.whispercpp_model,
+            binary=asr.whispercpp_binary,
+            language=asr.language,
+        )
+    raise ValueError(
+        f"bilinmeyen ASR backend'i: {asr.backend!r} "
+        "(geçerli: faster-whisper, whispercpp)"
+    )
 
 
 def _fail(mesaj: str) -> NoReturn:
@@ -195,19 +228,15 @@ def run(
 
         # [2] TRANSCRIBE
         if transcriber is None:
-            # Varsayılan backend tembel import: `--help`/hata yollarında
-            # faster-whisper (+CTranslate2) yüklenmez; model zaten tembel.
-            from fillercut.transcribe.fw_backend import FasterWhisperTranscriber
-
-            transcriber = FasterWhisperTranscriber(
-                model_size=cfg.asr.model_size,
-                device=cfg.asr.device,
-                compute_type=cfg.asr.compute_type,
-                language=cfg.asr.language,
-            )
-        _out.print("[cyan][2/6] TRANSCRIBE[/cyan] — transkript çıkarılıyor…")
+            try:
+                transcriber = _make_transcriber(cfg.asr)
+            except ValueError as exc:
+                _fail(f"TRANSCRIBE: {exc}")
+        _out.print(
+            f"[cyan][2/6] TRANSCRIBE[/cyan] — transkript çıkarılıyor (backend: {cfg.asr.backend})…"
+        )
         try:
-            with _out.status("ASR çalışıyor (ilk çalıştırmada ~1 GB model iner)…"):
+            with _out.status("ASR çalışıyor (faster-whisper ilk koşuda ~1 GB model indirir)…"):
                 words = transcriber.transcribe(wav)
         except Exception as exc:
             # ASR backend'i keyfi hata üretebilir (CUDA/driver/model indirme)

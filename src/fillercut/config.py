@@ -38,12 +38,28 @@ class ConfigError(Exception):
 
 @dataclass(frozen=True)
 class AsrConfig:
-    """ASR (TRANSCRIBE katmanı) ayarları."""
+    """ASR (TRANSCRIBE katmanı) ayarları.
 
+    ``backend`` hangi motorun çalışacağını seçer (DESIGN.md §5 Katman A):
+
+    - ``"faster-whisper"`` (default) — CUDA/CPU, mevcut davranış. ``model_size``,
+      ``device``, ``compute_type`` bu backend'e aittir.
+    - ``"whispercpp"`` — whisper.cpp CLI subprocess (Vulkan ile AMD/Intel GPU).
+      ``whispercpp_binary`` (PATH'te ``whisper-cli`` varsayılır, ffmpeg gibi) ve
+      ``whispercpp_model`` (GGML ``.bin`` yolu; whispercpp seçilirse zorunlu)
+      bu backend'e aittir.
+
+    Yeni anahtarlar geriye uyumludur (hepsi default'lu) — ``config_version``
+    bump gerektirmez.
+    """
+
+    backend: str = "faster-whisper"
     model_size: str = "turbo"
     device: str = "auto"
     compute_type: str = "default"
     language: str = "tr"
+    whispercpp_binary: str = "whisper-cli"
+    whispercpp_model: str = ""
 
 
 @dataclass(frozen=True)
@@ -148,21 +164,21 @@ def _bolum_al(data: dict[str, object], ad: str) -> dict[str, object]:
 
 def _asr_yap(data: dict[str, object]) -> AsrConfig:
     """[asr] bölümünden AsrConfig üretir."""
-    gecerli = {"model_size", "device", "compute_type", "language"}
+    gecerli = {
+        "backend",
+        "model_size",
+        "device",
+        "compute_type",
+        "language",
+        "whispercpp_binary",
+        "whispercpp_model",
+    }
     _bolum_anahtarlari(data, "asr", gecerli)
     kwargs: dict[str, object] = {}
-    if "model_size" in data:
-        _tip_kontrol("asr.model_size", data["model_size"], str)
-        kwargs["model_size"] = data["model_size"]
-    if "device" in data:
-        _tip_kontrol("asr.device", data["device"], str)
-        kwargs["device"] = data["device"]
-    if "compute_type" in data:
-        _tip_kontrol("asr.compute_type", data["compute_type"], str)
-        kwargs["compute_type"] = data["compute_type"]
-    if "language" in data:
-        _tip_kontrol("asr.language", data["language"], str)
-        kwargs["language"] = data["language"]
+    for str_key in gecerli:  # hepsi str alan
+        if str_key in data:
+            _tip_kontrol(f"asr.{str_key}", data[str_key], str)
+            kwargs[str_key] = data[str_key]
     return AsrConfig(**kwargs)  # type: ignore[arg-type]
 
 

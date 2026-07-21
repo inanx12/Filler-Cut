@@ -34,10 +34,13 @@ class TestDefaults:
         assert cfg.aggressive is False
         assert cfg.yes is False
         # ASR
+        assert cfg.asr.backend == "faster-whisper"
         assert cfg.asr.model_size == "turbo"
         assert cfg.asr.device == "auto"
         assert cfg.asr.compute_type == "default"
         assert cfg.asr.language == "tr"
+        assert cfg.asr.whispercpp_binary == "whisper-cli"
+        assert cfg.asr.whispercpp_model == ""
         # Detect
         assert cfg.detect.fuzzy_threshold == 85.0
         assert cfg.detect.silence_min_ms == 400
@@ -143,6 +146,31 @@ silence_min_ms = 600
         assert cfg.detect.fuzzy_threshold == 85.0
         assert cfg.padding.min_keep_ms == 300
         assert cfg.asr.model_size == "turbo"
+
+    def test_whispercpp_backend_anahtarlari(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """v0.3: [asr].backend + whispercpp_* — geriye uyumlu (config_version bump yok)."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "filler-cut.toml").write_text(
+            """\
+config_version = 1
+
+[asr]
+backend = "whispercpp"
+whispercpp_binary = "/opt/whisper-cli"
+whispercpp_model = "/models/ggml-large-v3-turbo-q5_0.bin"
+language = "tr"
+""",
+            encoding="utf-8",
+        )
+        cfg = load_config()
+        assert cfg.asr.backend == "whispercpp"
+        assert cfg.asr.whispercpp_binary == "/opt/whisper-cli"
+        assert cfg.asr.whispercpp_model == "/models/ggml-large-v3-turbo-q5_0.bin"
+        # fw alanları dokunulmadıysa default
+        assert cfg.asr.model_size == "turbo"
+        assert cfg.config_version == 1
 
 
 # ─── Öncelik zinciri: CLI > config > default ──────────────────────────────────
