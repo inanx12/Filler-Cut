@@ -118,14 +118,23 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `render/render.py`: `ENCODE_TEMPLATE` düştü, arg'lar `encoder.py` + `config.render`'dan; `pipeline.py` tek probe + konsol satırı; `report/json_report.py`'ye `encoder` alanı | `4518b0f` |
 | `report/html_report.py` (statik HTML review: timeline + TAM kesim tablosu, inline CSS/JS'siz, `html.escape`) + `ReportCut.approved` alanı (v0.3 interaktif review temeli, geriye uyumlu) + `cli.py` `--open`; `pipeline.py` REVIEW wiring'i (`--yes`'te HTML yok) | `dff36e9` |
 
-**Test sayısı:** 323 (`python -m pytest` → 323 passed). Bunun 318'i ffmpeg
-gerektirmez; 5'i `ffmpeg` marker'lıdır (gerçek ffmpeg/donanım) — CI
-`-m "not ffmpeg"` ile atlar, donanımsız makinede NVENC testleri kendi kendine
-skip eder.
+**v0.3 (sürüyor)**
 
-**Sıradaki:** v0.3 — **interaktif review** (HTML'de kesimleri seçerek onay;
-`ReportCut.approved` alanı tüketilir, JS/sunucu katmanı) + **`wcpp_backend.py`**
-(whisper.cpp / Vulkan — AMD/Intel GPU ASR backend'i).
+| Modül | Commit |
+|---|---|
+| interaktif review sunucusu (stdlib http.server) + plan filtresi + approved/rejected rapor alanları | `f6f5389` |
+| interaktif HTML/JS (checkbox + timeline toggle) + `--interactive` wiring | `d9a7c1b` |
+| `transcribe/wcpp_backend.py` (whisper.cpp / whisper-cli subprocess — Vulkan AMD/Intel GPU; saf `build_command` `-ml 1 -sow -ojf` + saf JSON parser, offsets ZATEN ms-int) + `[asr].backend`/`whispercpp_*` config + `pipeline._make_transcriber` (tembel import) + KI-1 backend karşılaştırması | `14bd1c3` |
+
+**Test sayısı:** 397 (`python -m pytest` → 395 passed, 2 skipped). Bunun 390'ı
+marker'sız; 5'i `ffmpeg`, 2'si `wcpp` marker'lı (gerçek ffmpeg / gerçek
+whisper-cli+model) — CI `-m "not ffmpeg and not wcpp"` ile atlar, donanım/model
+yoksa ilgili testler kendi kendine skip eder.
+
+**Sıradaki:** v0.3'ün kalanı — interaktif review'un `wcpp_backend` ile uçtan
+uca doğrulanması + KI-1 backend karşılaştırmasının gerçek donanımda koşulması
+(whisper-cli binary + `ggml-large-v3-turbo-q5_0.bin`; `@pytest.mark.wcpp`
+referansı `tests/data/wcpp_reference_tr.json` elle doldurulacak).
 
 **Not (TRANSCRIBE):** Model ayarları `fw_backend.py` modül sabitleridir
 (`turbo` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile
@@ -138,6 +147,18 @@ Gerçek donanımda doğrulanan tuzaklar: CTranslate2 DLL çözümlemesi process
 PATH'ini kullanır (`add_dll_directory` tek başına yetmez — dizinler PATH'in
 başına eklenir, çift ekleme yapılmaz) ve nvidia-* paketleri namespace
 package'tir (`__file__` None döner, dizin `__path__[0]`'dan bulunur).
+
+**Not (TRANSCRIBE — whisper.cpp backend):** `[asr].backend = "whispercpp"`
+seçilince `wcpp_backend.py`, `whisper-cli`'yi subprocess olarak çağırır
+(binary + GGML `.bin` model kullanıcıdan, ffmpeg gibi sistem bağımlılığı —
+indirme yöneticisi KAPSAM DIŞI). Vulkan için pip binding YOK, çünkü Vulkan pip
+wheel'inde gelmiyor (kaynak derleme, Windows'ta kırık) — subprocess yaklaşımı
+Vulkan/CUDA/BLAS binary'sini kara-kutu olarak takmayı sağlar. Kelime
+timestamp'i `--output-json-full` + `--max-len 1 --split-on-word`; offsetler
+ZATEN ms-int (fw'deki `round(sn*1000)` çevrimi burada yok). **DTW uyarısı:**
+turbo modeller DTW token-hizasını desteklemez → timestamp'ler ham (KI-5
+muadili); DTW için non-turbo `large-v3` gerekir. fw vs wcpp karşılaştırması
+KNOWN_ISSUES.md KI-1'de, gerçek donanım koşusunu bekliyor.
 
 **Not (RENDER encoder):** `render/encoder.py`, `config.encoder.preference`
 sırasındaki her aday için 0.2 saniyelik gerçek probe encode'u çalıştırıp ilk
