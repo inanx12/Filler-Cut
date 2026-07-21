@@ -235,8 +235,15 @@ def run(
         _out.print(
             f"[cyan][2/6] TRANSCRIBE[/cyan] — transkript çıkarılıyor (backend: {cfg.asr.backend})…"
         )
+        # faster-whisper ilk koşuda ~1 GB model indirir; whispercpp yerel .bin
+        # kullanır (indirme yok) — spinner metni backend'e göre.
+        _asr_bilgi = (
+            "faster-whisper ilk koşuda ~1 GB model indirir"
+            if cfg.asr.backend == "faster-whisper"
+            else "whisper-cli çalışıyor"
+        )
         try:
-            with _out.status("ASR çalışıyor (faster-whisper ilk koşuda ~1 GB model indirir)…"):
+            with _out.status(f"ASR çalışıyor ({_asr_bilgi})…"):
                 words = transcriber.transcribe(wav)
         except Exception as exc:
             # ASR backend'i keyfi hata üretebilir (CUDA/driver/model indirme)
