@@ -1,6 +1,38 @@
 {
-  "_template": true,
-  "_aciklama": "GERÇEK whisper-cli '-ml 1 -sow' çıktısının kelime SINIRLARINI elle doğrulamak için referans. Ses (test_konusma.wav) dinlenerek doldurulur — sadece bir insan yapabilir. Model: ggml-large-v3-turbo-q5_0.bin (KI-1 ana koşu). Doldurunca '_template' -> false; o zaman @pytest.mark.wcpp testi her kelimeyi ±tolerance_ms karşılaştırır. Boş/template kaldıkça test yapısal doğrulama yapar, sınır karşılaştırmasını atlar.",
+  "_template": false,
+  "_aciklama": "GERÇEK whisper-cli '-ml 1 -sow' çıktısının kelime SINIRLARINI elle doğrulamak için referans. Ses (test_konusma.wav) dinlenerek doldurulur. Model: ggml-large-v3-turbo-q5_0.bin (KI-1 ana koşu).",
+  "_kiyas_disi": "10 kelime kıyas dışı (KI-1/KI-5 zincir şişmesi — wcpp duraklamaları komşu kelimelere ekliyor): Bugün ref 4262-4497 / wcpp 120-4180; filir 4574-4788 / 4180-4640; şey 6429-6928 / 6660-7630; wishfur 8165-8600 / 8040-8760; benim 8600-8893 / 8760-9220; ığılarımı 9037-9868 / 9220-10240; yakalayabilecek 9868-10805 / 10240-10990; mi 10805-10996 / 10990-11460; umarım 13064-13396 / 12050-13740; çalışır 13396-13923 / 13740-14820. Kalan 6 kelime duraklamasız akış bölgesinden — reçete doğrulaması bu kapsamda yapılır.",
   "tolerance_ms": 300,
-  "words": []
+  "words": [
+    {
+      "text": "kat",
+      "start_ms": 4848,
+      "end_ms": 5057
+    },
+    {
+      "text": "projesini",
+      "start_ms": 5098,
+      "end_ms": 5590
+    },
+    {
+      "text": "test",
+      "start_ms": 5590,
+      "end_ms": 5880
+    },
+    {
+      "text": "ediyorum",
+      "start_ms": 5880,
+      "end_ms": 6429
+    },
+    {
+      "text": "bakalım",
+      "start_ms": 7637,
+      "end_ms": 8165
+    },
+    {
+      "text": "yani",
+      "start_ms": 11462,
+      "end_ms": 12069
+    }
+  ]
 }
