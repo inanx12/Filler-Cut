@@ -21,6 +21,21 @@ pip install -e .            # CLI'nin kendisi
 pip install -e ".[cuda]"    # NVIDIA hızlandırması (faster-whisper için cuBLAS/cuDNN)
 pip install -e ".[dev]"     # geliştirme: pytest, ruff, mypy
 ```
+### Backend ve donanım tablosu
+
+| Donanım | `faster-whisper` (varsayılan) | `whispercpp` |
+|---|---|---|
+| NVIDIA GPU | ✅ CUDA (resmi wheel) | ✅ resmi cublas paketi |
+| CPU (herkes) | ✅ int8 | ✅ resmi bin-x64 paketi |
+| AMD GPU | ❌ CTranslate2 ROCm desteklemez | ⚠️ `GGML_HIP=ON` derlemesi (ROCm 7+) veya Vulkan build |
+| Intel GPU | ❌ | ⚠️ Vulkan build (SYCL Windows'ta deneysel) |
+
+Not: whisper.cpp'nin resmi Windows release'lerinde Vulkan/HIP paketi yoktur
+(upstream issue #3673). GPU hızlanması isteyen AMD/Intel kullanıcıları
+kaynaktan derler (ROCm 7+ veya Vulkan SDK + CMake); CPU paketi her yerde
+çalışır. Filler-Cut tarafında kod değişikliği gerekmez — binary yolu
+`whispercpp_binary` config anahtarından okunur.
+
 
 ## Kullanım
 

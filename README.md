@@ -23,6 +23,21 @@ pip install -e ".[cuda]"    # NVIDIA acceleration (cuBLAS/cuDNN for faster-whisp
 pip install -e ".[dev]"     # development: pytest, ruff, mypy
 ```
 
+### Backend & hardware support
+
+| Hardware | `faster-whisper` (default) | `whispercpp` |
+|---|---|---|
+| NVIDIA GPU | ✅ CUDA (official wheel) | ✅ official cublas package |
+| CPU (everyone) | ✅ int8 | ✅ official bin-x64 package |
+| AMD GPU | ❌ CTranslate2 has no ROCm support | ⚠️ `GGML_HIP=ON` build (ROCm 7+) or Vulkan build |
+| Intel GPU | ❌ | ⚠️ Vulkan build (SYCL is experimental on Windows) |
+
+Note: upstream whisper.cpp Windows releases ship no Vulkan/HIP binaries
+(see issue #3673). AMD/Intel users who want GPU acceleration build from
+source (ROCm 7+ or Vulkan SDK + CMake); the CPU package works everywhere.
+No code changes are needed on the Filler-Cut side — the binary path comes
+from the `whispercpp_binary` config key.
+
 ## Usage
 
 ```bash
