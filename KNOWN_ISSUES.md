@@ -23,6 +23,44 @@
 
 ### KI-1 backend karşılaştırması (faster-whisper vs whisper.cpp)
 
+v0.3 koşusu tamamlandı (RTX 4050, whisper-cli v1.9.1 CUDA binary,
+`test_konusma.wav`, 2026-07). **Tek kayıt — bulgular bu kayıtla sınırlıdır,
+genelleme yok.** Sayım kuralı: kelime-bazlı; "Filler-Cut"ın bozuk hali
+(`filir kat`) iki kelime hatası sayıldı.
+
+| Metrik | fw (turbo/float16) | wcpp (turbo/q5_0) | wcpp (large-v3/q5_0) |
+|---|---|---|---|
+| Uydurma kelime | **8** — hayalet `abone ol`×2 + `filir`, `kat`, `vışver`, `ılır` | **4** — `filir`, `kat`, `wishfur`, `ığılarımı` | **2** — `wishbur`, `ııılarımı` |
+| Timestamp anomalisi (&gt;3 sn) | 0 | 1 — `Bugün` 4060 ms | 1 — `Bugün` 4580 ms |
+| Proje adı ("Filler-Cut") | `filir kat` | `filir kat` | **`filler cut` — doğru** |
+
+**Bulgular:**
+
+- **fw hayalet segment uydurdu:** kayıtta geçmeyen `abone ol abone ol`
+  (4 kelime) başlangıca eklendi — tek kelime uydurmadan ağır kusur.
+  wcpp aynı bölgeyi boş bıraktı (dürüst davranış).
+- **Filler kaçağı çözülmedi:** `ııı` üç backend'de de uydurma kelimeye
+  çevrildi (`ılır` / `ığılarımı` / `ııılarımı`). Backend değişimi uydurma
+  tipini değiştirir, false negative'i çözmez — KI-1 ana kaydı geçerli.
+- **Uydurmada bu kayıtta sıralama:** wcpp large-v3 (2) &lt; wcpp turbo (4)
+  &lt; fw (8). wcpp non-turbo üstüne proje adını doğru yazdı.
+- **Şişme her iki wcpp koşusunda da `Bugün` kelimesinde:** kelime sonu
+  takip eden sessizliğe taşmış (KI-5 mekanizması; tüm kelime sınırları
+  uç uca). Kesim güvenliği DTW'ye değil cutplan'daki `FILLER_ANOMALI_MS`
+  (3000 ms) korumasına dayanır — bu koruma tam bu vaka için vardı.
+
+**DTW notu (güncellendi):** Önceki sürümdeki "turbo DTW'yi mimari olarak
+desteklemez" iddiası **yanlıştı** — whisper.cpp kaynağında `large.v3` ve
+`large.v3.turbo` preset'leri mevcut (cli.cpp). Ancak DTW **varsayılan
+kapalıdır**, `--dtw &lt;preset&gt;` gerekir. Deneysel koşu (v1.9.1 CUDA binary,
+q5_0, her iki preset): 30/30 token'da `t_dtw = -1`, segment `offsets`
+DTW'siz haliyle birebir aynı — bu kurulumda DTW zaman üretmiyor.
+GGML q5_0 aheads verisi / CUDA backend kısıtı olası sebep; derin
+araştırma yapılmadı (getiri düşük, KI-5 koruması yeterli).
+
+- **Referans:** `tests/test_wcpp.py::TestGercekModel` (`@pytest.mark.wcpp`);
+  elle doğrulanmış kelime sınırı referansı `tests/data/wcpp_reference_tr.json`.
+
 v0.3 whisper.cpp backend'i (`transcribe/wcpp_backend.py`) eklendi; ASR
 kaynaklı kaçak/anomalinin backend'e göre değişip değişmediği aynı kayıtta
 (`test_konusma.wav`) ölçülecektir.
