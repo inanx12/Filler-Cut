@@ -227,3 +227,8 @@ muadili beklenir. DTW hizası isteniyorsa **non-turbo `large-v3`** gerekir
 - **Referans:** `tests/test_encoder.py::TestBuildEncodeArgs` (değerleri
   sabitler, kalitesini doğrulamaz); NVENC ölçümü
   `TestGercekNvencProbe::test_uretilen_arglarla_gercek_encode_gecer`.
+
+- **Not (2026-07):** AMD donanımına (RX 9060 XT, ROCm 7) erişildiğinde
+  "AMD günü": aynı oturumda (a) bu kaydın AMF kalibrasyonu + (b) whisper.cpp
+  HIP derlemesi (ASR tarafı, KI-1 sonrası backlog). İkisi ayrı silikon —
+  AMF video motoru ≠ ROCm compute ünitesi; birbirini etkilemez.
