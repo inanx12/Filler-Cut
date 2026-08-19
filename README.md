@@ -29,14 +29,18 @@ pip install -e ".[dev]"     # development: pytest, ruff, mypy
 |---|---|---|
 | NVIDIA GPU | ✅ CUDA (official wheel) | ✅ official cublas package |
 | CPU (everyone) | ✅ int8 | ✅ official bin-x64 package |
-| AMD GPU | ❌ CTranslate2 has no ROCm support | ⚠️ `GGML_HIP=ON` build (ROCm 7+) or Vulkan build |
-| Intel GPU | ❌ | ⚠️ Vulkan build (SYCL is experimental on Windows) |
+| AMD GPU | ❌ CTranslate2 has no ROCm support | ✅ Filler-Cut Vulkan build (see below) or `GGML_HIP=ON` build (ROCm 7+) |
+| Intel GPU | ❌ | ✅ Filler-Cut Vulkan build (see below) |
 
 Note: upstream whisper.cpp Windows releases ship no Vulkan/HIP binaries
-(see issue #3673). AMD/Intel users who want GPU acceleration build from
-source (ROCm 7+ or Vulkan SDK + CMake); the CPU package works everywhere.
-No code changes are needed on the Filler-Cut side — the binary path comes
-from the `whispercpp_binary` config key.
+(see issue #3673). Filler-Cut fills that gap with its own workflow:
+`.github/workflows/vulkan-build.yml` (whisper.cpp v1.9.1, `-DGGML_VULKAN=ON`)
+— triggered manually from the Actions tab, producing the
+`fillercut-whisper-cli-vulkan-win-x64.zip` artifact (vendor-agnostic: one
+binary for NVIDIA/AMD/Intel). On an RTX 4050 it matched CUDA speed
+(see KNOWN_ISSUES.md KI-1); only the very first run pays a one-time ~10 s
+shader compilation. No code changes are needed on the Filler-Cut side —
+the binary path comes from the `whispercpp_binary` config key.
 
 ## Usage
 

@@ -27,14 +27,18 @@ pip install -e ".[dev]"     # geliştirme: pytest, ruff, mypy
 |---|---|---|
 | NVIDIA GPU | ✅ CUDA (resmi wheel) | ✅ resmi cublas paketi |
 | CPU (herkes) | ✅ int8 | ✅ resmi bin-x64 paketi |
-| AMD GPU | ❌ CTranslate2 ROCm desteklemez | ⚠️ `GGML_HIP=ON` derlemesi (ROCm 7+) veya Vulkan build |
-| Intel GPU | ❌ | ⚠️ Vulkan build (SYCL Windows'ta deneysel) |
+| AMD GPU | ❌ CTranslate2 ROCm desteklemez | ✅ Filler-Cut Vulkan build (aşağıya bak) veya `GGML_HIP=ON` derlemesi (ROCm 7+) |
+| Intel GPU | ❌ | ✅ Filler-Cut Vulkan build (aşağıya bak) |
 
 Not: whisper.cpp'nin resmi Windows release'lerinde Vulkan/HIP paketi yoktur
-(upstream issue #3673). GPU hızlanması isteyen AMD/Intel kullanıcıları
-kaynaktan derler (ROCm 7+ veya Vulkan SDK + CMake); CPU paketi her yerde
-çalışır. Filler-Cut tarafında kod değişikliği gerekmez — binary yolu
-`whispercpp_binary` config anahtarından okunur.
+(upstream issue #3673). Filler-Cut bu boşluğu kendi workflow'uyla doldurur:
+`.github/workflows/vulkan-build.yml` (whisper.cpp v1.9.1, `-DGGML_VULKAN=ON`)
+— Actions sekmesinden manuel tetiklenir, `fillercut-whisper-cli-vulkan-win-x64.zip`
+artifact'ı üretir (vendor-agnostic: NVIDIA/AMD/Intel tek binary). RTX 4050'de
+CUDA ile aynı hız ölçüldü (KNOWN_ISSUES.md KI-1); yalnızca ilk çalıştırmada
+~10 sn tek seferlik shader derlemesi vardır. Filler-Cut tarafında kod
+değişikliği gerekmez — binary yolu `whispercpp_binary` config anahtarından
+okunur.
 
 
 ## Kullanım
