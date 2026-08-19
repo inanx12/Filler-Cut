@@ -79,7 +79,11 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
   sınır varsa KI-N kimliğiyle oraya kaydedilir; testler ve kod yorumları bu
   kimliğe referans verir. Sessizce workaround yazılmaz.
 - **v0.3 scope dışına çıkma:** GUI, çoklu video / batch işleme, CI → v1+
-  kapsamıdır. v0.3 bitmeden v1'e geçilmez.
+  kapsamıdır. v0.3 bitmeden v1'e geçilmez. **İstisna:** release tooling'i
+  (`.github/workflows/vulkan-build.yml` — whisper-cli Vulkan binary derlemesi)
+  test CI'ı değildir; Python koduna ve test suitine dokunmaz, bu kuralın
+  kapsamı dışında sayılır.
+
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
 ## Mevcut Durum (2026-07-20)
