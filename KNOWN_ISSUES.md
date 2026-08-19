@@ -136,6 +136,52 @@ muadili beklenir. DTW hizası isteniyorsa **non-turbo `large-v3`** gerekir
   (`tests/data/wcpp_reference_tr.json`, template) kıyaslar; binary/model/kayıt
   yoksa skip.
 
+### KI-1 Vulkan koşusu (2026-08, RTX 4050 — Filler-Cut Vulkan build)
+
+whisper.cpp resmi release'lerinde Vulkan paketi olmadığından (upstream #3673)
+Filler-Cut'ın kendi workflow'uyla derlenen Vulkan binary
+(`.github/workflows/vulkan-build.yml`, whisper.cpp v1.9.1, `-DGGML_VULKAN=ON`),
+CUDA binary (resmi cublas-12.4 paketi, aynı tag) ile aynı kayıtta kıyaslandı:
+`test_konusma.wav`, `ggml-large-v3-turbo-q5_0.bin`, `-l tr -ml 1 -sow -ojf`,
+3'er koşu. **Tek makine — bulgular bu kayıtla sınırlıdır, genelleme yok.**
+
+**Hız (ılık koşular, 2.-3. koşu ortalaması):**
+
+| Metrik | Vulkan | CUDA |
+|---|---|---|
+| total | ~1221 ms | ~1222 ms |
+| encode | ~191 ms | ~194 ms |
+| load | ~720 ms | ~721 ms |
+
+- **Ilık koşuda fark yok:** Vulkan backend'i `NV_coopmat2` uzantısıyla aynı
+  tensor core'ları kullanıyor; fark ölçüm gürültüsü seviyesinde (~3 ms).
+- **İlk koşu cezası (Vulkan):** ilk çalıştırmada shader derlemesi encode'u
+  ~11.2 sn'ye çıkarıyor (11252 ms). Cache diske yazılıyor — reboot sonrası ilk
+  koşuda encode ~200 ms'de kaldı, yani ceza **cihaz başına tek seferlik**.
+  CUDA'da ilk-koşu cezası yalnızca ~115 ms.
+- **Reboot sonrası tek ek süre OS dosya cache'i:** model dosyası soğukken
+  `load` 720 → 1240 ms; ikinci koşuda 646 ms'e düştü. Backend'den bağımsız.
+- **Kısa kayıtta load baskın:** ~15 sn'lik kayıtta total'in ~%60'ı model
+  yükleme — kara-kutu subprocess mimarisinin sabit maliyeti (her video için
+  bir kez ödenir).
+
+**Transkript (uydurma kimliği compute backend'ine göre değişiyor):**
+
+| | CUDA (2026-07 ve 2026-08) | Vulkan (2026-08) |
+|---|---|---|
+| Uydurma kelime | `filir`, `kat`, `wishfur`, `ığılarımı` (4) | `filir`, `kağıt`, `Vişvır`, `ığılarımı` (4) |
+
+- CUDA çıktısı iki ay arayla **kelimesi kelimesine aynı** — deterministic;
+  regresyon referansı olarak kullanılabilir.
+- Vulkan aynı sayıda ama **farklı** uydurma üretti (`kat`→`kağıt`,
+  `wishfur`→`Vişvır`): kayan nokta toplama sırası farkı uydurmanın kimliğini
+  değiştiriyor, sayısını değil. False negative iki backend'de de aynı (4
+  kaçak) — KI-1 ana kaydı güçlendi: uydurma model seviyesinde bir kusur.
+- `Bugün` timestamp şişmesi (4060 ms) iki backend'de de birebir aynı —
+  KI-5 anomalisi compute yolundan bağımsız, modele ait.
+- Uçtan uca doğrulama: `backend = "whispercpp"` + Vulkan binary ile
+  `fillercut` akışı sorunsuz tamamlandı (kesimler + reason zincirleri).
+
 ## KI-2 — Aggressive mod gerçek kelimeyi kesebilir (false positive)
 
 - **Belirti:** `aggressive=True` iken "bir şey söyleyeceğim" gibi gerçek
