@@ -22,3 +22,6 @@ deneme.mkv
 dtw_lv3.json
 dtw_turbo.json
 kiyas_ki1.py
+
+# Kişisel config (yerel binary/model yolları) — repo'ya girmez
+filler-cut.toml
