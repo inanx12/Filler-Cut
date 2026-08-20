@@ -33,10 +33,11 @@ pip install -e ".[dev]"     # geliştirme: pytest, ruff, mypy
 Not: whisper.cpp'nin resmi Windows release'lerinde Vulkan/HIP paketi yoktur
 (upstream issue #3673). Filler-Cut bu boşluğu kendi workflow'uyla doldurur:
 `.github/workflows/vulkan-build.yml` (whisper.cpp v1.9.1, `-DGGML_VULKAN=ON`)
-— Actions sekmesinden manuel tetiklenir, `fillercut-whisper-cli-vulkan-win-x64.zip`
-artifact'ı üretir (vendor-agnostic: NVIDIA/AMD/Intel tek binary). RTX 4050'de
-CUDA ile aynı hız ölçüldü (KNOWN_ISSUES.md KI-1); yalnızca ilk çalıştırmada
-~10 sn tek seferlik shader derlemesi vardır. Filler-Cut tarafında kod
+— `v*` tag push'unda build koşar ve zip Releases sayfasına düşer (kalıcı,
+anonim indirilebilir); Actions sekmesinden manuel de tetiklenebilir (yalnız
+artifact üretir). Paket vendor-agnostic'tir: NVIDIA/AMD/Intel tek binary.
+RTX 4050'de CUDA ile aynı hız ölçüldü (KNOWN_ISSUES.md KI-1); yalnızca ilk
+çalıştırmada ~10 sn tek seferlik shader derlemesi vardır. Filler-Cut tarafında kod
 değişikliği gerekmez — binary yolu `whispercpp_binary` config anahtarından
 okunur.
 
