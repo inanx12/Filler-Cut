@@ -15,9 +15,20 @@ on:
         description: "whisper.cpp tag/ref (sabit: v1.9.1; bilinçli değiştirilmedikçe dokunma)"
         required: true
         default: "v1.9.1"
+  push:
+    tags:
+      - "v*"   # v0.3.0 gibi tag push'u → build + Releases sayfasına asset
+
+# permissions: tag tetiklemesinde GITHUB_TOKEN ile release açıp asset yüklemek için
+# (gh release create). Manuel dispatch'te release adımı koşmaz, izin zararsız.
+permissions:
+  contents: write
 
 env:
   PACKAGE_NAME: fillercut-whisper-cli-vulkan-win-x64
+  # Tag koşusunda github.ref_name = tag adı; dispatch'te whispercpp_ref input'u.
+  TAG_NAME: ${{ github.ref_name }}
+  WHISPERCPP_REF: ${{ inputs.whispercpp_ref || 'v1.9.1' }}
 
 jobs:
   build:
@@ -27,7 +38,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ggml-org/whisper.cpp
-          ref: ${{ inputs.whispercpp_ref }}
+          ref: ${{ env.WHISPERCPP_REF }}
           path: whisper.cpp
 
       - name: Vulkan SDK kur (LunarG)
@@ -97,6 +108,36 @@ jobs:
           name: ${{ env.PACKAGE_NAME }}
           path: ${{ env.PACKAGE_NAME }}.zip
           retention-days: 30
-          # Release asset entegrasyonu bilinçli YOK — ikinci adım, ayrıca
-          # konuşulacak. Artifact manuel indirilip kullanıcı donanımında
-          # (RTX 4050) doğrulanacak.
+          # Artifact her koşuda üretilir (manuel doğrulama için) ama 30 günde
+          # silinir + indirmek GitHub hesabı ister — kalıcı dağıtım aşağıdaki
+          # release adımıdır.
+
+      - name: Release asset yükle (yalnız tag push'u)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # gh CLI runner'da yüklü gelir; üçüncü parti action yok.
+          # --repo şart: whisper.cpp alt dizine checkout edildiği için cwd'de
+          # Filler-Cut remote'u yok, gh hedef repo'yu buradan öğrenir.
+          # Tag push'unda release henüz yok → create hem açar hem asset yükler.
+          # --verify-tag: tag'in gerçekten repo'da olduğunu doğrular.
+          $notes = @"
+          whisper.cpp $($env:WHISPERCPP_REF) kaynak derlemesi, Windows x64, Vulkan backend.
+          Vendor-agnostic: tek binary ile NVIDIA / AMD / Intel GPU.
+
+          Kullanım:
+          1. Zip'i indir, bir klasöre aç (whisper-cli.exe + ggml DLL'leri + LICENSE)
+          2. Modeli HF'den indir: ggerganov/whisper.cpp -> ggml-large-v3-turbo-q5_0.bin
+          3. filler-cut.toml: [asr] backend = "whispercpp",
+             whispercpp_binary ve whispercpp_model yollarını yaz
+
+          Not: ilk çalıştırmada ~10 sn tek seferlik shader derlemesi vardır
+          (cache diske yazılır, sonraki koşular etkilenmez). Ölçümler:
+          KNOWN_ISSUES.md KI-1 Vulkan koşusu.
+          "@
+          gh release create $env:TAG_NAME "$env:PACKAGE_NAME.zip" `
+            --repo ${{ github.repository }} `
+            --title "whisper-cli Vulkan (Windows x64) — $env:TAG_NAME" `
+            --notes $notes --verify-tag
