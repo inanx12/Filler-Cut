@@ -137,7 +137,14 @@ jobs:
           (cache diske yazılır, sonraki koşular etkilenmez). Ölçümler:
           KNOWN_ISSUES.md KI-1 Vulkan koşusu.
           "@
-          gh release create $env:TAG_NAME "$env:PACKAGE_NAME.zip" `
-            --repo ${{ github.repository }} `
-            --title "whisper-cli Vulkan (Windows x64) — $env:TAG_NAME" `
-            --notes $notes --verify-tag
+          # Release zaten varsa create patlar ("already exists") — idempotent
+          # ol: varsa asset'i --clobber ile güncelle, yoksa oluştur.
+          if (gh release view $env:TAG_NAME --repo ${{ github.repository }} 2>$null) {
+            gh release upload $env:TAG_NAME "$env:PACKAGE_NAME.zip" `
+              --repo ${{ github.repository }} --clobber
+          } else {
+            gh release create $env:TAG_NAME "$env:PACKAGE_NAME.zip" `
+              --repo ${{ github.repository }} `
+              --title "whisper-cli Vulkan (Windows x64) — $env:TAG_NAME" `
+              --notes $notes --verify-tag
+          }
