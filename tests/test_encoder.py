@@ -60,6 +60,28 @@ def _fake_run(calisan: set[str]) -> Callable[..., subprocess.CompletedProcess[st
     return _run
 
 
+def _fake_run_bozuk_byte(
+    ham_stderr: bytes, *, rc: int = 1
+) -> Callable[..., subprocess.CompletedProcess[str]]:
+    """stderr'i çözülemeyen byte'larla dönen sahte ffmpeg probe çalışması.
+
+    Gerçek `subprocess.run`, `text=True` ile ham byte'ları metne çevirirken
+    `errors` kwarg'ını kullanır: `errors` verilmezse decode **strict**'tir ve
+    hata, `subprocess.run` ÇAĞRISININ KENDİSİNDE `UnicodeDecodeError` olarak
+    patlar. `probe_encoder` yalnız `TimeoutExpired` ve `OSError` yakalar —
+    `UnicodeDecodeError` (ValueError) sızar ve "asla exception fırlatmaz"
+    sözleşmesi kırılır. Sahte run bu decode sözleşmesini birebir uygular.
+    """
+
+    def _run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        errors = str(kwargs.get("errors") or "strict")
+        return subprocess.CompletedProcess(
+            cmd, rc, stdout="", stderr=ham_stderr.decode("utf-8", errors=errors)
+        )
+
+    return _run
+
+
 class TestEncoderMap:
     def test_kisa_isimler_ffmpeg_adlarina_eslenir(self) -> None:
         assert ENCODER_MAP == {
@@ -108,6 +130,35 @@ class TestProbeEncoder:
         assert deneme.ffmpeg_name == "h264_amf"
         # ffmpeg hatayı sarmalar: ilk satır kök nedendir
         assert deneme.error == "[AMF @ 000001] DLL amfrt64.dll failed to open"
+
+    def test_decode_sozlesmesi_errors_replace(self) -> None:
+        """Sözleşme kilidi: `text=True` tek başına YETMEZ, `errors` da şart.
+
+        `errors` olmadan ffmpeg'in locale'de çözülemeyen sürücü hata mesajları
+        strict decode'a takılır. `encoding` BİLİNÇLİ olarak verilmez: ffmpeg
+        log'u locale encoding'indedir (ffprobe JSON'unun aksine — bkz.
+        `audio/probe.py`).
+        """
+        with patch("subprocess.run", side_effect=_fake_run({"h264_nvenc"})) as run:
+            probe_encoder("nvenc")
+        assert run.call_args.kwargs["text"] is True
+        assert run.call_args.kwargs["errors"] == "replace"
+        assert "encoding" not in run.call_args.kwargs
+
+    def test_cozulemeyen_byte_probe_attempt_olur_exception_degil(self) -> None:
+        """Çözülemeyen byte'lı stderr `ProbeAttempt`'e dönmeli, exception'a değil.
+
+        `probe_encoder` "asla exception fırlatmaz, başarısızlık veridir"
+        sözleşmesini taşır; `UnicodeDecodeError` bir `ValueError`'dır ve
+        `TimeoutExpired`/`OSError` yakalayıcılarından sızarak `select_encoder`
+        zincirini komple patlatırdı.
+        """
+        ham = b"[AMF @ 000001] DLL amfrt64.dll failed to open \xff\xfe s\xc4r\xc3cu"
+        with patch("subprocess.run", side_effect=_fake_run_bozuk_byte(ham)):
+            deneme = probe_encoder("amf")
+        assert deneme.ok is False
+        assert "amfrt64.dll failed to open" in deneme.error  # okunabilir kısım korundu
+        assert chr(0xFFFD) in deneme.error  # bozuk byte'lar replacement char'a döndü
 
     def test_uzun_hata_kirpilir(self) -> None:
         uzun = subprocess.CompletedProcess([], 1, stdout="", stderr="x" * 500)

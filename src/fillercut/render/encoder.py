@@ -188,6 +188,14 @@ def probe_encoder(name: str, *, timeout: float = PROBE_TIMEOUT) -> ProbeAttempt:
             build_probe_command(ffmpeg_name),
             capture_output=True,
             text=True,
+            # `errors` olmadan decode STRICT'tir ve hata subprocess.run
+            # ÇAĞRISININ KENDİSİNDE UnicodeDecodeError olarak patlar. O bir
+            # ValueError'dır: aşağıdaki TimeoutExpired/OSError yakalayıcılardan
+            # sızar ve "asla exception fırlatmaz, başarısızlık veridir"
+            # sözleşmesini kırıp select_encoder zincirini komple düşürür.
+            # Sürücü hata mesajları locale encoding'inde çözülemeyen byte
+            # içerebilir; locale encoding'i korunur (ffmpeg log'u UTF-8 değil).
+            errors="replace",
             timeout=timeout,
             check=False,
         )
