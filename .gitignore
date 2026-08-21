@@ -13,6 +13,7 @@ build/
 rapor.json
 # Kişisel not dosyaları
 Venv komutu.txt
+Venv komutu ve test komutları.txt
 deneme.mkv
 *_transkript.json
 *_temiz.json
