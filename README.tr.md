@@ -41,6 +41,36 @@ RTX 4050'de CUDA ile aynı hız ölçüldü (KNOWN_ISSUES.md KI-1); yalnızca il
 değişikliği gerekmez — binary yolu `whispercpp_binary` config anahtarından
 okunur.
 
+### Vulkan paketi kurulumu (releases/v0.3.0+)
+
+GPU hızlandırması isteyen AMD/Intel kullanıcıları (veya CUDA kurmak
+istemeyen NVIDIA kullanıcıları) için hazır paket
+[Releases](https://github.com/inanx12/Filler-Cut/releases) sayfasında:
+
+1. `fillercut-whisper-cli-vulkan-win-x64.zip`'i indir, bir klasöre aç
+   (örn. `C:\tools\fillercut-whisper\`).
+2. Modeli indir: [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)
+   → `ggml-large-v3-turbo-q5_0.bin` (~1,6 GB).
+3. Filler-Cut'ı çalıştırdığın klasörde **`filler-cut.toml` dosyasını kendin
+   oluştur** (repo'yla gelmez; yollar makineye özeldir, `.gitignore`'dadır):
+
+   ```toml
+   config_version = 1
+
+   [asr]
+   backend = "whispercpp"
+   whispercpp_binary = 'C:\tools\fillercut-whisper\whisper-cli.exe'
+   whispercpp_model = 'C:\modeller\ggml-large-v3-turbo-q5_0.bin'
+   ```
+
+4. `fillercut video.mp4` — hepsi bu.
+
+İlk çalıştırmada ~10 sn tek seferlik shader derlemesi olur (diske
+cache'lenir). GPU'nun devrede olduğunun kanıtı çıktıdaki
+`ggml_vulkan: Found 1 Vulkan devices` satırıdır. CUDA Toolkit / Vulkan SDK
+kurmak gerekmez; güncel GPU sürücüsü yeterli.
+
+
 
 ## Kullanım
 

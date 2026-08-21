@@ -43,6 +43,37 @@ NVIDIA/AMD/Intel. On an RTX 4050 it matched CUDA speed (see KNOWN_ISSUES.md
 KI-1); only the very first run pays a one-time ~10 s shader compilation. No code changes are needed on the Filler-Cut side —
 the binary path comes from the `whispercpp_binary` config key.
 
+### Vulkan package setup (releases/v0.3.0+)
+
+For AMD/Intel users who want GPU acceleration (or NVIDIA users who don't
+want a CUDA install), a ready-made package is on the
+[Releases](https://github.com/inanx12/Filler-Cut/releases) page:
+
+1. Download `fillercut-whisper-cli-vulkan-win-x64.zip`, extract it
+   (e.g. `C:\tools\fillercut-whisper\`).
+2. Download the model: [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)
+   → `ggml-large-v3-turbo-q5_0.bin` (~1.6 GB).
+3. **Create `filler-cut.toml` yourself** in the folder where you run
+   Filler-Cut (not shipped with the repo; paths are machine-specific,
+   gitignored):
+
+   ```toml
+   config_version = 1
+
+   [asr]
+   backend = "whispercpp"
+   whispercpp_binary = 'C:\tools\fillercut-whisper\whisper-cli.exe'
+   whispercpp_model = 'C:\modeller\ggml-large-v3-turbo-q5_0.bin'
+   ```
+
+4. `fillercut video.mp4` — that's it.
+
+The first run pays a one-time ~10 s shader compilation (cached to disk).
+Proof the GPU is active is the `ggml_vulkan: Found 1 Vulkan devices` line
+in the output. No CUDA Toolkit / Vulkan SDK needed; an up-to-date GPU
+driver is enough.
+
+
 ## Usage
 
 ```bash
