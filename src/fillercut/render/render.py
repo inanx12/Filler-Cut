@@ -132,6 +132,14 @@ def _run_ffmpeg(cmd: list[str], *, adim: str, timeout: float) -> None:
             cmd,
             capture_output=True,
             text=True,
+            # `errors` olmadan decode STRICT'tir ve hata subprocess.run
+            # ÇAĞRISININ KENDİSİNDE UnicodeDecodeError olarak patlar; aşağıdaki
+            # RenderError sarması hiç devreye giremez ve kullanıcı "hangi
+            # segment patladı" bilgisi yerine ham istisnayı görür. ffmpeg
+            # banner'ı locale encoding'inde (Windows-TR: cp1254) çözülemeyen
+            # byte içerebilir — Türkçe dosya adları, kaynak metadata'sı. Locale
+            # encoding'i korunur: ffmpeg log'u UTF-8 değildir.
+            errors="replace",
             timeout=timeout,
             check=False,
         )

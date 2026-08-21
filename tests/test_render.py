@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
@@ -31,6 +32,28 @@ from fillercut.render.render import (
 from tests.make_fixture import make_color_sine_video
 
 GIRDI = Path("girdi.mp4")
+
+
+def _fake_run_bozuk_byte(
+    ham_stderr: bytes, *, rc: int = 1
+) -> Callable[..., subprocess.CompletedProcess[str]]:
+    """stderr'i çözülemeyen byte'larla dönen sahte ffmpeg çalışması.
+
+    Gerçek `subprocess.run`, `text=True` ile ham byte'ları metne çevirirken
+    `errors` kwarg'ını kullanır: `errors` verilmezse decode **strict**'tir ve
+    hata, `subprocess.run` ÇAĞRISININ KENDİSİNDE `UnicodeDecodeError` olarak
+    patlar — yani `_run_ffmpeg`'in `RenderError` sarması hiç devreye giremez
+    ve TemporaryDirectory'den çıkan istisna kullanıcıya ham sızar. Sahte run
+    bu sözleşmeyi birebir uygular (kwargs'tan okur).
+    """
+
+    def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        errors = str(kwargs.get("errors") or "strict")
+        return subprocess.CompletedProcess(
+            cmd, rc, stdout="", stderr=ham_stderr.decode("utf-8", errors=errors)
+        )
+
+    return _run
 
 #: Encode arg'ları artık render'ın modül sabiti değil, encoder.py + config
 #: ürünüdür (v0.2). Testler yazılım yolunu kullanır: donanımdan bağımsız.
@@ -235,6 +258,47 @@ class TestRenderMock:
                 tmp_path / "cikti.mp4",
                 encode_args=ENCODE_ARGS,
             )
+
+    def test_decode_sozlesmesi_errors_replace(self, girdi: Path, tmp_path: Path) -> None:
+        """Sözleşme kilidi: `text=True` tek başına YETMEZ, `errors` da şart.
+
+        `errors` olmadan ffmpeg'in locale'de çözülemeyen banner/stderr byte'ları
+        strict decode'a takılır. `encoding` BİLİNÇLİ olarak verilmez: ffmpeg
+        log'u locale encoding'indedir (ffprobe JSON'unun aksine — bkz.
+        `audio/probe.py`).
+        """
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffmpeg"),
+            patch("subprocess.run", side_effect=self._ok) as run,
+        ):
+            render(girdi, _plan([(0, 1_000)], 1_000), tmp_path / "cikti.mp4",
+                   encode_args=ENCODE_ARGS)
+        for cagri in run.call_args_list:  # hem segment hem concat çağrısı
+            assert cagri.kwargs["text"] is True
+            assert cagri.kwargs["errors"] == "replace"
+            assert "encoding" not in cagri.kwargs
+
+    def test_cozulemeyen_byte_unicode_hatasi_degil_render_error(
+        self, girdi: Path, tmp_path: Path
+    ) -> None:
+        """Çözülemeyen byte içeren stderr ham `UnicodeDecodeError` fırlatmamalı.
+
+        0xFF 0xFE ve 0xC4 0x74 geçerli dizi DEĞİLDİR; strict decode'da
+        `subprocess.run` patlardı ve kullanıcı `RenderError` yerine ham
+        istisnayı görürdü.
+        """
+        ham = b"x264 [error]: patladi \xff\xfe C:\\Kay\xc4t\\video.mp4"
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffmpeg"),
+            patch("subprocess.run", side_effect=_fake_run_bozuk_byte(ham)),
+            # UnicodeDecodeError (ValueError) buraya takılmaz → sızarsa test kırılır
+            pytest.raises(RenderError) as exc,
+        ):
+            render(girdi, _plan([(0, 1_000)], 1_000), tmp_path / "cikti.mp4",
+                   encode_args=ENCODE_ARGS)
+        mesaj = str(exc.value)
+        assert "x264 [error]: patladi" in mesaj  # okunabilir kısım korundu
+        assert chr(0xFFFD) in mesaj  # bozuk byte'lar replacement char'a döndü
 
     def test_segment_cikti_uretmezse_render_error(self, girdi: Path, tmp_path: Path) -> None:
         with (
