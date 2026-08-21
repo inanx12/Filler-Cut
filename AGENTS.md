@@ -138,7 +138,7 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | interaktif HTML/JS (checkbox + timeline toggle) + `--interactive` wiring | `d9a7c1b` |
 | `transcribe/wcpp_backend.py` (whisper.cpp / whisper-cli subprocess — Vulkan AMD/Intel GPU; saf `build_command` `-ml 1 -sow -ojf` + saf JSON parser, offsets ZATEN ms-int) + `[asr].backend`/`whispercpp_*` config + `pipeline._make_transcriber` (tembel import) + KI-1 backend karşılaştırması | `14bd1c3` |
 
-**Test sayısı:** 397 (`python -m pytest` → 395 passed, 2 skipped). Bunun 390'ı
+**Test sayısı:** 399 (`python -m pytest` → 397 passed, 2 skipped). Bunun 392'si
 marker'sız; 5'i `ffmpeg`, 2'si `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — CI `-m "not ffmpeg and not wcpp"` ile atlar, donanım/model
 yoksa ilgili testler kendi kendine skip eder.

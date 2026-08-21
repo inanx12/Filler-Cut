@@ -193,6 +193,24 @@ def _fake_run_json(payload: dict[str, Any], *, rc: int = 0, stderr: str = "") ->
     return _run
 
 
+def _fake_run_bozuk_byte(ham_stderr: bytes, *, rc: int = 1) -> Callable[..., Any]:
+    """stderr'i UTF-8 DIŞI byte'larla dönen sahte whisper-cli çalışması.
+
+    Gerçek ``subprocess.run``, ``text=True`` ile ham byte'ları metne çevirirken
+    ``errors`` kwarg'ını kullanır: ``errors`` verilmezse decode **strict**'tir ve
+    hata, ``subprocess.run`` ÇAĞRISININ KENDİSİNDE ``UnicodeDecodeError`` olarak
+    patlar — yani ``transcribe()``'ın ``WhisperCppError`` sarması hiç devreye
+    giremez. Sahte run bu sözleşmeyi birebir uygular (kwargs'tan okur), böylece
+    test gerçek decode davranışını kilitler.
+    """
+
+    def _run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        stderr = ham_stderr.decode("utf-8", errors=kwargs.get("errors") or "strict")
+        return subprocess.CompletedProcess(cmd, rc, stdout="", stderr=stderr)
+
+    return _run
+
+
 class TestWhisperCppTranscriber:
     @pytest.fixture()
     def ortam(self, tmp_path: Path) -> tuple[Path, Path]:
@@ -264,6 +282,44 @@ class TestWhisperCppTranscriber:
             pytest.raises(WhisperCppError, match="failed to load model"),
         ):
             WhisperCppTranscriber(model).transcribe(wav)
+
+    def test_decode_hatasi_yutulur_errors_replace(self, ortam: tuple[Path, Path]) -> None:
+        """Sözleşme kilidi: ``text=True`` tek başına YETMEZ, ``errors`` da şart.
+
+        ``errors`` olmadan whisper-cli'nin UTF-8 dışı stdout/stderr'i strict
+        decode'a takılır (Windows konsol kod sayfası, dosya adlarındaki ham
+        byte'lar). Bu assert, bayrağın sessizce düşmesini engeller.
+        """
+        model, wav = ortam
+        with (
+            patch("shutil.which", return_value="/usr/bin/whisper-cli"),
+            patch("subprocess.run", side_effect=_fake_run_json({"transcription": []})) as run,
+        ):
+            WhisperCppTranscriber(model).transcribe(wav)
+        assert run.call_args.kwargs["text"] is True
+        assert run.call_args.kwargs["errors"] == "replace"
+
+    def test_non_utf8_stderr_unicode_hatasi_degil_wcpp_error(
+        self, ortam: tuple[Path, Path]
+    ) -> None:
+        """UTF-8 dışı byte içeren stderr ham ``UnicodeDecodeError`` fırlatmamalı.
+
+        0xFF 0xFE ve 0xC4 0x74 geçerli UTF-8 dizisi DEĞİLDİR; strict decode'da
+        ``subprocess.run`` patlardı. ``errors="replace"`` ile bozuk byte'lar
+        U+FFFD'ye döner ve kullanıcı temiz ``WhisperCppError``'ı görür.
+        """
+        model, wav = ortam
+        ham = b"error: failed to load model \xff\xfe C:\\Kay\xc4t\\ggml.bin"
+        with (
+            patch("shutil.which", return_value="/usr/bin/whisper-cli"),
+            patch("subprocess.run", side_effect=_fake_run_bozuk_byte(ham)),
+            # UnicodeDecodeError (ValueError) buraya takılmaz → sızarsa test kırılır
+            pytest.raises(WhisperCppError) as exc,
+        ):
+            WhisperCppTranscriber(model).transcribe(wav)
+        mesaj = str(exc.value)
+        assert "failed to load model" in mesaj  # okunabilir kısım korundu
+        assert chr(0xFFFD) in mesaj  # bozuk byte'lar replacement char'a döndü
 
     def test_zaman_asimi_wcpp_error(self, ortam: tuple[Path, Path]) -> None:
         model, wav = ortam

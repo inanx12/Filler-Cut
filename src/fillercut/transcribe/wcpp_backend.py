@@ -208,6 +208,12 @@ class WhisperCppTranscriber(Transcriber):
                     cmd,
                     capture_output=True,
                     text=True,
+                    # whisper-cli stdout/stderr'i her zaman temiz UTF-8 DEĞİLDİR
+                    # (Windows'ta konsol kod sayfası, model/dosya adlarındaki ham
+                    # byte'lar). errors olmadan decode hatası subprocess.run
+                    # çağrısının KENDİSİNDE UnicodeDecodeError fırlatır ve
+                    # aşağıdaki WhisperCppError sarması hiç devreye giremez.
+                    errors="replace",
                     timeout=self.timeout,
                     check=False,
                 )
