@@ -6,11 +6,14 @@ ffmpeg'e hiç ulaşılmaz) ya da `fillercut.cli.run` mock'u kullanılır.
 
 from __future__ import annotations
 
+import importlib.metadata
+import tomllib
 from pathlib import Path
 from unittest.mock import patch
 
 from typer.testing import CliRunner, Result
 
+import fillercut
 from fillercut.cli import app
 from fillercut.config import Config
 from fillercut.models import CutPlan, Segment
@@ -35,8 +38,65 @@ def _birlesik_cikti(result: Result) -> str:
 def test_help_opsiyonlari_listeler() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for opsiyon in ("--aggressive", "--yes", "--output", "--config", "--interactive"):
+    for opsiyon in (
+        "--aggressive",
+        "--yes",
+        "--output",
+        "--config",
+        "--interactive",
+        "--version",
+    ):
         assert opsiyon in result.output
+
+
+class TestVersion:
+    """`--version` + tek kaynaklı sürüm okuması (v0.3.2).
+
+    v0.3.1'de sürüm İKİ yerde yazılıydı ve `__init__` bayat `0.1.0`'da kalmıştı.
+    Bu testler o bug sınıfını kapatır: sürümün tek kaynağı `pyproject.toml`,
+    runtime'da kurulu dağıtımın metadata'sı okunur.
+    """
+
+    def test_dist_adi_pyproject_ile_ayni(self) -> None:
+        """`DIST_NAME` elle yazılmış tek dize — pyproject'teki adla eşleşmeli.
+
+        Eşleşmezse `importlib.metadata.version` `PackageNotFoundError` verir ve
+        sürüm sessizce `0.0.0+notinstalled` fallback'ine düşerdi.
+        """
+        pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        with pyproject.open("rb") as fh:
+            veri = tomllib.load(fh)
+        assert fillercut.DIST_NAME == veri["project"]["name"]
+
+    def test_version_metadatadan_okunur_sabit_degil(self) -> None:
+        """`__version__` kurulu dağıtımın metadata'sıyla BİREBİR aynı olmalı.
+
+        Sabit bir dize geri gelirse (ikinci doğruluk kaynağı) bu assert kırılır.
+        """
+        assert fillercut.__version__ == importlib.metadata.version(fillercut.DIST_NAME)
+
+    def test_version_bayragi_metadata_ile_tutarli(self) -> None:
+        result = runner.invoke(app, ["--version"])
+        assert result.exit_code == 0
+        beklenen = importlib.metadata.version(fillercut.DIST_NAME)
+        assert result.output.strip() == f"fillercut, version {beklenen}"
+
+    def test_version_video_argumani_olmadan_calisir(self) -> None:
+        """Eager kilidi: `VIDEO` zorunlu argümandır.
+
+        Bayrak eager DEĞİLSE click önce "eksik argüman" hatası verir (kod 2) ve
+        sürüm hiç basılmaz.
+        """
+        result = runner.invoke(app, ["--version"])
+        assert result.exit_code == 0
+        assert "Missing argument" not in _birlesik_cikti(result)
+
+    def test_version_pipeline_calistirmaz(self) -> None:
+        """Sürüm basıp ÇIKAR — hiçbir video işlenmez."""
+        with patch("fillercut.cli.run") as m:
+            result = runner.invoke(app, ["video.mp4", "--version"])
+        assert result.exit_code == 0
+        m.assert_not_called()
 
 
 def test_olmayan_dosya_temiz_hata() -> None:

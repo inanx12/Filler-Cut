@@ -5,6 +5,10 @@ iş mantığı `pipeline.py`'dadır, burası yalnızca argüman ayrıştırır.
 
 v0.2: ``--config PATH`` ile TOML yapılandırma desteği. Öncelik zinciri:
 CLI arg > config dosyası > default (bkz. ``config.py``).
+
+v0.3.2: ``--version`` (eager) — sürüm `fillercut.__version__`'dan, yani kurulu
+dağıtımın metadata'sından gelir. Burada sabit sürüm dizesi YOKTUR; tek
+doğruluk kaynağı `pyproject.toml`'dır (bkz. ``fillercut/__init__.py``).
 """
 
 from pathlib import Path
@@ -12,6 +16,7 @@ from typing import Annotated
 
 import typer
 
+from fillercut import DIST_NAME, __version__
 from fillercut.config import ConfigError, load_config, merge_config
 from fillercut.pipeline import run
 
@@ -21,6 +26,17 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+
+def _version_callback(value: bool) -> None:
+    """`--version` eager callback'i: sürümü basıp 0 ile çıkar.
+
+    Eager olması şart: `VIDEO` argümanı zorunludur, eager olmayan bir bayrak
+    "eksik argüman" hatasına takılır ve sürüm hiç basılmaz.
+    """
+    if value:
+        typer.echo(f"{DIST_NAME}, version {__version__}")
+        raise typer.Exit()
 
 
 @app.command()
@@ -60,6 +76,15 @@ def main(
         typer.Option(
             "--interactive",
             help="Kesimleri tarayıcıda tek tek onayla (lokal sunucu, v0.3).",
+        ),
+    ] = False,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Sürümü basıp çık.",
         ),
     ] = False,
 ) -> None:
