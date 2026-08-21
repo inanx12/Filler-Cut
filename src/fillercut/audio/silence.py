@@ -134,6 +134,14 @@ def detect_silence(
             build_command(src),
             capture_output=True,
             text=True,
+            # `errors` olmadan decode STRICT'tir ve hata subprocess.run
+            # ÇAĞRISININ KENDİSİNDE UnicodeDecodeError olarak patlar; aşağıdaki
+            # SilenceDetectionError sarması hiç devreye giremez. Parse ettiğimiz
+            # `silence_start:`/`silence_end:` satırları saf ASCII'dir — Türkçe
+            # dosya adı yalnızca ATLANAN header satırlarında geçer, dolayısıyla
+            # U+FFFD'ye dönen byte'lar sonuçları etkilemez. Locale encoding'i
+            # korunur: ffmpeg log'u UTF-8 değil, locale encoding'indedir.
+            errors="replace",
             timeout=timeout,
             check=False,
         )

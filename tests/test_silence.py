@@ -7,6 +7,7 @@ dahil): sonuç satırları stderr'dedir, stdout BOŞTUR.
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
@@ -94,6 +95,27 @@ class TestParseSilence:
         assert parse_silence("") == []
 
 
+def _fake_run_bozuk_byte(
+    ham_stderr: bytes, *, rc: int = 0
+) -> Callable[..., subprocess.CompletedProcess[str]]:
+    """stderr'i çözülemeyen byte'larla dönen sahte ffmpeg çalışması.
+
+    Gerçek `subprocess.run`, `text=True` ile ham byte'ları metne çevirirken
+    `errors` kwarg'ını kullanır: `errors` verilmezse decode **strict**'tir ve
+    hata, `subprocess.run` ÇAĞRISININ KENDİSİNDE `UnicodeDecodeError` olarak
+    patlar — yani `detect_silence` stderr'i parse etmeye hiç sıra gelmez.
+    Sahte run bu sözleşmeyi birebir uygular (kwargs'tan okur).
+    """
+
+    def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        errors = str(kwargs.get("errors") or "strict")
+        return subprocess.CompletedProcess(
+            cmd, rc, stdout="", stderr=ham_stderr.decode("utf-8", errors=errors)
+        )
+
+    return _run
+
+
 class TestDetectSilenceWrapper:
     def test_komut_satiri_dogru(self, tmp_path: Path) -> None:
         wav = tmp_path / "ornek.wav"
@@ -116,6 +138,65 @@ class TestDetectSilenceWrapper:
         ):
             segs = detect_silence(wav)
         assert len(segs) == 2
+
+    def test_decode_sozlesmesi_errors_replace(self, tmp_path: Path) -> None:
+        """Sözleşme kilidi: `text=True` tek başına YETMEZ, `errors` da şart.
+
+        `errors` olmadan ffmpeg'in locale'de çözülemeyen banner byte'ları strict
+        decode'a takılır ve stderr'i parse etmeye hiç sıra gelmez. `encoding`
+        BİLİNÇLİ olarak verilmez: ffmpeg log'u locale encoding'indedir (ffprobe
+        JSON'unun aksine — bkz. `audio/probe.py`).
+        """
+        wav = tmp_path / "ornek.wav"
+        wav.write_bytes(b"RIFF")
+        fake = subprocess.CompletedProcess([], 0, stdout="", stderr=SILENCEDETECT_STDERR)
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffmpeg"),
+            patch("subprocess.run", return_value=fake) as run,
+        ):
+            detect_silence(wav)
+        assert run.call_args.kwargs["text"] is True
+        assert run.call_args.kwargs["errors"] == "replace"
+        assert "encoding" not in run.call_args.kwargs
+
+    def test_bozuk_byteli_headerda_parse_bozulmaz(self, tmp_path: Path) -> None:
+        """Türkçe/bozuk byte YALNIZCA atlanan header satırlarındaysa parse aynı kalır.
+
+        `silence_start:`/`silence_end:` satırları saf ASCII'dir; U+FFFD'ye dönen
+        byte'lar yalnızca `Input #0, wav, from '...'` gibi header satırlarına
+        düşer. Strict decode'da bu çıktı `subprocess.run`'ı patlatırdı.
+        """
+        wav = tmp_path / "ornek.wav"
+        wav.write_bytes(b"RIFF")
+        # Dosya adı bozuk byte içeren ek bir header satırı (0xFF 0xFE, 0xC4 0x74)
+        ham = (
+            b"Input #0, wav, from 'C:\\Kay\xc4t\\\xff\xfernek.wav':\n"
+            + SILENCEDETECT_STDERR.encode("utf-8")
+        )
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffmpeg"),
+            patch("subprocess.run", side_effect=_fake_run_bozuk_byte(ham)),
+        ):
+            segs = detect_silence(wav)
+        assert len(segs) == 2  # bozuk header'a rağmen aynı iki sessizlik
+
+    def test_cozulemeyen_byte_unicode_hatasi_degil_silence_error(
+        self, tmp_path: Path
+    ) -> None:
+        """Hata yolunda da çözülemeyen byte ham `UnicodeDecodeError` fırlatmamalı."""
+        wav = tmp_path / "ornek.wav"
+        wav.write_bytes(b"RIFF")
+        ham = b"Invalid data found \xff\xfe C:\\Kay\xc4t\\ornek.wav"
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffmpeg"),
+            patch("subprocess.run", side_effect=_fake_run_bozuk_byte(ham, rc=1)),
+            # UnicodeDecodeError (ValueError) buraya takılmaz → sızarsa test kırılır
+            pytest.raises(SilenceDetectionError) as exc,
+        ):
+            detect_silence(wav)
+        mesaj = str(exc.value)
+        assert "Invalid data found" in mesaj  # okunabilir kısım korundu
+        assert chr(0xFFFD) in mesaj  # bozuk byte'lar replacement char'a döndü
 
     def test_ffmpeg_hatasi_exception(self, tmp_path: Path) -> None:
         wav = tmp_path / "ornek.wav"
