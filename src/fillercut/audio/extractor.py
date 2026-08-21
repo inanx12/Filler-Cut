@@ -90,6 +90,13 @@ def extract_audio(
             cmd,
             capture_output=True,
             text=True,
+            # `errors` olmadan decode STRICT'tir ve hata subprocess.run
+            # ÇAĞRISININ KENDİSİNDE UnicodeDecodeError olarak patlar; aşağıdaki
+            # ExtractionError sarması hiç devreye giremez. ffmpeg banner'ı locale
+            # encoding'inde (Windows-TR: cp1254) çözülemeyen byte içerebilir —
+            # Türkçe dosya adları, kaynak metadata'sı. Locale encoding'i korunur:
+            # okunan şey yalnızca kullanıcıya gösterilen hata kuyruğudur.
+            errors="replace",
             timeout=timeout,
             check=False,
         )
