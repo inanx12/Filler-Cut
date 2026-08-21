@@ -40,6 +40,11 @@ subprocess sarmalayıcısında düzeltildi, sürüm okuması tek kaynağa indiri
     zincirini komple düşürüyordu.
   - `render/render.py` — `errors="replace"` (hata mesajındaki "hangi segment
     patladı" bilgisi korunur).
+  Sweep'te raporlanan üç **test-tarafı** çağrı da aynı deseni taşıyordu ve
+  bu sürümde kapatıldı: `tests/make_fixture.py` (sentetik fixture üreten
+  ffmpeg), `tests/test_encoder.py` (gerçek NVENC encode testi) ve
+  `tests/test_render.py` (gerçek ffprobe süre ölçümü). Test kodu oldukları
+  için ayrıca kilit testi yazılmadı; üçü de `-m ffmpeg` koşusunda çalışıyor.
 
 ### Eklendi
 
@@ -69,8 +74,16 @@ subprocess sarmalayıcısında düzeltildi, sürüm okuması tek kaynağa indiri
   `[project] name` ile eşitliği, `__version__ == importlib.metadata.version(...)`,
   `--version` çıktısının metadata ile tutarlılığı, video argümanı olmadan
   çalışması (eager kilidi) ve pipeline'ı çalıştırmaması.
+- `tests/test_version.py` — **sürüm bayatlığı alarmı.** `pyproject.toml`'daki
+  sürüm ile kurulu dağıtımın metadata'sının eşitliğini assert eder; fail
+  mesajı çözümü açıkça söyler ("VENV BAYAT — `pip install -e .` çalıştır").
+  `TestVersion`'daki üç assert sürümün İÇ tutarlılığını kilitler ama üçü de
+  aynı metadata'yı okuduğu için venv bayatken yeşil kalır — bayatlığı yakalayan
+  tek test budur.
 - Yazılan kilit testlerinin tamamı, fix uygulanmadan önce kırmızı olduğu
-  doğrulanarak eklendi. Toplam test sayısı 399 → 416 (414 passed, 2 skipped).
+  doğrulanarak eklendi; sürüm alarmı da sahte bump ile fiilen kırmızıya
+  düşürülüp mesajı doğrulandı. Toplam test sayısı 399 → 417
+  (415 passed, 2 skipped).
 
 ### Belgeler
 
@@ -78,15 +91,20 @@ subprocess sarmalayıcısında düzeltildi, sürüm okuması tek kaynağa indiri
   hattı, v0.3.1 ve v0.3.2 satırları eklendi, modül/commit tabloları dolduruldu,
   test sayısı güncellendi, "Sıradaki" v0.4'e (zincir şişmesi re-anchor'ı —
   planlandı, başlanmadı) çevrildi.
-- `README.md` + `README.tr.md`: Options listelerine `--version`.
+- `README.md` + `README.tr.md`: Options listeleri tamamlandı — `--version`'ın
+  yanı sıra hiç listelenmemiş olan `--config`, `--open` ve `--interactive`
+  eklendi. Açıklamalar `cli.py`'daki `help` metinleriyle, sıralama da option
+  tanım sırasıyla hizalandı; `README.tr.md` artık `fillercut --help` çıktısıyla
+  birebir aynı (`README.md` İngilizcedir — DESIGN.md §3 — ve aynı metinlerin
+  birebir çevirisini taşır).
 
 ### Bilinen sınırlar
 
 - v0.3.1'de kaydedilen "kalan beş site" sınırı **çözüldü** (yukarı bkz.).
-- Repo sweep'i: `src/` altında `errors`/`encoding` eksiği kalan subprocess
-  çağrısı YOKTUR (6/6 site kapalı). `tests/make_fixture.py` ve iki
-  `@pytest.mark.ffmpeg` testi aynı deseni taşır; test yardımcısı oldukları için
-  bu sürümün kapsamına alınmadı.
+- Repo sweep'i **tamamen kapandı**: repoda `text=True`/`capture_output=True`
+  kullanıp `errors` geçmeyen subprocess çağrısı KALMADI — `src/` altında 6/6,
+  `tests/` altında 3/3 site kapalı. `subprocess.Popen`/`check_output`/`call`
+  hiç kullanılmıyor.
 
 [0.3.2]: https://github.com/inanx12/Filler-Cut/releases/tag/v0.3.2
 
