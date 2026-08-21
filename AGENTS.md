@@ -86,7 +86,7 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
-## Mevcut Durum (2026-07-20)
+## Mevcut Durum (2026-08-21)
 
 **v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
 gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
@@ -95,6 +95,31 @@ gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
 **v0.2 TAMAMLANDI** — TOML config + donanım encoder tespiti + statik HTML review
 bitti (DESIGN.md §8): `fillercut video.mp4` interaktif modda onaydan ÖNCE
 `<ad>_review.html` üretiyor (timeline + kesim tablosu, JS'siz/taşınabilir).
+
+**v0.3.0 TAMAMLANDI** — whisper.cpp/Vulkan backend'i (DESIGN.md §8 v0.3 kapsamı):
+`transcribe/wcpp_backend.py` + `[asr].backend = "whispercpp"`. KI-1'in fw vs
+wcpp karşılaştırması gerçek donanımda (RTX 4050) koşuldu ve **sayısallaştı** —
+hız beraberliği, uydurma kimliği farkı ve zincir şişmesi vakaları
+`KNOWN_ISSUES.md`'de belgeli.
+
+**Vulkan dağıtım hattı TAMAMLANDI** — `.github/workflows/vulkan-build.yml`
+whisper.cpp v1.9.1'i Vulkan ile derliyor (windows-latest, sabit sürüm) ve `v*`
+tag push'unda binary'yi Releases'a asset olarak yüklüyor (idempotent:
+`upload --clobber`). Upstream whisper.cpp Windows release'leri Vulkan binary'si
+YAYINLAMIYOR — bu hattın varlık sebebi budur. RTX 4050'de doğrulandı
+(`ggml_vulkan: Found 1 Vulkan devices`), kurulum README'de 4 adım. Bu bir test
+CI'ı DEĞİLDİR (release tooling istisnası — bkz. İş Akışı).
+
+**v0.3.1 TAMAMLANDI** — bakım sürümü: `wcpp_backend.py` decode fix'i
+(`errors="replace"`) + iki kilit testi + paket versiyonunun gerçekten bump
+edilmesi (v0.2.0/v0.3.0 tag'leri `0.1.0` metadata'sıyla kesilmişti).
+`CHANGELOG.md` bu sürümle başlar.
+
+**v0.3.2 TAMAMLANDI** — aynı decode bug sınıfı kalan **beş** subprocess
+sarmalayıcısında kapatıldı (`audio/probe.py`, `audio/extractor.py`,
+`audio/silence.py`, `render/encoder.py`, `render/render.py`) + `--version`
+bayrağı ve tek kaynaklı sürüm okuması. Davranış değişikliği yok: parse
+mantığı, `reason` formatları ve JSON alanları aynı.
 
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
@@ -137,16 +162,42 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | interaktif review sunucusu (stdlib http.server) + plan filtresi + approved/rejected rapor alanları | `f6f5389` |
 | interaktif HTML/JS (checkbox + timeline toggle) + `--interactive` wiring | `d9a7c1b` |
 | `transcribe/wcpp_backend.py` (whisper.cpp / whisper-cli subprocess — Vulkan AMD/Intel GPU; saf `build_command` `-ml 1 -sow -ojf` + saf JSON parser, offsets ZATEN ms-int) + `[asr].backend`/`whispercpp_*` config + `pipeline._make_transcriber` (tembel import) + KI-1 backend karşılaştırması | `14bd1c3` |
+| KI-1 fw vs wcpp gerçek koşu sonuçları (uydurma tablosu, zincir şişmesi, DTW notu düzeltmesi) + `tests/data` kelime sınırı referansı | `5f37276`, `07e7761` |
+| `.github/workflows/vulkan-build.yml` (whisper.cpp v1.9.1 Vulkan derlemesi) + `v*` tag'de Releases'a asset yükleme (idempotent) + README kurulum bölümü | `05cd318`, `abc495f`, `208e333`, `686913d` |
+| KI-1 Vulkan koşusu — RTX 4050'de hız beraberliği, uydurma kimliği farkı | `df15333` |
 
-**Test sayısı:** 399 (`python -m pytest` → 397 passed, 2 skipped). Bunun 392'si
+**v0.3.1**
+
+| Modül | Commit |
+|---|---|
+| `transcribe/wcpp_backend.py`: `errors="replace"` (decode hatası `WhisperCppError`'a sarılsın) + 2 kilit testi | `aa509e7` |
+| `pyproject.toml` + `__init__.py` `0.3.1`'e bump + `CHANGELOG.md` | `7c455e0` |
+
+**v0.3.2**
+
+| Modül | Commit |
+|---|---|
+| `audio/probe.py`: `encoding="utf-8", errors="replace"` (ffprobe çıktısı spec gereği UTF-8; Türkçe `title` metadata'sı cp1254'te bozulur) + 3 kilit testi | `0b21174` |
+| `audio/extractor.py`: `errors="replace"` (locale encoding korunur — ffmpeg log'u UTF-8 değil) + 2 kilit testi | `b711935` |
+| `audio/silence.py`: `errors="replace"`; parse yüzeyi saf ASCII, Türkçe ad yalnız atlanan header'larda + 3 kilit testi | `5935ce6` |
+| `render/encoder.py`: `errors="replace"` — `UnicodeDecodeError` bir `ValueError`'dır, `probe_encoder`'ın "asla exception fırlatmaz" sözleşmesinden sızıyordu + 2 kilit testi | `7c1765b` |
+| `render/render.py`: `errors="replace"` (hata yolunda "hangi segment" bilgisi korunur) + 2 kilit testi | `7258e63` |
+| `cli.py` `--version` (typer eager option) + `__init__.__version__` artık `importlib.metadata`'dan okunur (tek kaynak: `pyproject.toml`) + 5 kilit testi | `2c85c9a` |
+
+**Test sayısı:** 416 (`python -m pytest` → 414 passed, 2 skipped). Bunun 409'u
 marker'sız; 5'i `ffmpeg`, 2'si `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — CI `-m "not ffmpeg and not wcpp"` ile atlar, donanım/model
 yoksa ilgili testler kendi kendine skip eder.
 
-**Sıradaki:** v0.3'ün kalanı — interaktif review'un `wcpp_backend` ile uçtan
-uca doğrulanması + KI-1 backend karşılaştırmasının gerçek donanımda koşulması
-(whisper-cli binary + `ggml-large-v3-turbo-q5_0.bin`; `@pytest.mark.wcpp`
-referansı `tests/data/wcpp_reference_tr.json` elle doldurulacak).
+**Sıradaki:** **v0.4 — zincir şişmesi re-anchor'ı (planlandı, BAŞLANMADI).**
+KI-1'in gerçek koşusunda belgelenen vaka: whisper kelime zincirinde bir
+timestamp şişince sonraki kelimeler de kayıyor; KI-5 koruması tek kelimelik
+kesimi kırpar ama zincirin kendisini yeniden çıpalamaz. v0.4'ün konusu budur.
+
+Devam eden küçük iş (v0.3 kuyruğu): interaktif review'un `wcpp_backend` ile
+uçtan uca doğrulanması — `@pytest.mark.wcpp` referansı
+`tests/data/wcpp_reference_tr.json` elle doldurulacak (whisper-cli binary +
+`ggml-large-v3-turbo-q5_0.bin`).
 
 **Not (TRANSCRIBE):** Model ayarları `fw_backend.py` modül sabitleridir
 (`turbo` / `cuda` / `float16` — RTX 4050 hedefli; CPU'da `int8` ile

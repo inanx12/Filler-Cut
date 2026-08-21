@@ -91,6 +91,7 @@ Opsiyonlar:
 --aggressive      aday filler'ları ("şey", "yani", "hani", "işte") da kes
 -y, --yes         review onayını atla
 -o, --output YOL  özel çıktı MP4 yolu
+--version         sürümü basıp çık
 ```
 
 Render'dan önce özet tablosu basılır ve onay istenir (`--yes` ile atlanır) —

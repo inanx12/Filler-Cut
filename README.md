@@ -93,6 +93,7 @@ Options:
 --aggressive      also cut candidate fillers ("şey", "yani", "hani", "işte")
 -y, --yes         skip the review confirmation
 -o, --output PATH  custom output MP4 path
+--version         print the version and exit
 ```
 
 Before rendering, a review summary is printed and confirmation is asked
