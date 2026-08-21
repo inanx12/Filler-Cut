@@ -425,6 +425,11 @@ class TestGercekNvencProbe:
             ),
             str(cikti),
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        # errors="replace": sürücü hata mesajı locale'de çözülemeyen byte
+        # içerirse strict decode subprocess.run'ın kendisinde patlar ve aşağıdaki
+        # assert'in stderr kuyruğu hiç görünmez (src tarafı: v0.3.2).
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, errors="replace", check=False
+        )
         assert proc.returncode == 0, proc.stderr[-400:]
         assert cikti.is_file() and cikti.stat().st_size > 0

@@ -379,6 +379,10 @@ class TestGercekFfmpegKesimDogrulugu:
             ],
             capture_output=True,
             text=True,
+            # errors="replace": text=True tek başına decode'u STRICT bırakır;
+            # Türkçe yol/metadata byte'ı subprocess.run'ın kendisinde
+            # UnicodeDecodeError'a döner (src tarafı: v0.3.2).
+            errors="replace",
             check=True,
         )
         return int(round(float(proc.stdout.strip()) * 1000))

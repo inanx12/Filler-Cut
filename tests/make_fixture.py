@@ -48,7 +48,13 @@ def make_color_sine_video(path: str | Path, *, duration_ms: int, fps: int = 30) 
         "-shortest",  # iki kaynak süresi kare örnegine denk düşmezse kısaya çek
         str(dst),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    # errors="replace": text=True tek başına decode'u STRICT bırakır ve
+    # locale'de çözülemeyen ffmpeg banner byte'ı subprocess.run'ın kendisinde
+    # UnicodeDecodeError'a döner — aşağıdaki RuntimeError sarması devreye
+    # giremez (src tarafındaki aynı düzeltme: v0.3.2).
+    proc = subprocess.run(
+        cmd, capture_output=True, text=True, errors="replace", check=False
+    )
     if proc.returncode != 0:
         tail = (proc.stderr or "").strip()[-400:]
         raise RuntimeError(f"fixture üretilemedi (hata kodu {proc.returncode}):\n{tail}")
