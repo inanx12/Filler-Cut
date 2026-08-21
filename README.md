@@ -87,13 +87,17 @@ Outputs, written next to the input (or to `--output`):
 - `video_transkript.json` — the word-level transcript (kept even if you
   decline at the review step)
 
-Options:
+Options (identical to `fillercut --help`, which is Turkish — the CLI is
+Turkish-only; these are one-to-one translations):
 
 ```
---aggressive      also cut candidate fillers ("şey", "yani", "hani", "işte")
--y, --yes         skip the review confirmation
--o, --output PATH  custom output MP4 path
---version         print the version and exit
+--config PATH      TOML config file (default: filler-cut.toml).
+--aggressive       Also cut candidate fillers (şey, yani, hani, işte).
+-y, --yes          Skip the review confirmation (render without asking).
+-o, --output PATH  Output MP4 path (default: <name>_temiz.mp4).
+--open             Open the review HTML in the default browser once written.
+--interactive      Approve cuts one by one in the browser (local server, v0.3).
+--version          Print the version and exit.
 ```
 
 Before rendering, a review summary is printed and confirmation is asked

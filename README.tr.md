@@ -85,13 +85,16 @@ fillercut video.mp4
 - `video_transkript.json` — kelime seviyesinde transkript (review'da
   reddetseniz bile korunur)
 
-Opsiyonlar:
+Opsiyonlar (`fillercut --help` çıktısıyla birebir aynı):
 
 ```
---aggressive      aday filler'ları ("şey", "yani", "hani", "işte") da kes
--y, --yes         review onayını atla
--o, --output YOL  özel çıktı MP4 yolu
---version         sürümü basıp çık
+--config YOL       TOML config dosyası (varsayılan: filler-cut.toml).
+--aggressive       Aday filler'ları (şey, yani, hani, işte) da kes.
+-y, --yes          Review onayını atla (onaysız render).
+-o, --output YOL   Çıktı MP4 yolu (varsayılan: <ad>_temiz.mp4).
+--open             Review HTML'ini üretimden sonra varsayılan tarayıcıda aç.
+--interactive      Kesimleri tarayıcıda tek tek onayla (lokal sunucu, v0.3).
+--version          Sürümü basıp çık.
 ```
 
 Render'dan önce özet tablosu basılır ve onay istenir (`--yes` ile atlanır) —
