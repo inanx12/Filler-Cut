@@ -76,6 +76,13 @@ def probe_duration_ms(path: str | Path, *, timeout: float = 60.0) -> int:
             build_command(src),
             capture_output=True,
             text=True,
+            # ffprobe çıktısı spec gereği UTF-8'dir (Türkçe `title` metadata'sı
+            # dahil); locale encoding'i (Windows-TR: cp1254) onu mojibake'e
+            # çevirir. `errors` olmadan decode strict'tir ve hata subprocess.run
+            # ÇAĞRISININ KENDİSİNDE UnicodeDecodeError olarak patlar — aşağıdaki
+            # ProbeError sarması hiç devreye giremez.
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             check=False,
         )
