@@ -5,10 +5,10 @@ testleriyle aynı desen). Sahte run, komuttaki `-c:v <ad>`'a bakıp "bu encoder
 çalışıyor/çalışmıyor" senaryosunu kurar — böylece zincir sırası, atlama ve
 fallback davranışı donanımdan bağımsız doğrulanır.
 
-`TestGercekNvencProbe` gerçek ffmpeg + NVIDIA donanımı ister:
-`@pytest.mark.ffmpeg` ile işaretlidir (CI'da `-m "not ffmpeg"` ile atlanır) ve
-donanım yoksa çalışma anında `pytest.skip` eder — donanımsız makinede suite
-yeşil kalır.
+`TestGercekNvencProbe` (NVIDIA) ve `TestGercekQsvProbe` (Intel iGPU) gerçek
+ffmpeg + donanım ister: `@pytest.mark.ffmpeg` ile işaretlidirler (CI'da
+`-m "not ffmpeg"` ile atlanır) ve donanım yoksa çalışma anında `pytest.skip`
+ederler — donanımsız makinede suite yeşil kalır.
 """
 
 from __future__ import annotations
@@ -27,6 +27,8 @@ from fillercut.render.encoder import (
     ENCODER_MAP,
     NVENC_PRESET,
     PIX_FMT,
+    QSV_PRESET,
+    QSV_QP_OFFSET,
     EncoderSelection,
     ProbeAttempt,
     build_audio_args,
@@ -355,9 +357,28 @@ class TestBuildEncodeArgs:
         assert args[args.index("-qp_i") + 1] == "20"
         assert args[args.index("-qp_p") + 1] == "20"
 
-    def test_qsv_global_quality(self) -> None:
+    def test_qsv_cqp_crf_ofsetli(self) -> None:
+        # Kalibrasyon (KI-6): ICQ (`-global_quality`) değil CQP kazandı.
         args = build_video_args("h264_qsv", RenderConfig(crf=23))
-        assert args[args.index("-global_quality") + 1] == "23"
+        assert args[args.index("-preset") + 1] == QSV_PRESET
+        assert args[args.index("-q:v") + 1] == str(23 + QSV_QP_OFFSET)
+        assert "-global_quality" not in args
+        assert "-crf" not in args  # QSV crf bilmez
+
+    def test_qsv_q_stream_belirtecli_olmali(self) -> None:
+        """Belirteçsiz `-q` ses encoder'ına da sızar (aac 192k → qscale VBR).
+
+        Ölçüldü: aynı komutta `-q 23` aac'yi 241 kbps'e çıkardı, `-q:v 23`
+        `-b:a` hedefini korudu; ürettikleri video akışı bit-birebir aynı.
+        """
+        args = build_video_args("h264_qsv", RenderConfig())
+        assert "-q" not in args
+
+    @pytest.mark.parametrize(("crf", "beklenen_q"), [(0, "0"), (51, "51"), (99, "51")])
+    def test_qsv_degeri_aralikta_kirpilir(self, crf: int, beklenen_q: str) -> None:
+        # config uç değer verebilir: -q:v [0, 51] dışına taşmamalı.
+        args = build_video_args("h264_qsv", RenderConfig(crf=crf))
+        assert args[args.index("-q:v") + 1] == beklenen_q
 
     def test_pix_fmt_tum_encoderlarda_ayni(self) -> None:
         for ffmpeg_name in ENCODER_MAP.values():
@@ -428,6 +449,57 @@ class TestGercekNvencProbe:
         # errors="replace": sürücü hata mesajı locale'de çözülemeyen byte
         # içerirse strict decode subprocess.run'ın kendisinde patlar ve aşağıdaki
         # assert'in stderr kuyruğu hiç görünmez (src tarafı: v0.3.2).
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, errors="replace", check=False
+        )
+        assert proc.returncode == 0, proc.stderr[-400:]
+        assert cikti.is_file() and cikti.stat().st_size > 0
+
+
+#: Gerçek ffmpeg + Intel QSV (iGPU) gerektiren test — CI'da `-m "not ffmpeg"`
+#: ile atlanır; iGPU yoksa/kapalıysa çalışma anında skip eder. Bu makinede
+#: QSV yalnız hibrit kip açıkken çalışır (KI-6 kalibrasyon notu).
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg PATH'te yok")
+class TestGercekQsvProbe:
+    @staticmethod
+    def _qsv_veya_skip() -> ProbeAttempt:
+        deneme = probe_encoder("qsv")
+        if not deneme.ok:
+            pytest.skip(f"QSV donanımı/sürücüsü yok: {deneme.error}")
+        return deneme
+
+    def test_qsv_probe_donanimda_calisir(self) -> None:
+        deneme = self._qsv_veya_skip()
+        assert deneme.ffmpeg_name == "h264_qsv"
+        assert deneme.error == ""
+
+    def test_secim_qsv_tercihini_bulur(self) -> None:
+        self._qsv_veya_skip()
+        secim = select_encoder(EncoderConfig(preference=["qsv", "libx264"]))
+        assert secim.name == "qsv"
+        assert secim.fallback is False
+
+    def test_uretilen_arglarla_gercek_encode_gecer(self, tmp_path: Path) -> None:
+        """Kalite argümanları sürücü tarafından KABUL ediliyor mu?
+
+        NVENC muadilinin QSV karşılığı: probe encoder'ın açıldığını gösterir,
+        bu test `-preset medium -q:v <crf>` setinin de geçerli olduğunu
+        gösterir. `-q:v`'nin stream belirteci saf tarafta sabitlenir
+        (`TestBuildEncodeArgs::test_qsv_q_stream_belirtecli_olmali`).
+        """
+        deneme = self._qsv_veya_skip()
+        cikti = tmp_path / "qsv.mp4"
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=0.5",
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=0.5",
+            *build_encode_args(
+                EncoderSelection(name="qsv", ffmpeg_name=deneme.ffmpeg_name), RenderConfig()
+            ),
+            str(cikti),
+        ]
+        # errors="replace": NVENC muadiliyle aynı gerekçe (v0.3.2 decode fix'i).
         proc = subprocess.run(
             cmd, capture_output=True, text=True, errors="replace", check=False
         )

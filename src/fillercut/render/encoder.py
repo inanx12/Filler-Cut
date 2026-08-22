@@ -9,9 +9,12 @@ cevap verir.
 listesini ayrıştırmak YETMEZ — encoder listede görünüp sürücüde patlar
 (DESIGN.md §5). Bu makinede birebir doğrulandı: `h264_amf` ve `h264_qsv`
 listede var ama probe'da sırasıyla `amfrt64.dll failed to open` ve
-`Error creating a MFX session: -9` ile 171 koduyla çıkıyor. Bu yüzden her aday
-için 0.2 saniyelik `testsrc2` test encode'u çalıştırılır; çıkış kodu 0 ise
-encoder gerçekten çalışıyordur. Maliyet: aday başına ~0.1-0.4 sn.
+`Error creating a MFX session: -9` ile 171 koduyla çıkıyordu. QSV'nin sonradan
+ÇALIŞIR hale gelmesi (BIOS/Vantage hibrit kip → iGPU açıldı, `-encoders`
+listesi hiç değişmeden) listeye güvenmemenin en net kanıtıdır: aynı ffmpeg,
+aynı liste, farklı sonuç. Bu yüzden her aday için 0.2 saniyelik `testsrc2`
+test encode'u çalıştırılır; çıkış kodu 0 ise encoder gerçekten çalışıyordur.
+Maliyet: aday başına ~0.1-0.4 sn.
 
 **Cache YOK.** Sürücü/donanım process'ler arası değişebilir (harici GPU,
 sürücü güncellemesi) — diske yazılan bir cache eskir ve sessizce yanlış
@@ -19,9 +22,10 @@ encoder seçtirir. Probe `pipeline.run()` başında BİR KEZ yapılır ve sonucu
 (`EncoderSelection`) katmanlar arasında taşınır; process içi tek probe yeterli.
 
 **Kalite argümanları tek tabloda** (`_KALITE_ARGS`): kalibrasyon tek yerden
-yapılsın diye codec başına tek fonksiyon vardır. NVENC değerleri RTX 4050'de
-gerçek encode ile doğrulandı; AMF/QSV kalibrasyonu donanım erişimi olmadığı
-için bekliyor (KNOWN_ISSUES.md KI-6).
+yapılsın diye codec başına tek fonksiyon vardır. NVENC değerleri RTX 4050'de,
+QSV değerleri Intel UHD (i5-12450HX, hibrit kip) üzerinde gerçek encode +
+SSIM ölçümüyle doğrulandı; AMF kalibrasyonu AMD donanımı olmadığı için
+bekliyor (KNOWN_ISSUES.md KI-6).
 
 **`[render].video_codec` gerilimi:** v0.2'de video encoder'ı `preference`
 zincirinden gelir ve codec ailesi h264'te sabittir; `video_codec` alanı bu
@@ -69,6 +73,21 @@ PROBE_TIMEOUT = 30.0
 
 #: NVENC preset'i: p1 (en hızlı) … p7 (en yavaş/kaliteli). p5 dengeli orta nokta.
 NVENC_PRESET = "p5"
+
+#: QSV preset'i: TargetUsage 1 (veryslow/kaliteli) … 7 (veryfast). İsimler x264
+#: sözlüğüyle AYNI görünür ama karşılıkları TargetUsage'dır; `render.preset`
+#: (x264 sözlüğü, "ultrafast"/"placebo" içerebilir) buraya BAĞLANMAZ — geçersiz
+#: isim encode'u patlatırdı. `medium` = TargetUsage 4, ölçümün yapıldığı değer.
+QSV_PRESET = "medium"
+
+#: QSV `-q:v` (CQP) = `crf` + bu ofset. Ofset 0: kalibrasyonda `-q:v = crf`
+#: adayı, x264 crf 23 referansının SSIM'ine iki klipte de en yakın çıktı
+#: (720p30 facecam: −0.0010; 1080p60 düşük hareket: −0.0004).
+#: **Ölçüm sapması (KI-6):** CQP sabit kuantizasyondur, x264'ün crf'i gibi
+#: içeriğe göre uyarlanmaz — düşük hareketli 1080p60 klipte aynı SSIM için
+#: dosya referansı %31 aştı (720p30 facecam'de %9). Sapma kalite yönünde
+#: bırakıldı (NVENC ofsetiyle aynı tercih: bedeli daha büyük dosya).
+QSV_QP_OFFSET = 0
 
 #: NVENC `-cq` = `crf` + bu ofset. Donanım encoder'ı aynı sayısal değerde
 #: yazılım x264'ün gerisinde kalabildiği için kalite yönünde cömert davranılır
@@ -326,8 +345,17 @@ def _amf_args(render: RenderConfig) -> list[str]:
 
 
 def _qsv_args(render: RenderConfig) -> list[str]:
-    """QSV: ICQ benzeri sabit kalite (`-global_quality`). Kalibre edilmemiş (KI-6)."""
-    return ["-preset", "medium", "-global_quality", _q(render.crf)]
+    """QSV: CQP sabit kuantizasyon (`-q:v`), crf'e ofsetli (bkz. QSV_QP_OFFSET).
+
+    **Stream belirteci ZORUNLU.** Belirteçsiz `-q` ses encoder'ına da sızar:
+    aac `-b:a` hedefini bırakıp qscale VBR'a geçer (ölçümde 192k → 241 kbps).
+    `-q:v` yalnız videoyu bağlar; ürettiği video akışı `-q` ile bit-birebir
+    aynıdır (aynı md5).
+
+    Mod seçimi ölçümle yapıldı (KI-6): CQP, ICQ'ya (`-global_quality`) göre
+    aynı dosya boyutunda iki klipte de daha yüksek SSIM verdi ve daha hızlıydı.
+    """
+    return ["-preset", QSV_PRESET, "-q:v", _q(render.crf + QSV_QP_OFFSET)]
 
 
 #: Codec başına kalite argümanları — TEK TABLO (kalibrasyon tek yerden yapılır).
