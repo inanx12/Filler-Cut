@@ -165,6 +165,7 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | KI-1 fw vs wcpp gerçek koşu sonuçları (uydurma tablosu, zincir şişmesi, DTW notu düzeltmesi) + `tests/data` kelime sınırı referansı | `5f37276`, `07e7761` |
 | `.github/workflows/vulkan-build.yml` (whisper.cpp v1.9.1 Vulkan derlemesi) + `v*` tag'de Releases'a asset yükleme (idempotent) + README kurulum bölümü | `05cd318`, `abc495f`, `208e333`, `686913d` |
 | KI-1 Vulkan koşusu — RTX 4050'de hız beraberliği, uydurma kimliği farkı | `df15333` |
+| `render/encoder.py`: `h264_qsv` kalibrasyonu (ICQ → CQP `-q:v = crf`; Intel UHD'de iki klip × 7 aday boyut/süre/SSIM) + `TestGercekQsvProbe`; KI-6 QSV yarısı "Çözüldü" | `42ca3e9`, `93f2f2e` |
 
 **v0.3.1**
 
@@ -184,8 +185,8 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `render/render.py`: `errors="replace"` (hata yolunda "hangi segment" bilgisi korunur) + 2 kilit testi | `7258e63` |
 | `cli.py` `--version` (typer eager option) + `__init__.__version__` artık `importlib.metadata`'dan okunur (tek kaynak: `pyproject.toml`) + 5 kilit testi | `2c85c9a` |
 
-**Test sayısı:** 416 (`python -m pytest` → 414 passed, 2 skipped). Bunun 409'u
-marker'sız; 5'i `ffmpeg`, 2'si `wcpp` marker'lı (gerçek ffmpeg / gerçek
+**Test sayısı:** 424 (`python -m pytest` → 422 passed, 2 skipped). Bunun 414'ü
+marker'sız; 8'i `ffmpeg`, 2'si `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — CI `-m "not ffmpeg and not wcpp"` ile atlar, donanım/model
 yoksa ilgili testler kendi kendine skip eder.
 
@@ -229,8 +230,13 @@ sırasındaki her aday için 0.2 saniyelik gerçek probe encode'u çalıştırı
 `pipeline.run()` başında BİR KEZ yapılır (diske cache yok — sürücü
 değişebilir), konsola tek satır düşer ve `rapor.json`'un `encoder` alanına
 girer. `ffmpeg -encoders` listesi YETMEZ: geliştirme makinesinde `h264_amf` ve
-`h264_qsv` listede görünüp sürücüde patlıyor (`amfrt64.dll failed to open`,
-`MFX session: -9`) — DESIGN.md §5'in probe gerekçesi birebir doğrulandı. NVENC
-değerleri (`-preset p5 -cq {crf-2}`) RTX 4050'de gerçek encode'la ölçüldü;
-**AMF/QSV kalite argümanları kalibre EDİLMEDİ — AMD/Intel donanımı bulunana
-kadar bekliyor (KI-6)**.
+`h264_qsv` listede görünüp sürücüde patlıyordu (`amfrt64.dll failed to open`,
+`MFX session: -9`) — DESIGN.md §5'in probe gerekçesi birebir doğrulandı. QSV'nin
+sonradan (hibrit kip açılınca, `-encoders` listesi hiç değişmeden) ÇALIŞIR hale
+gelmesi aynı gerekçeyi ikinci kez doğruladı. NVENC değerleri
+(`-preset p5 -cq {crf-2}`) RTX 4050'de, QSV değerleri
+(`-preset medium -q:v {crf}`, CQP) Intel UHD iGPU'da gerçek encode + SSIM
+ölçümüyle kalibre edildi (tablolar KI-6'da); QSV'de `-q` DEĞİL `-q:v` — belirteçsiz
+biçim ses encoder'ına sızıp `-b:a` hedefini bozuyor.
+**AMF kalite argümanları kalibre EDİLMEDİ — AMD donanımı bulunana kadar
+bekliyor (KI-6, "AMD günü")**.
