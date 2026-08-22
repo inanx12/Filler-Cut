@@ -253,28 +253,115 @@ CUDA binary (resmi cublas-12.4 paketi, aynı tag) ile aynı kayıtta kıyasland�
   işaretlenip kullanıcı onayına sunulması.
 - **Referans:** `tests/test_cutplan.py::TestTimestampAnomaliKorumasi`.
 
-## KI-6 — AMF ve QSV kalite argümanları kalibre edilmedi
+## KI-6 — AMF ve QSV kalite argümanları kalibre edilmedi (QSV yarısı: Çözüldü)
 
 - **Belirti:** `render/encoder.py`'nin kalite tablosunda `h264_amf` ve
-  `h264_qsv` girişleri makul default'lardır; gerçek donanımda kalite/boyut
-  ölçümü YAPILMAMIŞTIR.
+  `h264_qsv` girişleri makul default'lardı; gerçek donanımda kalite/boyut
+  ölçümü YAPILMAMIŞTI. **QSV yarısı 2026-08'de ölçüldü (aşağıya bak); AMF
+  yarısı açık.**
 - **Neden:** Geliştirme makinesi NVIDIA'dır (RTX 4050). AMD ve Intel donanımına
   erişim yok; her iki encoder da bu makinede `-encoders` listesinde görünüyor
   ama probe'da patlıyor (`amfrt64.dll failed to open`, `MFX session: -9`) —
-  yani arg setleri gerçek bir sürücüde hiç çalıştırılamadı.
-- **Etki:** AMD/Intel makinelerde çıktı kalitesi veya dosya boyutu beklenenden
+  yani arg setleri gerçek bir sürücüde hiç çalıştırılamadı. (Intel tarafı
+  sonradan açıldı: aynı makinede hibrit kip etkinleştirilince iGPU görünür
+  oldu ve QSV probe'u geçti — `-encoders` listesi hiç değişmeden.)
+- **Etki:** AMD makinelerde çıktı kalitesi veya dosya boyutu beklenenden
   sapabilir; en kötü durumda argüman reddi → o encoder'ın render'da patlaması
-  (probe geçse bile). NVENC ve libx264 yolları ölçüldü, etkilenmez.
+  (probe geçse bile). NVENC, QSV ve libx264 yolları ölçüldü, etkilenmez.
 - **Alınan önlem:** Değerler crf'e bağlanıp tek tabloda toplandı
   (`_KALITE_ARGS`) — kalibrasyon tek dosyada, tek fonksiyonda yapılabilir.
   AMF'de rate control açıkça `cqp`'ye sabitlendi: AMF'nin varsayılan bitrate
   hedefli modu düşük bitrate'te sessizce kalite düşürür.
-- **Kalan risk:** Kalibrasyon AMD/Intel donanımı bulunana kadar bekliyor.
+- **Kalan risk:** AMF kalibrasyonu AMD donanımı bulunana kadar bekliyor.
 - **Referans:** `tests/test_encoder.py::TestBuildEncodeArgs` (değerleri
   sabitler, kalitesini doğrulamaz); NVENC ölçümü
-  `TestGercekNvencProbe::test_uretilen_arglarla_gercek_encode_gecer`.
+  `TestGercekNvencProbe::test_uretilen_arglarla_gercek_encode_gecer`, QSV
+  ölçümü `TestGercekQsvProbe::test_uretilen_arglarla_gercek_encode_gecer`.
+
+### KI-6 QSV kalibrasyonu — **Çözüldü** (2026-08, Intel UHD / i5-12450HX)
+
+Donanım: i5-12450HX + Intel UHD iGPU (Lenovo Vantage "Hibrit Kip" açık) ve
+RTX 4050; ffmpeg 8.1.2 (gyan full build, `--enable-libvpl`). **Tek makine —
+bulgular bu kayıtla sınırlıdır, genelleme yok.**
+
+**Seçenek envanteri (`ffmpeg -h encoder=h264_qsv` + generic AVOptions).**
+Rate-control modu encoder help'inde görünmez; ffmpeg'in kendi log satırıyla
+doğrulandı (`RateControlMethod:`):
+
+| Aday arg | Seçilen mod |
+|---|---|
+| `-q:v N` | CQP |
+| `-global_quality N` | ICQ |
+| `-global_quality N -look_ahead 1` | LA_ICQ (grid dışı) |
+
+`-preset` burada TargetUsage'dır (`veryslow`=1 … `veryfast`=7, `medium`=4).
+
+**Ölçüm.** Referans: libx264 `-preset medium -crf 23`. SSIM ffmpeg'in kendi
+`ssim` filtresiyle kaynağa karşı (`All:`), boyut yalnız video (`-an`), tam
+klip (kesit değil). Adayların hepsi `-preset medium`.
+
+KLIP_A — `8BitDo.mp4`, 1280x720@30, 510 sn, konuşma/facecam:
+
+| Aday | Boyut (MB) | Δboyut | SSIM | ΔSSIM | Süre (sn) |
+|---|---|---|---|---|---|
+| **x264 crf 23 (referans)** | **75.21** | — | **0.99073** | — | 84.8 |
+| CQP `-q:v 21` | 109.99 | +46.2% | 0.99156 | +0.00083 | 39.6 |
+| **CQP `-q:v 23`** | **82.30** | **+9.4%** | **0.98971** | **−0.00102** | **39.3** |
+| CQP `-q:v 26` | 57.09 | −24.1% | 0.98569 | −0.00504 | 38.7 |
+| ICQ `-global_quality 21` | 116.94 | +55.5% | 0.99159 | +0.00086 | 43.4 |
+| ICQ `-global_quality 23` | 93.32 | +24.1% | 0.99025 | −0.00048 | 43.2 |
+| ICQ `-global_quality 26` | 64.61 | −14.1% | 0.98708 | −0.00365 | 43.3 |
+
+KLIP_B — `nokta 1.mp4`, 1920x1080@60, 222 sn, düşük hareketli mouse incelemesi:
+
+| Aday | Boyut (MB) | Δboyut | SSIM | ΔSSIM | Süre (sn) |
+|---|---|---|---|---|---|
+| **x264 crf 23 (referans)** | **12.45** | — | **0.99770** | — | 41.2 |
+| CQP `-q:v 21` | 19.58 | +57.3% | 0.99778 | +0.00008 | 45.3 |
+| CQP `-q:v 23` | 16.30 | +30.9% | 0.99731 | −0.00039 | 45.6 |
+| **CQP `-q:v 26`** | **13.42** | **+7.8%** | **0.99658** | **−0.00112** | **45.6** |
+| ICQ `-global_quality 21` | 17.01 | +36.6% | 0.99698 | −0.00072 | 59.5 |
+| ICQ `-global_quality 23` | 14.59 | +17.2% | 0.99665 | −0.00105 | 58.9 |
+| ICQ `-global_quality 26` | 11.86 | −4.7% | 0.99567 | −0.00203 | 59.1 |
+
+**Seçim gerekçesi.**
+
+- **Mod: CQP.** Eşit dosya boyutuna indirgendiğinde (ICQ noktaları arasında
+  doğrusal ara değer) CQP iki klipte de daha yüksek SSIM veriyor: KLIP_A'da
+  82.3 MB'ta 0.98971 vs ICQ ≈0.98903; KLIP_B'de 13.42 MB'ta 0.99658 vs
+  ICQ ≈0.99623. CQP ayrıca her iki klipte daha hızlı (KLIP_B'de 45.6 vs 59.1
+  sn). LA_ICQ grid'e alınmadı: lookahead VBR'ı besler, crf benzeri sabit
+  kalite hedefi değildir.
+- **Değer: `-q:v = crf` (ofset 0).** Kural "referansın SSIM'ine en yakın VE
+  boyutu anlamlı aşmayan aday". Klip başına kazananlar farklı çıktı:
+  KLIP_A'da `-q:v 23` (crf+0), KLIP_B'de `-q:v 26` (crf+3). Tek doğrusal
+  eşleme gerektiği için ofset 0 seçildi; **karar KLIP_A'ya (konuşma/facecam)
+  yaslandı** — aracın hedef içeriği odur ve orada crf+3 SSIM'i 0.005
+  düşürüyor (görünür kayıp), ofset 0 ise iki klipte de referansın 0.001
+  içinde kalıyor.
+- **Ölçüm sapması (kayda geçti):** CQP sabit kuantizasyondur; x264'ün crf'i
+  gibi içeriğe göre uyarlanmaz. Bedeli, düşük hareketli 1080p60 klipte
+  boyutun referansı %31 aşmasıdır (facecam'de %9). Sapma bilinçli olarak
+  kalite yönünde bırakıldı — NVENC ofsetindeki (`-2`) tercihle aynı: "bedeli
+  daha büyük dosya".
+- **`-q` değil `-q:v`:** belirteçsiz `-q` ses encoder'ına da sızıyor; aynı
+  komutta aac `-b:a 192k` hedefini bırakıp qscale VBR'a geçti (241 kbps).
+  `-q:v`'nin ürettiği video akışı `-q` ile bit-birebir aynı (aynı md5), yani
+  yukarıdaki ölçümler eşlemeye taşınır. Uçtan uca koşuda çıktının ses akışı
+  196 kbps ölçüldü (config hedefi korunuyor).
+
+**Uçtan uca doğrulama:** `[encoder].preference = ["qsv", "libx264"]` ile
+KLIP_A üzerinde tam `fillercut` koşusu — konsol satırı
+`[6/6] RENDER — encoder: h264_qsv (probe: qsv ✓)`, çıktı baştan sona hatasız
+decode oldu (h264 1280x720 + aac 196 kbps, 503.95 sn).
+
+### KI-6 AMF yarısı — AÇIK
 
 - **Not (2026-07):** AMD donanımına (RX 9060 XT, ROCm 7) erişildiğinde
   "AMD günü": aynı oturumda (a) bu kaydın AMF kalibrasyonu + (b) whisper.cpp
   HIP derlemesi (ASR tarafı, KI-1 sonrası backlog). İkisi ayrı silikon —
   AMF video motoru ≠ ROCm compute ünitesi; birbirini etkilemez.
+- **Yöntem hazır:** QSV kalibrasyonunun deseni aynen tekrarlanır (referans
+  x264 crf 23 → aday grid'i → boyut/süre/SSIM tablosu → crf eşlemesi).
+  AMF'de rate control adayları önce `ffmpeg -h encoder=h264_amf` çıktısıyla
+  doğrulanmalıdır (ezberden arg yazılmaz).
