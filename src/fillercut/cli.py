@@ -9,8 +9,15 @@ CLI arg > config dosyası > default (bkz. ``config.py``).
 v0.3.2: ``--version`` (eager) — sürüm `fillercut.__version__`'dan, yani kurulu
 dağıtımın metadata'sından gelir. Burada sabit sürüm dizesi YOKTUR; tek
 doğruluk kaynağı `pyproject.toml`'dır (bkz. ``fillercut/__init__.py``).
+
+v0.3.3: konsol akışları ``main_entry``'de ``errors="replace"``e ayarlanır —
+çıktı yönlendirildiğinde (``> log.txt``, pipe) Python locale encoding'ine
+düşer ve konsol süslerini (``✓``) kodlayamayıp koşuyu öldürüyordu. Bu,
+v0.3.2'nin subprocess ``errors="replace"`` temizliğinin yazma tarafındaki
+eşleniğidir: orada dışarıdan GELEN byte'lar, burada dışarıya GİDEN metin.
 """
 
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -26,6 +33,46 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+
+def _akisi_dayaniklilastir(akis: object) -> None:
+    """Tek konsol akışını `errors="replace"`e çevirir — asla exception vermez.
+
+    `encoding` BİLİNÇLİ olarak değiştirilmez: locale encoding'i korunur, yalnız
+    kodlanamayan karakter `?`'e düşer. UTF-8'e zorlamak yönlendirilmiş çıktıyı
+    düzeltirken gerçek konsolda kod sayfasıyla çelişip mojibake üretebilirdi;
+    bozulan tek şey süs karakteri, metnin kendisi (Türkçe dahil cp1254'te
+    temsil edilebilir) yerinde kalıyor.
+
+    Guard'lar: `sys.stdout` pythonw altında `None` olabilir; test/capture
+    sarmalayıcılarında (`StringIO` vb.) `reconfigure` bulunmayabilir; kapalı
+    veya ayrılmış akışta çağrı `ValueError` verir. Üçü de sessizce geçilir —
+    konsol kurulumu aracı ÖLDÜRMEMELİ (düzeltmeye çalıştığımız kusurun aynısı).
+    """
+    reconfigure = getattr(akis, "reconfigure", None)
+    if reconfigure is None:
+        return
+    try:
+        reconfigure(errors="replace")
+    except (ValueError, OSError):
+        return
+
+
+def _konsol_akislarini_ayarla() -> None:
+    """stdout + stderr'i yönlendirmeye dayanıklı hale getirir."""
+    _akisi_dayaniklilastir(sys.stdout)
+    _akisi_dayaniklilastir(sys.stderr)
+
+
+def main_entry() -> None:
+    """`console_scripts` hedefi — akışları ayarlayıp typer app'ini çalıştırır.
+
+    Giriş noktası doğrudan `app` DEĞİL bu sarmalayıcıdır: ayar, ilk `echo`'dan
+    önce çalışmak zorunda. Modül seviyesinde yapılamaz — `fillercut.cli`'yi
+    import etmek (testler, araçlar) çağıranın akışlarını değiştirmemeli.
+    """
+    _konsol_akislarini_ayarla()
+    app()
 
 
 def _version_callback(value: bool) -> None:

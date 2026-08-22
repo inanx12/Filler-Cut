@@ -7,17 +7,21 @@ ffmpeg'e hiç ulaşılmaz) ya da `fillercut.cli.run` mock'u kullanılır.
 from __future__ import annotations
 
 import importlib.metadata
+import io
+import sys
 import tomllib
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner, Result
 
 import fillercut
-from fillercut.cli import app
+from fillercut.cli import _konsol_akislarini_ayarla, app, main_entry
 from fillercut.config import Config
 from fillercut.models import CutPlan, Segment
 from fillercut.pipeline import PipelineResult
+from fillercut.render.encoder import EncoderSelection, ProbeAttempt
 from fillercut.report.json_report import build_report
 
 runner = CliRunner()
@@ -196,3 +200,74 @@ def test_interactive_varsayilan_false() -> None:
         runner.invoke(app, ["video.mp4"])
     _, kwargs = m.call_args
     assert kwargs["interactive"] is False
+
+
+#: Crash'in gerçek kaynağı: konsola basılan probe özeti (`✓` = U+2713, cp1254'te
+#: YOK). Sabit metin değil gerçek nesne kullanılır — özet biçimi değişirse test
+#: onunla birlikte değişsin.
+_OZET = EncoderSelection(
+    name="nvenc",
+    ffmpeg_name="h264_nvenc",
+    attempts=(ProbeAttempt("nvenc", "h264_nvenc", True),),
+).summary
+
+
+def _cp1254_akis() -> io.TextIOWrapper:
+    """`fillercut video.mp4 > log.txt`'in Windows-TR'deki akışının aynısı.
+
+    Yönlendirilmiş stdout locale encoding'ine düşer (ölçüldü: `cp1254`,
+    `errors="surrogateescape"`) — surrogateescape ÇÖZMEZ, yalnız decode
+    tarafında iş görür; kodlanamayan `✓` yazımda patlar.
+    """
+    return io.TextIOWrapper(io.BytesIO(), encoding="cp1254", errors="surrogateescape")
+
+
+class TestKonsolAkisiDayanikliligi:
+    """v0.3.3: yönlendirilmiş çıktı koşuyu öldürmemeli."""
+
+    def test_ayarsiz_cp1254_akisi_ozet_basiminda_patlar(self) -> None:
+        # Kusurun kendisi sabitlenir: fix bunu ÖNLEMEZSE test yeşil kalır ve
+        # aşağıdaki testler anlamını yitirir.
+        akis = _cp1254_akis()
+        with pytest.raises(UnicodeEncodeError):
+            akis.write(_OZET)
+
+    def test_ayardan_sonra_crash_yok_ve_akis_surer(self) -> None:
+        akis = _cp1254_akis()
+        with patch.object(sys, "stdout", akis):
+            _konsol_akislarini_ayarla()
+            print(_OZET)
+            print("Bitti: cikti.mp4")  # akış kapanmadı, sonrası da yazılıyor
+            akis.flush()
+        yazilan = akis.buffer.getvalue().decode("cp1254")  # type: ignore[attr-defined]
+        assert "nvenc ?" in yazilan  # `✓` replace ile düştü
+        assert "Bitti: cikti.mp4" in yazilan
+
+    def test_stderr_de_ayarlanir(self) -> None:
+        akis = _cp1254_akis()
+        with patch.object(sys, "stderr", akis):
+            _konsol_akislarini_ayarla()
+            assert akis.errors == "replace"
+
+    def test_akis_none_ise_gecilir(self) -> None:
+        # pythonw altında sys.stdout None olabilir — ayar aracı öldürmemeli.
+        with patch.object(sys, "stdout", None), patch.object(sys, "stderr", None):
+            _konsol_akislarini_ayarla()
+
+    def test_reconfiguresuz_akis_gecilir(self) -> None:
+        # pytest capture / StringIO gibi sarmalayıcılarda `reconfigure` yok.
+        with patch.object(sys, "stdout", io.StringIO()):
+            _konsol_akislarini_ayarla()
+
+    def test_kapali_akis_gecilir(self) -> None:
+        akis = _cp1254_akis()
+        akis.close()
+        with patch.object(sys, "stdout", akis):
+            _konsol_akislarini_ayarla()  # ValueError sızmamalı
+
+    def test_main_entry_akislari_ayarlayip_appi_cagirir(self) -> None:
+        akis = _cp1254_akis()
+        with patch.object(sys, "stdout", akis), patch("fillercut.cli.app") as sahte_app:
+            main_entry()
+        assert akis.errors == "replace"  # ayar ilk echo'dan ÖNCE
+        sahte_app.assert_called_once_with()
