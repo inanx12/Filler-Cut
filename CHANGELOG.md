@@ -7,6 +7,97 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [0.3.3] — 2026-08-22
+
+Donanım kalibrasyonu + bir crash düzeltmesi. `h264_qsv` kalite argümanları
+ilk kez gerçek Intel donanımında ölçüldü (KI-6'nın QSV yarısı kapandı) ve
+yönlendirilmiş çıktıda koşuyu öldüren encoding hatası giderildi. Yeni
+bağımlılık yok.
+
+### Düzeltildi
+
+- **`render/encoder.py` — `h264_qsv` kalite argümanları kalibre edildi.**
+  v0.2'den beri tablodaki QSV girişi (`-preset medium -global_quality {crf}`)
+  "makul default"tu; gerçek donanımda hiç ölçülmemişti (KI-6). Intel UHD
+  iGPU'da (i5-12450HX, hibrit kip) iki gerçek klip × 7 aday ölçüldü — libx264
+  `crf 23` referansına karşı boyut, süre ve SSIM:
+  - **Mod ICQ değil CQP.** Eşit dosya boyutuna indirgendiğinde CQP iki klipte
+    de daha yüksek SSIM verdi (720p30 facecam: 0.98971 vs ~0.98903 @ 82 MB;
+    1080p60 düşük hareket: 0.99658 vs ~0.99623 @ 13.4 MB) ve daha hızlıydı
+    (45.6 vs 59.1 sn). Yeni arg seti: `-preset medium -q:v {crf}`.
+  - **Eşleme `-q:v = crf` (ofset 0).** Klip başına kazananlar çakıştı
+    (facecam'de crf+0, düşük hareketli klipte crf+3); tek doğrusal eşleme
+    gerektiği için karar aracın hedef içeriğine — konuşma/facecam — yaslandı.
+    Ofset 0 iki klipte de referansın SSIM'ine 0.001 içinde kalıyor.
+  - **Ölçüm sapması kayda geçti:** CQP sabit kuantizasyondur, x264'ün crf'i
+    gibi içeriğe uyarlanmaz — düşük hareketli 1080p60 klipte dosya referansı
+    %31 aştı (facecam'de %9). Sapma bilinçli olarak kalite yönünde bırakıldı
+    (NVENC'in `-2` ofsetiyle aynı tercih: bedeli daha büyük dosya).
+  - **`-q` değil `-q:v`.** Stream belirteci olmadan `-q` ses encoder'ına da
+    sızıyor: aynı komutta aac `-b:a 192k` hedefini bırakıp qscale VBR'a geçti
+    (241 kbps ölçüldü). Ürettikleri video akışı bit-birebir aynı (aynı md5),
+    yani ölçümler eşlemeye taşınıyor.
+  - `_KALITE_ARGS`'ın diğer satırlarına (`h264_nvenc`, `h264_amf`, `libx264`)
+    dokunulmadı. Ölçüm tabloları KNOWN_ISSUES.md KI-6'da.
+- **CLI — yönlendirilmiş stdout koşuyu öldürüyordu.** `fillercut video.mp4
+  > log.txt` (veya herhangi bir pipe) Windows-TR makinede traceback'le
+  ölüyordu: yönlendirilmiş stdout locale encoding'ine düşüyor (ölçüldü:
+  `cp1254`, `errors="surrogateescape"`) ve probe özetindeki `✓` (U+2713)
+  cp1254'te yok → `UnicodeEncodeError`. Çıktı terminalde kalınca görünmüyor,
+  log alan herkesi vuruyordu. `main_entry` artık stdout+stderr'i
+  `errors="replace"`e ayarlıyor. `encoding="utf-8"` BİLİNÇLİ olarak
+  seçilmedi: locale encoding'i korumak gerçek konsolda kod sayfasıyla
+  çelişme riskini sıfırlıyor, bedeli yalnız süs karakteri — gerçek koşuda
+  doğrulandı, `log.txt`'de `—` (0x97) ve `ı` (0xFD) sağlam, yalnız `✓` → `?`.
+  Bu, v0.3.2'nin subprocess `errors="replace"` temizliğinin **yazma**
+  tarafındaki eşleniğidir: orada dışarıdan gelen byte'lar, burada dışarıya
+  giden metin. Guard'lar sessizce geçilir (akış `None` — pythonw;
+  `reconfigure` yok — StringIO/capture; akış kapalı — `ValueError`), çünkü
+  konsol kurulumunun kendisi aracı öldürmemeli.
+
+### Değişti
+
+- **`console_scripts` hedefi `fillercut.cli:app` → `fillercut.cli:main_entry`.**
+  Akış ayarı ilk `echo`'dan önce çalışmak zorunda; modül seviyesinde
+  yapılamaz, çünkü `fillercut.cli`'yi import etmek (testler, araçlar)
+  çağıranın akışlarını değiştirmemeli. **Not:** bu paketleme değişikliğidir,
+  etkili olması için `pip install -e .` gerekir.
+
+### Testler
+
+- QSV değer sabitlemesi CQP'ye güncellendi; `-q:v`'nin stream belirteçli
+  olması ve `[0, 51]` kırpması ayrıca kilitlendi.
+- `tests/test_encoder.py::TestGercekQsvProbe` — NVENC muadilinin QSV
+  karşılığı (`@pytest.mark.ffmpeg`): probe, QSV öncelikli seçim ve üretilen
+  arg setiyle gerçek encode. Donanım yoksa kendi kendine skip eder.
+- `tests/test_cli.py::TestKonsolAkisiDayanikliligi` — cp1254 sahte akışa
+  gerçek `EncoderSelection.summary` basımı: crash yok, `✓` replace ile düşüyor,
+  akış sürüyor; üç guard yolu ayrıca kilitli.
+- Kilit testler v0.3.2 desenine uygun şekilde **fix'siz kırmızı** olduğu
+  doğrulanarak eklendi: fix devre dışı bırakılınca 3 test düştü ve anası tam
+  da üretimdeki hatayı verdi (`'charmap' codec can't encode character '✓'`).
+- Toplam test sayısı 417 → 431 (429 passed, 2 skipped); `ffmpeg` marker'lı
+  test 5 → 8.
+
+### Belgeler
+
+- `KNOWN_ISSUES.md` KI-6: başlık "QSV yarısı: Çözüldü" olarak işaretlendi
+  (kayıt silinmedi), seçenek envanteri + iki klip için tam ölçüm tabloları +
+  seçim gerekçesi + uçtan uca doğrulama eklendi. **AMF yarısı ayrı bölümde
+  AÇIK**, "AMD günü" notu korundu ve tekrar edilecek yöntem yazıldı.
+- `AGENTS.md`: "AMF/QSV kalite argümanları kalibre EDİLMEDİ" notu AMF'ye
+  daraltıldı, seçilen QSV arg seti ve `-q:v` tuzağı eklendi; QSV'nin aynı
+  `-encoders` listesiyle önce patlayıp (hibrit kip kapalıyken) sonra çalışması
+  DESIGN.md §5'in probe gerekçesinin ikinci doğrulaması olarak kayda geçti.
+
+### Bilinen sınırlar
+
+- **KI-6 AMF yarısı açık** — AMD donanımı yok; kalibrasyon "AMD günü"nde
+  QSV'nin deseniyle tekrarlanacak (referans → aday grid'i → boyut/süre/SSIM →
+  crf eşlemesi), adaylar önce `ffmpeg -h encoder=h264_amf` ile doğrulanacak.
+
+[0.3.3]: https://github.com/inanx12/Filler-Cut/releases/tag/v0.3.3
+
 ## [0.3.2] — 2026-08-21
 
 v0.3.1'de açılan iki bug sınıfının kapanışı: decode hatası kalan **beş**
