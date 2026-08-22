@@ -121,6 +121,15 @@ sarmalayıcısında kapatıldı (`audio/probe.py`, `audio/extractor.py`,
 bayrağı ve tek kaynaklı sürüm okuması. Davranış değişikliği yok: parse
 mantığı, `reason` formatları ve JSON alanları aynı.
 
+**v0.3.3 TAMAMLANDI** — donanım kalibrasyonu + bir crash düzeltmesi:
+(a) `h264_qsv` kalite argümanları ilk kez gerçek Intel donanımında ölçüldü
+(Intel UHD / i5-12450HX hibrit kip, iki klip × 7 aday, boyut/süre/SSIM) →
+ICQ yerine CQP, `-preset medium -q:v {crf}`; **KI-6'nın QSV yarısı kapandı**,
+AMF yarısı açık. (b) Yönlendirilmiş stdout (`> log.txt`, pipe) Windows-TR'de
+`✓` yüzünden `UnicodeEncodeError` ile koşuyu öldürüyordu — `main_entry`
+akışları `errors="replace"`e ayarlıyor, `console_scripts` hedefi
+`cli:main_entry` oldu (bu paketleme değişikliği `pip install -e .` ister).
+
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
 **v0.1**
@@ -185,7 +194,16 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `render/render.py`: `errors="replace"` (hata yolunda "hangi segment" bilgisi korunur) + 2 kilit testi | `7258e63` |
 | `cli.py` `--version` (typer eager option) + `__init__.__version__` artık `importlib.metadata`'dan okunur (tek kaynak: `pyproject.toml`) + 5 kilit testi | `2c85c9a` |
 
-**Test sayısı:** 424 (`python -m pytest` → 422 passed, 2 skipped). Bunun 414'ü
+**v0.3.3**
+
+| Modül | Commit |
+|---|---|
+| `render/encoder.py`: `h264_qsv` kalibrasyonu — ICQ → CQP, `-q:v = crf` (Intel UHD'de iki klip × 7 aday boyut/süre/SSIM); `-q` DEĞİL `-q:v` (belirteçsiz biçim aac `-b:a` hedefini bozuyor) + `TestGercekQsvProbe` ve 4 değer kilidi | `42ca3e9` |
+| `KNOWN_ISSUES.md` KI-6: QSV yarısı "Çözüldü" — envanter + ölçüm tabloları + seçim gerekçesi; AMF yarısı ayrı bölümde AÇIK | `93f2f2e` |
+| `cli.py`: `main_entry` — stdout/stderr `errors="replace"` (yönlendirilmiş çıktı crash'i), `console_scripts` hedefi değişti + 7 kilit testi | `243442f` |
+| `CHANGELOG.md` v0.3.3 + `pyproject.toml` `0.3.3`'e bump | `706742e`, `a3d159a` |
+
+**Test sayısı:** 431 (`python -m pytest` → 429 passed, 2 skipped). Bunun 421'i
 marker'sız; 8'i `ffmpeg`, 2'si `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — CI `-m "not ffmpeg and not wcpp"` ile atlar, donanım/model
 yoksa ilgili testler kendi kendine skip eder.
