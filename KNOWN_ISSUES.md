@@ -183,6 +183,22 @@ CUDA binary (resmi cublas-12.4 paketi, aynı tag) ile aynı kayıtta kıyasland�
   KI-5 anomalisi compute yolundan bağımsız, modele ait.
 - Uçtan uca doğrulama: `backend = "whispercpp"` + Vulkan binary ile
   `fillercut` akışı sorunsuz tamamlandı (kesimler + reason zincirleri).
+- **Backend-varyant tuzağı kabul testini vurdu (2026-08):** referans
+  eşleşmesi kelime METNİYLE yapıldığından Vulkan koşusu `kat`/`wishfur`
+  satırlarında "referans kelimesi çıktıda yok" diye kırmızı veriyordu —
+  projenin kendi dağıttığı binary kendi kabul testini kırıyordu. Harness
+  varyant-toleranslı hâle getirildi (`tests/data/wcpp_reference_tr.json`'da
+  opsiyonel `varyantlar` alanı; elle doğrulanmış SINIRLAR değişmedi, yalnız
+  eşleştirme metadatası). İki binary yan yana ölçüldü: kelime sayısı aynı
+  (16/16), en büyük CUDA↔Vulkan sınır farkı **180 ms** (tolerans 300 ms) —
+  yani sınırlar backend'e göre pratikte aynı, değişen yalnız uydurmanın
+  yazımı ve `filir|kat` ayrım noktası. Ölçüm bir sınıflandırma hatası da
+  ortaya çıkardı: `kat` `temiz_akis` sanılıyordu, ama uydurma `filir kat`
+  bölgesinin iç ayrım noktası backend'e göre kayıyor (CUDA 4640, Vulkan
+  4460) — sapma duraklamadan değil zincir kaymasından geliyor. CUDA'da
+  −208 ms ile toleransın içinde, Vulkan'da −388 ms ile dışında kalıyordu;
+  kelime `zincir_kaymasi` sınıfına taşındı (komşusu `filir` gibi). Kabul
+  testi artık her iki binary'de de 3/3 yeşil.
 
 ### KI-1 zincir şişmesi re-anchor'ı (v0.4.0) — **kısmen çözüldü**
 

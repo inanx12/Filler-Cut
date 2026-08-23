@@ -396,7 +396,134 @@ class TestWhisperCppTranscriber:
         assert WhisperCppTranscriber(model).language == LANGUAGE == "tr"
 
 
+# ─── Saf: referans eşleştirme (varyant toleransı) ─────────────────────────────
+
+
+class TestVaryantEslestirme:
+    """`_referans_adaylari` — backend'e göre değişen YAZIMI kabul eder, sınırı değil.
+
+    Bu testler gerçek model/binary İSTEMEZ (marker'sız): eşleştirme yüzeyi saf
+    fonksiyondur, sentetik `Word` listeleriyle kilitlenir. Vurduğu tuzak KI-1'de
+    belgeli — CUDA `kat`/`wishfur`, Vulkan `kağıt`/`Vişvır`.
+    """
+
+    @staticmethod
+    def _by_text(words: list[Word]) -> dict[str, list[Word]]:
+        by_text: dict[str, list[Word]] = {}
+        for w in words:
+            by_text.setdefault(w.text.strip().lower(), []).append(w)
+        return by_text
+
+    @staticmethod
+    def _w(text: str, start: int, end: int) -> Word:
+        return Word(text=text, start_ms=start, end_ms=end, confidence=0.9)
+
+    def test_varyant_yazim_eslesir(self) -> None:
+        vulkan = [self._w("kağıt", 4_460, 5_120)]
+        beklenen = {"text": "kat", "start_ms": 4_848, "end_ms": 5_057, "varyantlar": ["kağıt"]}
+        adaylar = _referans_adaylari(self._by_text(vulkan), beklenen)
+        assert [w.text for w in adaylar] == ["kağıt"]
+
+    def test_asil_yazim_varyant_varken_de_eslesir(self) -> None:
+        cuda = [self._w("kat", 4_640, 5_100)]
+        beklenen = {"text": "kat", "start_ms": 4_848, "end_ms": 5_057, "varyantlar": ["kağıt"]}
+        assert [w.text for w in _referans_adaylari(self._by_text(cuda), beklenen)] == ["kat"]
+
+    def test_varyantsiz_girdide_eski_davranis_birebir(self) -> None:
+        words = [self._w("yani", 11_460, 12_050), self._w("başka", 1_000, 1_500)]
+        beklenen = {"text": "yani", "start_ms": 11_462, "end_ms": 12_069}
+        assert [w.text for w in _referans_adaylari(self._by_text(words), beklenen)] == ["yani"]
+        # Varyant listesi YOKKEN başka hiçbir yazım kabul edilmez (regresyon kilidi).
+        yok = {"text": "kat", "start_ms": 4_848, "end_ms": 5_057}
+        assert _referans_adaylari(self._by_text([self._w("kağıt", 4_460, 5_120)]), yok) == []
+
+    def test_kabul_edilen_metinler_normalize_edilir(self) -> None:
+        # `by_text` sözlüğüyle aynı normalizasyon: strip + lower.
+        beklenen = {"text": "  Kat ", "varyantlar": ["Kağıt"]}
+        assert _kabul_edilen_metinler(beklenen) == ["kat", "kağıt"]
+
+    def test_turkce_I_tuzagi_belgeli(self) -> None:
+        """Normalizasyon DÜZ ``str.lower()``'dır — TR-safe lower DEĞİL.
+
+        Bu bilinçlidir: eşleştirme `by_text` sözlüğüyle aynı normalizasyonu
+        kullanmak zorunda, o da ASR çıktısını düz `.lower()` ile anahtarlıyor.
+        Bedeli Türkçe I tuzağı: ``"KAĞIT".lower()`` → ``kağit`` (noktasız ı
+        DEĞİL). Sonuç: varyantlar referans dosyasına **backend'in bastığı
+        yazımla** yazılmalı; büyük harfli noktasız-ı içeren bir varyant
+        eşleşmez. `detect/fillers.py`'nin TR-safe lower'ı buraya taşınmaz —
+        o filler karşılaştırmasına özgüdür (ı→i katlaması + tekrar sıkıştırma),
+        kelime eşleştirmesi için fazla agresiftir.
+        """
+        assert _kabul_edilen_metinler({"text": "KAĞIT"}) == ["kağit"]
+        assert _kabul_edilen_metinler({"text": "kağıt"}) == ["kağıt"]
+
+    def test_bos_varyant_listesi_zararsiz(self) -> None:
+        beklenen = {"text": "kat", "varyantlar": []}
+        assert _kabul_edilen_metinler(beklenen) == ["kat"]
+
+    def test_birden_cok_aday_sirayla_ve_tekil(self) -> None:
+        # Aynı yazım iki kez geçebilir (tekrar eden kelime) → ikisi de aday;
+        # farklı varyantlar da toplanır, aynı nesne iki kez sayılmaz.
+        words = [
+            self._w("kat", 4_640, 5_100),
+            self._w("kağıt", 9_000, 9_400),
+            self._w("kat", 12_000, 12_300),
+        ]
+        beklenen = {"text": "kat", "varyantlar": ["kağıt", "kat"]}
+        adaylar = _referans_adaylari(self._by_text(words), beklenen)
+        assert [(w.text, w.start_ms) for w in adaylar] == [
+            ("kat", 4_640),
+            ("kat", 12_000),
+            ("kağıt", 9_000),
+        ]
+
+    def test_eslesme_yoksa_bos_liste(self) -> None:
+        words = [self._w("merhaba", 0, 500)]
+        beklenen = {"text": "kat", "varyantlar": ["kağıt"]}
+        assert _referans_adaylari(self._by_text(words), beklenen) == []
+
+    def test_referans_dosyasindaki_varyantlar_ki1_ile_uyumlu(self) -> None:
+        """Referans dosyası KI-1'de belgeli iki varyantı taşımalı (belge kilidi)."""
+        ref = json.loads(_REFERANS_JSON.read_text(encoding="utf-8"))
+        varyantli = {
+            k["text"]: k["varyantlar"] for k in ref["words"] if k.get("varyantlar")
+        }
+        assert varyantli == {"kat": ["kağıt"], "wishfur": ["Vişvır"]}
+
+
 # ─── Gerçek model (marker'lı) ─────────────────────────────────────────────────
+
+
+def _kabul_edilen_metinler(beklenen: dict[str, Any]) -> list[str]:
+    """Referans girdisinin kabul ettiği yazımlar: ``text`` + opsiyonel ``varyantlar``.
+
+    KI-1'de belgeli gerçek: compute backend'i (CUDA / Vulkan / ileride HIP)
+    uydurma kelimelerin **kimliğini** değiştiriyor, sayısını değil — aynı kayıt
+    CUDA'da ``kat`` / ``wishfur``, Vulkan'da ``kağıt`` / ``Vişvır`` yazılıyor.
+    Metin eşleşmesi tek yazıma bağlı kalırsa projenin KENDİ dağıttığı Vulkan
+    binary'si kabul testini kırar. Karşılaştırma metinde toleranslı, **sınırda
+    değil**: elle doğrulanmış zamanlar varyanttan bağımsızdır ve değişmez.
+
+    Normalizasyon `by_text` sözlüğüyle aynı: strip + lower.
+    """
+    metinler = [str(beklenen["text"]), *(str(v) for v in beklenen.get("varyantlar", []))]
+    return [m.strip().lower() for m in metinler]
+
+
+def _referans_adaylari(
+    by_text: dict[str, list[Word]], beklenen: dict[str, Any]
+) -> list[Word]:
+    """Referans girdisiyle eşleşen kelimeler — varyantlar dahil, çıktı sırasıyla.
+
+    Aynı kelime iki yazımdan birden gelemez (kimlikle tekilleştirilir); varyantı
+    olmayan girdide davranış eski hâliyle birebir aynıdır (yalnız ``text``).
+    """
+    adaylar: list[Word] = []
+    for metin in _kabul_edilen_metinler(beklenen):
+        for w in by_text.get(metin, []):
+            if not any(w is mevcut for mevcut in adaylar):
+                adaylar.append(w)
+    return adaylar
 
 
 def _gercek_binary() -> str | None:
@@ -499,10 +626,12 @@ class TestGercekModel:
         satirlar = [f"{'kelime':<18}{'re-anchor':<14}{'referans':<14}{'sapma s/e':<14}sinif"]
         hatalar: list[str] = []
         for beklenen in ref["words"]:
-            metin = str(beklenen["text"]).strip().lower()
             sinif = str(beklenen.get("sinif", "temiz_akis"))
-            adaylar = by_text.get(metin, [])
-            assert adaylar, f"referans kelimesi çıktıda yok: {beklenen['text']!r}"
+            adaylar = _referans_adaylari(by_text, beklenen)
+            assert adaylar, (
+                f"referans kelimesi çıktıda yok: {beklenen['text']!r} "
+                f"(kabul edilen yazımlar: {_kabul_edilen_metinler(beklenen)})"
+            )
             w = self._en_yakin(adaylar, beklenen["start_ms"], beklenen["end_ms"])
             ds = w.start_ms - int(beklenen["start_ms"])
             de = w.end_ms - int(beklenen["end_ms"])
@@ -540,16 +669,19 @@ class TestGercekModel:
         capali = reanchor_words(ham, self._sessizlik_haritasi())
         tol = int(ref["tolerance_ms"])
 
-        def _bul(liste: list[Word], metin: str, bs: int, be: int) -> Word | None:
-            adaylar = [w for w in liste if w.text.strip().lower() == metin]
+        def _bul(liste: list[Word], beklenen: dict[str, Any], bs: int, be: int) -> Word | None:
+            by_text: dict[str, list[Word]] = {}
+            for w in liste:
+                by_text.setdefault(w.text.strip().lower(), []).append(w)
+            adaylar = _referans_adaylari(by_text, beklenen)
             return self._en_yakin(adaylar, bs, be) if adaylar else None
 
         for beklenen in ref["words"]:
             if beklenen.get("sinif") != "temiz_akis":
                 continue
-            metin = str(beklenen["text"]).strip().lower()
+            metin = str(beklenen["text"])
             bs, be = int(beklenen["start_ms"]), int(beklenen["end_ms"])
-            once, sonra = _bul(ham, metin, bs, be), _bul(capali, metin, bs, be)
+            once, sonra = _bul(ham, beklenen, bs, be), _bul(capali, beklenen, bs, be)
             assert once is not None and sonra is not None, f"kelime yok: {metin!r}"
             if abs(once.start_ms - bs) <= tol and abs(once.end_ms - be) <= tol:
                 assert abs(sonra.start_ms - bs) <= tol and abs(sonra.end_ms - be) <= tol, (

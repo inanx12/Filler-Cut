@@ -1,13 +1,13 @@
 {
   "_template": false,
-  "_aciklama": "GERÇEK whisper-cli '-ml 1 -sow' çıktısının kelime SINIRLARINI elle doğrulamak için referans. Ses (test_konusma.wav) dinlenerek doldurulur. Model: ggml-large-v3-turbo-q5_0.bin (KI-1 ana koşu). v0.4.0'dan beri kıyas RE-ANCHOR SONRASI sınırlarla yapılır (transcribe/reanchor.py) — pipeline'ın DETECT'e verdiği sınırlar bunlardır.",
+  "_aciklama": "GERÇEK whisper-cli '-ml 1 -sow' çıktısının kelime SINIRLARINI elle doğrulamak için referans. Ses (test_konusma.wav) dinlenerek doldurulur. Model: ggml-large-v3-turbo-q5_0.bin (KI-1 ana koşu). v0.4.0'dan beri kıyas RE-ANCHOR SONRASI sınırlarla yapılır (transcribe/reanchor.py) — pipeline'ın DETECT'e verdiği sınırlar bunlardır. Bir kelimenin opsiyonel 'varyantlar' listesi varsa eşleştirme o yazımları da kabul eder — compute backend'i (CUDA/Vulkan/HIP) uydurma kelimelerin YAZIMINI değiştirebilir (KI-1); SINIRLAR elle doğrulanmıştır ve varyanttan bağımsızdır.",
   "_kiyas_disi": "TARİHÇE (v0.3, re-anchor'dan önce): 10 kelime kıyas dışıydı (KI-1/KI-5 zincir şişmesi — wcpp duraklamaları komşu kelimelere ekliyor): Bugün ref 4262-4497 / wcpp 120-4180; filir 4574-4788 / 4180-4640; şey 6429-6928 / 6660-7630; wishfur 8165-8600 / 8040-8760; benim 8600-8893 / 8760-9220; ığılarımı 9037-9868 / 9220-10240; yakalayabilecek 9868-10805 / 10240-10990; mi 10805-10996 / 10990-11460; umarım 13064-13396 / 12050-13740; çalışır 13396-13923 / 13740-14820. Kalan 6 kelime duraklamasız akış bölgesindendi. v0.4.0'da 10'u da kıyas setine ALINDI; hangisinin re-anchor kapsamında olduğu her kelimenin 'sinif' alanında, ölçülen sonuç 'reanchor_ms'/'olculen_sapma_ms' alanlarında.",
   "_olcum": {
     "tarih": "2026-08",
     "kayit": "test_konusma.wav (16 kHz mono WAV'a çıkarılmış hâli)",
     "silencedetect": "noise=-35dB, d=0.4 (audio/silence.py modül sabitleri) — ffmpeg 8.1.2",
     "harita_ms": [[3164, 4182], [6931, 7638], [12099, 13066], [13899, 14514]],
-    "sonuc": "16 kelimenin 8'i tolerans içinde (6 temiz akış + 2 duraklama komşuluğu). Kalan 8 'zincir_kaymasi': sapma konuşmadan konuşmaya kayan zincirden gelir, o bölgede sessizlik YOKTUR — sessizlik tabanlı çapalama bunları düzeltemez (kapsam dışı, KI-1'de belgeli).",
+    "sonuc": "16 kelimenin 7'si tolerans içinde (5 temiz akış + 2 duraklama komşuluğu; 'kat' 2026-08'de zincir_kaymasi'na taşındı — bkz. o kelimenin notu). Kalan 8 'zincir_kaymasi': sapma konuşmadan konuşmaya kayan zincirden gelir, o bölgede sessizlik YOKTUR — sessizlik tabanlı çapalama bunları düzeltemez (kapsam dışı, KI-1'de belgeli).",
     "not": "reanchor_ms / olculen_sapma_ms değerleri bu ölçümün kaydıdır; eşik veya ffmpeg sürümü değişirse birkaç ms oynayabilir — testler bu değerleri EŞİTLİK olarak assert ETMEZ."
   },
   "tolerance_ms": 300,
@@ -35,7 +35,13 @@
       "text": "kat",
       "start_ms": 4848,
       "end_ms": 5057,
-      "sinif": "temiz_akis"
+      "sinif": "zincir_kaymasi",
+      "varyantlar": ["kağıt"],
+      "wcpp_ham_ms": [4640, 5100],
+      "reanchor_ms": [4640, 5100],
+      "olculen_sapma_ms": [-208, 43],
+      "olculen_sapma_vulkan_ms": [-388, 63],
+      "not": "Uydurma yazım (proje adı 'Filler-Cut' → 'filir kat'). KI-1: compute backend'i uydurmanın KİMLİĞİNİ değiştiriyor, sayısını değil — CUDA 'kat', Vulkan 'kağıt'. Sınırlar elle doğrulanmıştır ve varyant listesi yalnızca EŞLEŞTİRME metadatasıdır. SINIF DÜZELTMESİ (2026-08): önce 'temiz_akis' sanılmıştı; ölçüm bunu yanlışladı — bu kelime uydurma 'filir kat' bölgesinin ikinci yarısıdır ve bölgenin İÇ AYRIM NOKTASI backend'e göre kayıyor (CUDA 4640, Vulkan 4460). Sapma duraklamadan değil zincir kaymasından geliyor (komşusu 'filir' zaten zincir_kaymasi) ve o bölgede sessizlik yok — re-anchor kapsamı dışı. CUDA'da -208/+43 ile tolerans içinde kalıyordu, Vulkan'da -388/+63 ile dışına çıktı: vaka baştan eşikte duruyormuş."
     },
     {
       "text": "projesini",
@@ -79,7 +85,8 @@
       "wcpp_ham_ms": [8040, 8760],
       "reanchor_ms": [8040, 8760],
       "olculen_sapma_ms": [-125, 160],
-      "not": "Sessizlikle kesişmiyor; zaten tolerans içindeydi, re-anchor dokunmadı (regresyon kilidi)."
+      "varyantlar": ["Vişvır"],
+      "not": "Sessizlikle kesişmiyor; zaten tolerans içindeydi, re-anchor dokunmadı (regresyon kilidi). Uydurma yazım — KI-1: CUDA 'wishfur', Vulkan 'Vişvır' (varyant listesi yalnızca eşleştirme metadatası; sınırlar değişmez)."
     },
     {
       "text": "benim",
