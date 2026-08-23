@@ -65,19 +65,48 @@ class TestStartKirpma:
         assert _sinirlar(sonuc) == [("x", 500, 900)]
 
 
-# ─── Kural: boydan boya geçme → end = sessizlik.start ────────────────────────
+# ─── Kural: boydan boya geçme → UZUN kalan parça korunur ────────────────────
 
 
 class TestBoydanGecme:
-    def test_kelime_sessizligi_boydan_gecerse_end_kirpilir(self) -> None:
+    """Kelime sessizliği tümüyle yutmuşsa gerçek konuşma iki yanda da olabilir.
+
+    Kural: uzun kalan parça korunur (eşitlikte sol taraf). Gerekçe ölçümle
+    sabittir — KNOWN_ISSUES.md KI-1, `umarım` vakası: kısa tarafı tutmak start
+    sapmasını 1014 ms'de bırakıyordu, uzun taraf 2 ms'ye indiriyor.
+    """
+
+    def test_sag_parca_uzunsa_start_kirpilir(self) -> None:
         sonuc = reanchor_words([_w("uzun", 100, 5_000)], [_s(1_000, 2_000)])
+        assert _sinirlar(sonuc) == [("uzun", 2_000, 5_000)]
+
+    def test_sol_parca_uzunsa_end_kirpilir(self) -> None:
+        sonuc = reanchor_words([_w("uzun", 100, 4_200)], [_s(3_000, 4_000)])
+        assert _sinirlar(sonuc) == [("uzun", 100, 3_000)]
+
+    def test_esitlikte_sol_taraf_korunur(self) -> None:
+        # [1000, 2000) sessizliği: sol 900, sağ 900 → belirsiz, sol taraf.
+        sonuc = reanchor_words([_w("uzun", 100, 2_900)], [_s(1_000, 2_000)])
         assert _sinirlar(sonuc) == [("uzun", 100, 1_000)]
 
-    def test_iki_sessizligi_gecen_kelime_ilkinde_durur(self) -> None:
+    def test_umarim_vakasi_gercek_olcum(self) -> None:
+        """KI-1 `umarım` vakası (wcpp turbo/q5_0, test_konusma.wav).
+
+        Ham sınır 12050–13740, gerçek sessizlik 12099–13066, elle doğrulanmış
+        referans 13064–13396. Uzun taraf (sağ, 674 ms) korunur → start sapması
+        1014 ms yerine 2 ms. Kısa tarafı tutan eski kural −1014/−1297 veriyordu.
+        """
+        sonuc = reanchor_words([_w("umarım", 12_050, 13_740)], [_s(12_099, 13_066)])
+        assert _sinirlar(sonuc) == [("umarım", 13_066, 13_740)]
+        assert abs(sonuc[0].start_ms - 13_064) <= 300  # referansla ±300 ms içinde
+
+    def test_iki_sessizligi_gecen_kelime_her_ikisinde_daralir(self) -> None:
+        # [1000, 2000): sol 900 < sağ 7000 → start = 2000.
+        # [5000, 6000): sol 3000 = sağ 3000 → eşitlik, end = 5000.
         sonuc = reanchor_words(
             [_w("uzun", 100, 9_000)], [_s(1_000, 2_000), _s(5_000, 6_000)]
         )
-        assert _sinirlar(sonuc) == [("uzun", 100, 1_000)]
+        assert _sinirlar(sonuc) == [("uzun", 2_000, 5_000)]
 
 
 # ─── Kural: tam içerme (ghost kelime) → dokunulmaz ──────────────────────────
@@ -156,8 +185,10 @@ class TestSessizlikNormalizasyonu:
         assert reanchor_words([w], [_s(100, 500), _s(300, 900)])[0] is w
 
     def test_sirasiz_sessizlikle_kirpma_dogru(self) -> None:
+        # Sıralandıktan sonra: [1000, 2000) → sağ uzun, start = 2000;
+        # ardından [4000, 4500) → sol (2000 ms) uzun, end = 4000.
         sonuc = reanchor_words([_w("x", 100, 5_000)], [_s(4_000, 4_500), _s(1_000, 2_000)])
-        assert _sinirlar(sonuc) == [("x", 100, 1_000)]
+        assert _sinirlar(sonuc) == [("x", 2_000, 4_000)]
 
     def test_silence_disi_segment_valueerror(self) -> None:
         filler = Segment(start_ms=0, end_ms=100, kind="filler", reason="kesin filler")
@@ -194,9 +225,9 @@ class TestListeSozlesmesi:
         assert reanchor_words([w], [_s(900, 1_200)])[0] is w
 
     def test_ms_int_disiplini_korunur(self) -> None:
-        sonuc = reanchor_words([_w("x", 100, 5_000)], [_s(1_234, 2_000)])
+        sonuc = reanchor_words([_w("x", 100, 2_468)], [_s(1_234, 2_000)])
         assert isinstance(sonuc[0].end_ms, int)
-        assert sonuc[0].end_ms == 1_234
+        assert sonuc[0].end_ms == 1_234  # sol parça 1134 ms > sağ 468 ms
 
 
 # ─── İnvariant: ters aralık üretilemez ──────────────────────────────────────

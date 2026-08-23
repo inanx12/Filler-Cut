@@ -17,7 +17,10 @@ Kurallar (hepsi katı eşitsizlik; **değme kesişim kırpma sayılmaz** — KI-
 
 - `end` sessizliğin içindeyse → `end = sessizlik.start`
 - `start` sessizliğin içindeyse → `start = sessizlik.end`
-- kelime sessizliği boydan boya geçiyorsa → `end = sessizlik.start`
+- kelime sessizliği boydan boya geçiyorsa → **uzun kalan parça korunur**
+  (eşitlikte sol taraf). Gerçek konuşma sessizliğin iki yanında da olabilir;
+  gerçek koşu ölçümü (KI-1) kısa tarafı tutmanın sapmayı büyüttüğünü gösterdi
+  (`umarım`: start sapması 1014 ms → 2 ms).
 - kelime TAMAMEN sessizliğin içindeyse (ghost kelime) → **dokunulmaz**;
   bu fazda silme/flag'leme yok, transkript bütünlüğü korunur (yalnızca DEBUG
   log'u düşer).
@@ -85,8 +88,18 @@ def _reanchor_word(word: Word, araliklar: list[tuple[int, int]]) -> Word:
                 word.text, word.start_ms, word.end_ms, s_start, s_end,
             )
             return word
-        if start < s_start:
-            end = s_start  # end sessizliğin içinde VEYA kelime boydan geçiyor
+        if start < s_start and s_end < end:
+            # Boydan geçme: kelime sessizliği tümüyle yutmuş — gerçek konuşma
+            # sessizliğin SOLUNDA da SAĞINDA da olabilir. UZUN olan parça
+            # korunur (eşitlikte sol taraf). Ölçüm gerekçesi KNOWN_ISSUES.md
+            # KI-1'de: `umarım` vakasında kısa tarafı tutmak start sapmasını
+            # 1014 ms'de bırakıyordu, uzun taraf 2 ms'ye indiriyor.
+            if (end - s_end) > (s_start - start):
+                start = s_end
+            else:
+                end = s_start
+        elif start < s_start:
+            end = s_start  # end sessizliğin içinde, start sessizliğin solunda
         else:
             start = s_end  # start sessizliğin içinde, end sessizliğin sağında
 
