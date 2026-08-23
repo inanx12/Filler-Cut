@@ -1,38 +1,147 @@
 {
   "_template": false,
-  "_aciklama": "GERÇEK whisper-cli '-ml 1 -sow' çıktısının kelime SINIRLARINI elle doğrulamak için referans. Ses (test_konusma.wav) dinlenerek doldurulur. Model: ggml-large-v3-turbo-q5_0.bin (KI-1 ana koşu).",
-  "_kiyas_disi": "10 kelime kıyas dışı (KI-1/KI-5 zincir şişmesi — wcpp duraklamaları komşu kelimelere ekliyor): Bugün ref 4262-4497 / wcpp 120-4180; filir 4574-4788 / 4180-4640; şey 6429-6928 / 6660-7630; wishfur 8165-8600 / 8040-8760; benim 8600-8893 / 8760-9220; ığılarımı 9037-9868 / 9220-10240; yakalayabilecek 9868-10805 / 10240-10990; mi 10805-10996 / 10990-11460; umarım 13064-13396 / 12050-13740; çalışır 13396-13923 / 13740-14820. Kalan 6 kelime duraklamasız akış bölgesinden — reçete doğrulaması bu kapsamda yapılır.",
+  "_aciklama": "GERÇEK whisper-cli '-ml 1 -sow' çıktısının kelime SINIRLARINI elle doğrulamak için referans. Ses (test_konusma.wav) dinlenerek doldurulur. Model: ggml-large-v3-turbo-q5_0.bin (KI-1 ana koşu). v0.4.0'dan beri kıyas RE-ANCHOR SONRASI sınırlarla yapılır (transcribe/reanchor.py) — pipeline'ın DETECT'e verdiği sınırlar bunlardır.",
+  "_kiyas_disi": "TARİHÇE (v0.3, re-anchor'dan önce): 10 kelime kıyas dışıydı (KI-1/KI-5 zincir şişmesi — wcpp duraklamaları komşu kelimelere ekliyor): Bugün ref 4262-4497 / wcpp 120-4180; filir 4574-4788 / 4180-4640; şey 6429-6928 / 6660-7630; wishfur 8165-8600 / 8040-8760; benim 8600-8893 / 8760-9220; ığılarımı 9037-9868 / 9220-10240; yakalayabilecek 9868-10805 / 10240-10990; mi 10805-10996 / 10990-11460; umarım 13064-13396 / 12050-13740; çalışır 13396-13923 / 13740-14820. Kalan 6 kelime duraklamasız akış bölgesindendi. v0.4.0'da 10'u da kıyas setine ALINDI; hangisinin re-anchor kapsamında olduğu her kelimenin 'sinif' alanında, ölçülen sonuç 'reanchor_ms'/'olculen_sapma_ms' alanlarında.",
+  "_olcum": {
+    "tarih": "2026-08",
+    "kayit": "test_konusma.wav (16 kHz mono WAV'a çıkarılmış hâli)",
+    "silencedetect": "noise=-35dB, d=0.4 (audio/silence.py modül sabitleri) — ffmpeg 8.1.2",
+    "harita_ms": [[3164, 4182], [6931, 7638], [12099, 13066], [13899, 14514]],
+    "sonuc": "16 kelimenin 8'i tolerans içinde (6 temiz akış + 2 duraklama komşuluğu). Kalan 8 'zincir_kaymasi': sapma konuşmadan konuşmaya kayan zincirden gelir, o bölgede sessizlik YOKTUR — sessizlik tabanlı çapalama bunları düzeltemez (kapsam dışı, KI-1'de belgeli).",
+    "not": "reanchor_ms / olculen_sapma_ms değerleri bu ölçümün kaydıdır; eşik veya ffmpeg sürümü değişirse birkaç ms oynayabilir — testler bu değerleri EŞİTLİK olarak assert ETMEZ."
+  },
   "tolerance_ms": 300,
   "words": [
     {
+      "text": "Bugün",
+      "start_ms": 4262,
+      "end_ms": 4497,
+      "sinif": "zincir_kaymasi",
+      "wcpp_ham_ms": [120, 4180],
+      "reanchor_ms": [120, 3164],
+      "olculen_sapma_ms": [-4142, -1333],
+      "not": "Patolojik vaka: ham aralık referansla HİÇ kesişmiyor (120-4180 vs 4262-4497). Kırpma daraltır, kaydıramaz — hiçbir eşikte düzelmez."
+    },
+    {
+      "text": "filir",
+      "start_ms": 4574,
+      "end_ms": 4788,
+      "sinif": "zincir_kaymasi",
+      "wcpp_ham_ms": [4180, 4640],
+      "reanchor_ms": [4182, 4640],
+      "olculen_sapma_ms": [-392, -148]
+    },
+    {
       "text": "kat",
       "start_ms": 4848,
-      "end_ms": 5057
+      "end_ms": 5057,
+      "sinif": "temiz_akis"
     },
     {
       "text": "projesini",
       "start_ms": 5098,
-      "end_ms": 5590
+      "end_ms": 5590,
+      "sinif": "temiz_akis"
     },
     {
       "text": "test",
       "start_ms": 5590,
-      "end_ms": 5880
+      "end_ms": 5880,
+      "sinif": "temiz_akis"
     },
     {
       "text": "ediyorum",
       "start_ms": 5880,
-      "end_ms": 6429
+      "end_ms": 6429,
+      "sinif": "temiz_akis"
+    },
+    {
+      "text": "şey",
+      "start_ms": 6429,
+      "end_ms": 6928,
+      "sinif": "duraklama_komsulugu",
+      "wcpp_ham_ms": [6660, 7630],
+      "reanchor_ms": [6660, 6931],
+      "olculen_sapma_ms": [231, 3],
+      "not": "Re-anchor'ın çözdüğü asıl sınıf: kelime sonu 679 ms'lik duraklamayı yutmuştu, end sapması 702 ms → 3 ms."
     },
     {
       "text": "bakalım",
       "start_ms": 7637,
-      "end_ms": 8165
+      "end_ms": 8165,
+      "sinif": "temiz_akis"
+    },
+    {
+      "text": "wishfur",
+      "start_ms": 8165,
+      "end_ms": 8600,
+      "sinif": "duraklama_komsulugu",
+      "wcpp_ham_ms": [8040, 8760],
+      "reanchor_ms": [8040, 8760],
+      "olculen_sapma_ms": [-125, 160],
+      "not": "Sessizlikle kesişmiyor; zaten tolerans içindeydi, re-anchor dokunmadı (regresyon kilidi)."
+    },
+    {
+      "text": "benim",
+      "start_ms": 8600,
+      "end_ms": 8893,
+      "sinif": "zincir_kaymasi",
+      "wcpp_ham_ms": [8760, 9220],
+      "reanchor_ms": [8760, 9220],
+      "olculen_sapma_ms": [160, 327]
+    },
+    {
+      "text": "ığılarımı",
+      "start_ms": 9037,
+      "end_ms": 9868,
+      "sinif": "zincir_kaymasi",
+      "wcpp_ham_ms": [9220, 10240],
+      "reanchor_ms": [9220, 10240],
+      "olculen_sapma_ms": [183, 372]
+    },
+    {
+      "text": "yakalayabilecek",
+      "start_ms": 9868,
+      "end_ms": 10805,
+      "sinif": "zincir_kaymasi",
+      "wcpp_ham_ms": [10240, 10990],
+      "reanchor_ms": [10240, 10990],
+      "olculen_sapma_ms": [372, 185]
+    },
+    {
+      "text": "mi",
+      "start_ms": 10805,
+      "end_ms": 10996,
+      "sinif": "zincir_kaymasi",
+      "wcpp_ham_ms": [10990, 11460],
+      "reanchor_ms": [10990, 11460],
+      "olculen_sapma_ms": [185, 464]
     },
     {
       "text": "yani",
       "start_ms": 11462,
-      "end_ms": 12069
+      "end_ms": 12069,
+      "sinif": "temiz_akis"
+    },
+    {
+      "text": "umarım",
+      "start_ms": 13064,
+      "end_ms": 13396,
+      "sinif": "zincir_kaymasi",
+      "wcpp_ham_ms": [12050, 13740],
+      "reanchor_ms": [13066, 13740],
+      "olculen_sapma_ms": [2, 344],
+      "not": "Boydan geçme kuralının (uzun kalan parça) kazandığı vaka: start sapması -1014 ms → +2 ms; end 344 ms ile toleransın 44 ms dışında kaldı."
+    },
+    {
+      "text": "çalışır",
+      "start_ms": 13396,
+      "end_ms": 13923,
+      "sinif": "zincir_kaymasi",
+      "wcpp_ham_ms": [13740, 14820],
+      "reanchor_ms": [14514, 14820],
+      "olculen_sapma_ms": [1118, 897],
+      "not": "Boydan geçme kuralının ÖDÜNÜ: burada gerçek konuşma kısa (sol) parçada, uzun taraf yanlış tarafa düşüyor (+344/-24 → +1118/+897). Toplam sapmada kural yine de en iyisi — KI-1'deki üç varyant tablosuna bak."
     }
   ]
 }

@@ -9,6 +9,10 @@ gerçek binary olmadan uçtan uca test edilir.
 ``@pytest.mark.wcpp`` ile işaretlidir (CI'da ``-m "not wcpp"`` ile atlanır) ve
 binary/model/kayıt yoksa çalışma anında ``pytest.skip`` eder — donanımsız/
 modelsiz makinede suite yeşil kalır.
+
+Referans kıyası (v0.4.0) RE-ANCHOR SONRASI sınırlarla yapılır; bu yüzden o iki
+test ayrıca ``@pytest.mark.ffmpeg`` taşır — sessizlik haritası gerçek ffmpeg
+koşusuyla çıkarılır (ffmpeg/ffprobe yoksa skip).
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -24,8 +29,12 @@ from unittest.mock import patch
 
 import pytest
 
-from fillercut.models import Word
+from fillercut.audio.extractor import extract_audio
+from fillercut.audio.probe import probe_duration_ms
+from fillercut.audio.silence import detect_silence
+from fillercut.models import Segment, Word
 from fillercut.transcribe.base import Transcriber
+from fillercut.transcribe.reanchor import reanchor_words
 from fillercut.transcribe.wcpp_backend import (
     LANGUAGE,
     WhisperCppError,
@@ -438,8 +447,39 @@ class TestGercekModel:
         assert baslangiclar == sorted(baslangiclar), "kelimeler zaman sıralı değil"
         assert all(w.start_ms >= 0 and w.end_ms > w.start_ms for w in words)
 
+    def _sessizlik_haritasi(self) -> list[Segment]:
+        """Pipeline'ın kullandığı haritanın aynısı: 16 kHz WAV + silencedetect.
+
+        Re-anchor'ın girdisi budur (`silence_min_ms` süzgecinden GEÇMEMİŞ ham
+        harita — bkz. pipeline wiring'i). ffmpeg/ffprobe yoksa skip.
+        """
+        if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+            pytest.skip("ffmpeg/ffprobe PATH'te yok — sessizlik haritası çıkarılamaz")
+        with tempfile.TemporaryDirectory(prefix="fillercut_wcpp_") as tmp:
+            wav = Path(tmp) / "analiz.wav"
+            extract_audio(_KONUSMA_WAV, wav)
+            return detect_silence(wav, total_duration_ms=probe_duration_ms(wav))
+
+    @staticmethod
+    def _en_yakin(adaylar: list[Word], start_ms: int, end_ms: int) -> Word:
+        """Aynı metinli birden çok kelime varsa referansa en yakın olanı."""
+        return min(adaylar, key=lambda w: abs(w.start_ms - start_ms) + abs(w.end_ms - end_ms))
+
+    @pytest.mark.ffmpeg
     def test_kelime_sinirlari_elle_dogrulanmis_referansla(self) -> None:
-        """-ml 1 -sow kelime sınırlarını elle doğrulanmış referansla kıyaslar.
+        """RE-ANCHOR SONRASI kelime sınırlarını elle doğrulanmış referansla kıyaslar.
+
+        v0.4.0'dan beri kıyas, ham ASR çıktısıyla değil pipeline'ın DETECT'e
+        verdiği (çapalanmış) sınırlarla yapılır — ölçülen şey ürünün gerçekten
+        kullandığı zamanlardır.
+
+        Referanstaki her kelimenin bir ``sinif``ı vardır:
+
+        - ``temiz_akis`` / ``duraklama_komsulugu`` → re-anchor KAPSAMINDA,
+          ±``tolerance_ms`` içinde olmalı (kabul ölçütü).
+        - ``zincir_kaymasi`` → kapsam DIŞI: sapma konuşmadan konuşmaya kayan
+          zincirden gelir, o bölgede sessizlik yoktur (KI-1'de belgeli).
+          Assert edilmez; tabloya basılır ki sapma görünür kalsın.
 
         Referans (``tests/data/wcpp_reference_tr.json``) ELLE doldurulur (ses
         dinlenerek); template kaldıkça bu karşılaştırma atlanır (yapısal test
@@ -449,19 +489,71 @@ class TestGercekModel:
         if ref.get("_template", False) or not ref.get("words"):
             pytest.skip("referans elle doldurulmamış (wcpp_reference_tr.json _template=true)")
 
-        words = self._transkript()
+        ham = self._transkript()
+        words = reanchor_words(ham, self._sessizlik_haritasi())
         tol = int(ref["tolerance_ms"])
         by_text: dict[str, list[Word]] = {}
         for w in words:
             by_text.setdefault(w.text.strip().lower(), []).append(w)
 
+        satirlar = [f"{'kelime':<18}{'re-anchor':<14}{'referans':<14}{'sapma s/e':<14}sinif"]
+        hatalar: list[str] = []
         for beklenen in ref["words"]:
             metin = str(beklenen["text"]).strip().lower()
+            sinif = str(beklenen.get("sinif", "temiz_akis"))
             adaylar = by_text.get(metin, [])
             assert adaylar, f"referans kelimesi çıktıda yok: {beklenen['text']!r}"
-            sinirlar = [(w.start_ms, w.end_ms) for w in adaylar]
-            assert any(
-                abs(w.start_ms - beklenen["start_ms"]) <= tol
-                and abs(w.end_ms - beklenen["end_ms"]) <= tol
-                for w in adaylar
-            ), f"{beklenen['text']!r} sınırı ±{tol}ms dışında: {sinirlar}"
+            w = self._en_yakin(adaylar, beklenen["start_ms"], beklenen["end_ms"])
+            ds = w.start_ms - int(beklenen["start_ms"])
+            de = w.end_ms - int(beklenen["end_ms"])
+            icinde = abs(ds) <= tol and abs(de) <= tol
+            capali_aralik = f"{w.start_ms}-{w.end_ms}"
+            ref_aralik = f"{beklenen['start_ms']}-{beklenen['end_ms']}"
+            sapma = f"{ds:+d}/{de:+d}"
+            satirlar.append(
+                f"{beklenen['text']:<18}{capali_aralik:<14}{ref_aralik:<14}"
+                f"{sapma:<14}{sinif}{'' if icinde else '  [tolerans dışı]'}"
+            )
+            if sinif != "zincir_kaymasi" and not icinde:
+                hatalar.append(
+                    f"{beklenen['text']!r} ({sinif}) sınırı ±{tol}ms dışında: "
+                    f"re-anchor {w.start_ms}-{w.end_ms}, referans "
+                    f"{beklenen['start_ms']}-{beklenen['end_ms']}, sapma {ds:+d}/{de:+d}"
+                )
+        print("\n".join(satirlar))
+        ozet = "\n".join(hatalar)
+        assert not hatalar, f"re-anchor kapsamındaki kelimeler tolerans dışında:\n{ozet}"
+
+    @pytest.mark.ffmpeg
+    def test_reanchor_temiz_akis_kelimelerine_zarar_vermez(self) -> None:
+        """Regresyon kilidi: çapalama, zaten doğru olan kelimeleri bozmamalı.
+
+        `temiz_akis` sınıfındaki kelimeler duraklamasız bölgededir ve HAM
+        çıktıda da tolerans içindedir; re-anchor bunları tolerans dışına
+        itmemelidir (kırpma yalnız sessizliğe taşan uçlara dokunur).
+        """
+        ref = json.loads(_REFERANS_JSON.read_text(encoding="utf-8"))
+        if ref.get("_template", False) or not ref.get("words"):
+            pytest.skip("referans elle doldurulmamış (wcpp_reference_tr.json _template=true)")
+
+        ham = self._transkript()
+        capali = reanchor_words(ham, self._sessizlik_haritasi())
+        tol = int(ref["tolerance_ms"])
+
+        def _bul(liste: list[Word], metin: str, bs: int, be: int) -> Word | None:
+            adaylar = [w for w in liste if w.text.strip().lower() == metin]
+            return self._en_yakin(adaylar, bs, be) if adaylar else None
+
+        for beklenen in ref["words"]:
+            if beklenen.get("sinif") != "temiz_akis":
+                continue
+            metin = str(beklenen["text"]).strip().lower()
+            bs, be = int(beklenen["start_ms"]), int(beklenen["end_ms"])
+            once, sonra = _bul(ham, metin, bs, be), _bul(capali, metin, bs, be)
+            assert once is not None and sonra is not None, f"kelime yok: {metin!r}"
+            if abs(once.start_ms - bs) <= tol and abs(once.end_ms - be) <= tol:
+                assert abs(sonra.start_ms - bs) <= tol and abs(sonra.end_ms - be) <= tol, (
+                    f"re-anchor {metin!r} kelimesini tolerans DIŞINA itti: "
+                    f"{once.start_ms}-{once.end_ms} → {sonra.start_ms}-{sonra.end_ms} "
+                    f"(referans {bs}-{be})"
+                )
