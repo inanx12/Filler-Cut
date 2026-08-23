@@ -55,6 +55,13 @@ FILLER = Segment(
 )
 SIL_HAM = Segment(start_ms=100, end_ms=900, kind="silence", reason="ham sessizlik 800ms")
 SIL_FILTRE = Segment(start_ms=100, end_ms=900, kind="silence", reason="filtreli sessizlik 800ms")
+#: v0.4.0 re-anchor sonrası beklenen kelimeler: `merhaba` [0, 500) ham
+#: sessizlik haritasıyla (SIL_HAM = [100, 900)) kesişir → sonu sessizliğin
+#: BAŞINA çekilir. `Eee,` [3320, 4040) hiçbir sessizlikle kesişmez, dokunulmaz.
+WORDS_CAPALI = [
+    Word(text="merhaba", start_ms=0, end_ms=100, confidence=0.9),
+    WORDS[1],
+]
 PLAN = CutPlan(
     original_duration_ms=TOPLAM_MS,
     keep=[
@@ -174,9 +181,12 @@ class TestCagriSirasiVeVeriAkisi:
             "select_encoder",  # probe run() başında, tek sefer (v0.2)
             "probe",
             "extract",
+            # v0.4.0: sessizlik haritası TRANSCRIBE'dan ÖNCE — WAV'dan üretilir,
+            # transkriptten bağımsızdır ve re-anchor'ın girdisidir. Süre süzgeci
+            # (filter_silence) DETECT'te kalır; ffmpeg koşusu yine TEK.
+            "detect_silence",
             "transcribe",
             "detect_fillers",
-            "detect_silence",
             "filter_silence",
             "build_cutplan",
             "build_report",
@@ -220,8 +230,51 @@ class TestCagriSirasiVeVeriAkisi:
     ) -> None:
         run(girdi, config=Config(yes=True, aggressive=True),
             transcriber=_SahteTranscriber(katmanlar.sira))
-        assert katmanlar.fillers.call_args.args[0] == WORDS
+        # v0.4.0: DETECT'e giden kelimeler re-anchor'dan GEÇMİŞ olanlardır
+        # (WORDS değil WORDS_CAPALI) — ayrıntılı kilit aşağıdaki testte.
+        assert katmanlar.fillers.call_args.args[0] == WORDS_CAPALI
         assert katmanlar.fillers.call_args.kwargs["aggressive"] is True
+
+    def test_detect_fillers_reanchorlu_kelimeleri_alir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        """v0.4.0 invariant: re-anchor TRANSCRIBE ile DETECT ARASINDA uygulanır.
+
+        ASR ham çıktısı DETECT'e doğrudan gitmez: `merhaba` [0, 500) sonu ham
+        sessizlik haritasındaki [100, 900) bölgesine taşmıştır; DETECT bu
+        kelimeyi kırpılmış hâliyle ([0, 100)) görmelidir. Kesişmeyen `Eee,`
+        aynen akar. Bu assert düşerse çapalama wiring'i kopmuş demektir.
+        """
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        gelen = katmanlar.fillers.call_args.args[0]
+        assert [(w.text, w.start_ms, w.end_ms) for w in gelen] == [
+            ("merhaba", 0, 100),  # sessizliğe taşan uç kırpıldı
+            ("Eee,", 3_320, 4_040),  # sessizlikle kesişmiyor — dokunulmadı
+        ]
+        assert gelen[1] is WORDS[1]  # dokunulmayan kelime aynı nesne
+
+    def test_reanchor_ham_haritayi_kullanir_filtreliyi_degil(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        """Çapalama `silence_min_ms` süzgecinden ÖNCEKİ haritayla yapılır.
+
+        `filter_silence` "hangi sessizlik KESİLİR" politikasıdır; çapalama ise
+        "konuşma nerede YOK" sorusunu sorar. Süzgeç re-anchor'dan SONRA
+        çağrılmalı ve girdisi ham harita olmalıdır.
+        """
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        assert katmanlar.filtre.call_args.args[0] == [SIL_HAM]
+        assert katmanlar.sira.index("filter_silence") > katmanlar.sira.index("transcribe")
+
+    def test_silencedetect_tek_kez_kosar(self, girdi: Path, katmanlar: Any) -> None:
+        """Harita bir kez hesaplanır — re-anchor ve DETECT aynı haritayı paylaşır.
+
+        v0.4.0 invariant'i: çift ffmpeg koşusu YOK (spec §2). Harita erkene
+        alınırken ikinci bir `detect_silence` çağrısı eklenmediği kilitlenir.
+        """
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        assert katmanlar.silence.call_count == 1
+        assert katmanlar.sira.count("detect_silence") == 1
 
     def test_explicit_output_yolu_kullanilir(
         self, girdi: Path, katmanlar: Any, tmp_path: Path
@@ -242,6 +295,21 @@ class TestTranskriptKaydi:
         veri = json.loads(yol.read_text(encoding="utf-8"))
         assert [w["text"] for w in veri["words"]] == ["merhaba", "Eee,"]
         assert veri["words"][1]["start_ms"] == 3_320
+
+    def test_transkript_reanchorlu_sinirlari_tasir(self, girdi: Path, katmanlar: Any) -> None:
+        """v0.4.0 davranış değişikliği: kaydedilen transkript RE-ANCHOR'LI.
+
+        Kayıt re-anchor'dan SONRA yapılır — dosyadaki sınırlar pipeline'ın
+        gerçekten kullandığı sınırlardır (ham ASR çıktısı değil). CHANGELOG'da
+        açıkça notlanan davranış budur; fixture olarak yeniden kullanıldığında
+        da tutarlı olur.
+        """
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        veri = json.loads(
+            (girdi.parent / "video_transkript.json").read_text(encoding="utf-8")
+        )
+        assert veri["words"][0]["end_ms"] == 100  # ham ASR 500 idi (SIL_HAM [100, 900))
+        assert veri["words"][1]["end_ms"] == 4_040  # kesişmeyen kelime aynen
 
     def test_review_red_durumunda_bile_korunur(self, girdi: Path, katmanlar: Any) -> None:
         katmanlar.confirm.return_value = False

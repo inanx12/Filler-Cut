@@ -12,9 +12,15 @@ REVIEW (v0.1 hali): render'dan ÖNCE konsola özet tablosu (kesim sayısı,
 kademe dağılımı, kesilmeyen aday uyarısı, kazanılan süre %, ilk 5 kesimin
 reason'ı) + ``[y/N]`` onayı; ``yes=True`` ile atlanır.
 
+RE-ANCHOR (v0.4.0): silencedetect haritası TRANSCRIBE'dan ÖNCE, WAV'dan
+BİR KEZ çıkarılır (transkriptten bağımsızdır) ve TRANSCRIBE ile DETECT
+arasında kelime sınırlarını çapalamak için kullanılır
+(``transcribe/reanchor.py``); aynı harita sonra DETECT'in sessizlik yarısını
+besler — çift ffmpeg koşusu YOKTUR. Çapalama backend-bağımsızdır (fw + wcpp).
+
 TRANSCRIBE adımından sonra kelime listesi ``<ad>_transkript.json`` olarak
 kaydedilir (çıktıların yanına) — pahalı ASR çıktısı review'da ret edilse
-bile korunur.
+bile korunur. v0.4.0'dan beri kaydedilen sınırlar re-anchor'lu sınırlardır.
 
 RENDER'ın encoder'ı ``run()`` başında BİR KEZ probe'lanır
 (``render/encoder.py``): seçim RENDER adımında konsola tek satır olarak düşer
@@ -55,6 +61,7 @@ from fillercut.report.json_report import (
 )
 from fillercut.report.review_server import ReviewServer
 from fillercut.transcribe.base import Transcriber, words_to_json
+from fillercut.transcribe.reanchor import reanchor_words
 
 _out = Console()
 _err = Console(stderr=True)
@@ -226,6 +233,16 @@ def run(
         except (ExtractionError, FileNotFoundError) as exc:
             _fail(f"EXTRACT başarısız: {exc}")
 
+        # Sessizlik haritası — DETECT'in dalga formu yarısı, ama TRANSCRIBE'dan
+        # ÖNCE hesaplanır (v0.4.0): harita WAV'dan üretilir, transkriptten
+        # bağımsızdır ve re-anchor'ın (aşağıda) girdisidir. Tek ffmpeg koşusu:
+        # aynı `ham_sessizlikler` hem çapalamayı hem DETECT'i besler.
+        _out.print("[dim]      sessizlik haritası çıkarılıyor (tek koşu)…[/dim]")
+        try:
+            ham_sessizlikler = detect_silence(wav, total_duration_ms=total_ms)
+        except (SilenceDetectionError, FileNotFoundError, ValueError) as exc:
+            _fail(f"DETECT (sessizlik) başarısız: {exc}")
+
         # [2] TRANSCRIBE
         if transcriber is None:
             try:
@@ -249,17 +266,38 @@ def run(
             # ASR backend'i keyfi hata üretebilir (CUDA/driver/model indirme)
             _fail(f"TRANSCRIBE başarısız: {exc.__class__.__name__}: {exc}")
 
+        # RE-ANCHOR (v0.4.0) — backend-bağımsız, TRANSCRIBE ile DETECT ARASINDA:
+        # ASR kelime sınırları duraklamaları yutar (KI-1 zincir şişmesi, KI-5);
+        # sessizliğe taşan uçlar haritaya çapalanır. HAM harita kullanılır,
+        # `silence_min_ms` süzgecinden GEÇMEMİŞ hali: o süzgeç "hangi sessizlik
+        # KESİLİR" politikasıdır — "konuşma nerede YOK" sorusunun cevabı değil.
+        # Haritanın kendi tabanı ffmpeg'in d=0.4'üdür (KI-1: <400 ms kırpılmaz).
+        ham_words = words
+        words = reanchor_words(words, ham_sessizlikler)
+        capalanan = sum(
+            1
+            for eski, yeni in zip(ham_words, words, strict=True)
+            if (eski.start_ms, eski.end_ms) != (yeni.start_ms, yeni.end_ms)
+        )
+        if capalanan:
+            _out.print(
+                f"[dim]      re-anchor: {capalanan}/{len(words)} kelime sınırı "
+                "sessizlik haritasına çapalandı[/dim]"
+            )
+
         # Transkript kaydı — pahalı ASR çıktısı korunur: review'da ret edilse
         # bile dosya kalır (hata ayıklama/fixture olarak kullanılabilir; biçim
         # tests/data/transcript_sample.json ile aynı). İsim girdi stem'inden:
-        # <ad>_transkript.json, çıktıların yanına.
+        # <ad>_transkript.json, çıktıların yanına. v0.4.0'dan beri kaydedilen
+        # sınırlar RE-ANCHOR'LU sınırlardır (davranış değişikliği, CHANGELOG).
         transkript_yolu = dst.parent / f"{src.stem}_transkript.json"
         try:
             transkript_yolu.write_text(words_to_json(words) + "\n", encoding="utf-8")
         except OSError as exc:
             _fail(f"transkript yazılamadı: {exc}")
 
-        # [3] DETECT — filler (transkript) + sessizlik (dalga formu)
+        # [3] DETECT — filler (re-anchor'lı transkript) + sessizlik (yukarıda
+        # çıkarılan ham harita; burada yalnızca süre süzgeci uygulanır).
         _out.print("[cyan][3/6] DETECT[/cyan] — filler ve sessizlikler tespit ediliyor…")
         fillerlar = detect_fillers(words, aggressive=aggressive)
         # KesilMEYEN aday sayısı REVIEW/rapora bilgi olarak akar; aggressive'de
@@ -267,10 +305,10 @@ def run(
         atlanan_aday = 0 if aggressive else count_aday_fillers(words)
         try:
             sessizlikler = filter_silence(
-                detect_silence(wav, total_duration_ms=total_ms),
+                ham_sessizlikler,
                 min_silence_ms=cfg.detect.silence_min_ms,
             )
-        except (SilenceDetectionError, FileNotFoundError, ValueError) as exc:
+        except ValueError as exc:
             _fail(f"DETECT (sessizlik) başarısız: {exc}")
 
     # [4] PLAN — merge + padding + min-keep → saf veri CutPlan
