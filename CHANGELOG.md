@@ -7,6 +7,63 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [0.4.0] — 2026-08-23
+
+Kelime sınırlarının silencedetect haritasına **yeniden çapalanması**
+(re-anchor) — KNOWN_ISSUES.md KI-1'in "zincir şişmesi" bulgusunun pipeline
+seviyesinde savunması. **Kullanıcıya görünür davranış değişikliği vardır**
+(aşağıda). Yeni bağımlılık yok.
+
+### Eklendi
+
+- **`transcribe/reanchor.py` — kelime sınırı çapalama (saf fonksiyon).**
+  ASR kelime sınırları duraklamaları yutar: whisper.cpp `-ml 1 -sow` sınırları
+  uç uca üretir, duraklama komşu kelimeye yapışır; faster-whisper'da da
+  muadili vardır (KI-5, `işte` ~15 sn). `reanchor_words(words, silences)` bir
+  kelimenin sessizliğe giren ucunu kırpar:
+  - `end` sessizliğin içindeyse → `end = sessizlik.start`
+  - `start` sessizliğin içindeyse → `start = sessizlik.end`
+  - kelime sessizliği boydan geçiyorsa → **uzun kalan parça korunur**
+    (eşitlikte sol taraf; gerekçe ölçümle sabit, KI-1'e bak)
+  - kelime TAMAMEN sessizlik içindeyse (ghost) → **dokunulmaz**; bu fazda
+    silme/flag'leme yok, transkript bütünlüğü korunur
+  Değme (uç uca) kesişim kırpma SAYILMAZ — KI-5'in "değme çakışma kanıt
+  sayılmaz" sınır semantiğiyle aynı katı eşitsizlik. Saf fonksiyondur:
+  subprocess yok, ffmpeg bilmez, `Word` frozen olduğu için kırpılanlar yeni
+  nesne olarak döner.
+
+### Değişti
+
+- **Kesim sınırları sıkılaşır (davranış değişikliği).** Şişmiş kelime
+  sınırından türeyen filler kesimleri artık kelimenin gerçek sınırına
+  daralır; duraklama komşuluğundaki şişmelerde kesim konuşmanın üstüne
+  taşmaz. Gerçek koşuda `şey` kelimesinin end sapması 702 ms → 3 ms,
+  `umarım`'ın start sapması −1014 ms → +2 ms.
+- **`<ad>_transkript.json` artık re-anchor'lı sınırları taşır.** Kayıt
+  çapalamadan SONRA yapılır: dosyadaki zamanlar pipeline'ın DETECT'e verdiği
+  zamanlardır, ham ASR çıktısı değil. Dosyayı fixture olarak kullanan
+  akışlar bunu bilmelidir.
+- **Pipeline sırası: silencedetect haritası TRANSCRIBE'dan ÖNCE.** Harita
+  WAV'dan üretilir, transkriptten bağımsızdır. **Tek koşu**: aynı harita hem
+  çapalamayı hem DETECT'in sessizlik yarısını besler — ikinci bir ffmpeg
+  çağrısı YOK. Çapalama ham haritayı kullanır (`silence_min_ms` süzgecinden
+  geçmemiş): o süzgeç "hangi sessizlik kesilir" politikasıdır, "konuşma
+  nerede yok" sorusunun cevabı değil.
+- **KI-5 anomali koruması yerinde kalır** (`FILLER_ANOMALI_MS` = 3000 ms) —
+  kaldırılmadı, yedek savunmaya çekildi: re-anchor'ın çıpası olmayan
+  bölgelerde (bkz. sınırlar) tek savunma odur.
+
+### Bilinen sınırlar (KI-1'de ölçümüyle)
+
+- **<400 ms duraklamalar kırpılmaz:** harita `audio/silence.py`'nin `d=0.4`
+  eşiğiyle üretilir; daha düşük eşikli AYRI bir silencedetect koşusu bilinçli
+  olarak backlog'dadır (çift ffmpeg koşusu istenmiyor).
+- **Zincir kayması kapsam dışıdır:** sapmanın bir bölümü konuşmadan konuşmaya
+  kayan zincirden gelir; o bölgede sessizlik YOKTUR, dolayısıyla sessizlik
+  tabanlı çapalama düzeltemez. Ölçüm: 16 referans kelimesinin 8'i tolerans
+  içinde (6 temiz akış + 2 duraklama komşuluğu), 8'i `zincir_kaymasi`.
+- **Filler kaçağı (KI-1 ana kaydı) bu sürümde ÇÖZÜLMEDİ** — ayrı faz.
+
 ## [0.3.3] — 2026-08-22
 
 Donanım kalibrasyonu + bir crash düzeltmesi. `h264_qsv` kalite argümanları

@@ -54,6 +54,8 @@ genelleme yok.** Sayım kuralı: kelime-bazlı; "Filler-Cut"ın bozuk hali
   (zararsız, hızlandırıcı); &gt;3 sn şişmeler `FILLER_ANOMALI_MS`
   korumasına takılır.
 - **Şişme savunması DTW'ye değil KI-5 korumasına dayanır** (aşağıya bak).
+- **v0.4.0: pipeline seviyesinde re-anchor eklendi — KISMEN çözüldü**
+  (aşağıdaki "KI-1 zincir şişmesi re-anchor'ı" bölümüne bak).
 
 **DTW notu (güncellendi):** Önceki sürümdeki "turbo DTW'yi mimari olarak
 desteklemez" iddiası **yanlıştı** — whisper.cpp kaynağında `large.v3` ve
@@ -182,6 +184,74 @@ CUDA binary (resmi cublas-12.4 paketi, aynı tag) ile aynı kayıtta kıyasland�
 - Uçtan uca doğrulama: `backend = "whispercpp"` + Vulkan binary ile
   `fillercut` akışı sorunsuz tamamlandı (kesimler + reason zincirleri).
 
+### KI-1 zincir şişmesi re-anchor'ı (v0.4.0) — **kısmen çözüldü**
+
+`transcribe/reanchor.py` kelime sınırlarını silencedetect haritasına yeniden
+çapalar: kelimenin sessizliğe giren ucu kırpılır (TRANSCRIBE ile DETECT
+arasında, backend-bağımsız). Harita WAV'dan BİR KEZ üretilir; çift ffmpeg
+koşusu yoktur. Bu, şişmenin **duraklama komşuluğu** sınıfını kapatır.
+
+**Ölçüm** (2026-08, `test_konusma.wav`, wcpp turbo/q5_0 sınırları KI-1 ana
+koşusundan; harita: 16 kHz WAV, `noise=-35dB d=0.4`, ffmpeg 8.1.2 →
+`[3164,4182] [6931,7638] [12099,13066] [13899,14514]`). Sapma = re-anchor
+sonrası sınır − elle doğrulanmış referans, `start/end`:
+
+| kelime | wcpp ham | re-anchor | referans | önce | sonra | sınıf |
+|---|---|---|---|---|---|---|
+| Bugün | 120–4180 | 120–3164 | 4262–4497 | −4142/−317 | −4142/−1333 | zincir kayması |
+| filir | 4180–4640 | 4182–4640 | 4574–4788 | −394/−148 | −392/−148 | zincir kayması |
+| şey | 6660–7630 | 6660–6931 | 6429–6928 | +231/+702 | **+231/+3** | duraklama komşuluğu |
+| wishfur | 8040–8760 | (aynı) | 8165–8600 | −125/+160 | −125/+160 | duraklama komşuluğu |
+| benim | 8760–9220 | (aynı) | 8600–8893 | +160/+327 | +160/+327 | zincir kayması |
+| ığılarımı | 9220–10240 | (aynı) | 9037–9868 | +183/+372 | +183/+372 | zincir kayması |
+| yakalayabilecek | 10240–10990 | (aynı) | 9868–10805 | +372/+185 | +372/+185 | zincir kayması |
+| mi | 10990–11460 | (aynı) | 10805–10996 | +185/+464 | +185/+464 | zincir kayması |
+| umarım | 12050–13740 | 13066–13740 | 13064–13396 | −1014/+344 | **+2**/+344 | zincir kayması |
+| çalışır | 13740–14820 | 14514–14820 | 13396–13923 | +344/+897 | +1118/+897 | zincir kayması |
+
+**Bulgular:**
+
+- **Şişme tek sınıf değil, İKİ sınıf.** (a) *Duraklama komşuluğu*: kelime ucu
+  gerçek bir duraklamayı yutmuş — re-anchor bunu kapatır (`şey`: 702 → 3 ms).
+  (b) *Zincir kayması*: sapma konuşmadan konuşmaya kayan zincirden gelir
+  (`benim` +160, `ığılarımı` +183, `yakalayabilecek` +372, `mi` +185 — hepsi
+  start tarafında). O bölgede **sessizlik YOKTUR**; sessizlik tabanlı
+  çapalamanın çıpası yoktur, düzeltemez. Bu sınıf açık kalır.
+- **Kabul ölçütü ölçümle düzeltildi.** v0.4 planındaki "10/10 tolerans içinde"
+  hedefi 10 vakanın tek sınıf olduğu varsayımına dayanıyordu; ölçüm bunu
+  yanlışladı. Referans setinin bugünkü durumu: 16 kelimenin **8'i** tolerans
+  içinde (6 temiz akış + 2 duraklama komşuluğu). Sınıflar
+  `tests/data/wcpp_reference_tr.json`'da kelime bazında kayıtlı
+  (`sinif`, `reanchor_ms`, `olculen_sapma_ms`).
+- **Eşik taraması işe yaramıyor.** `d` 0.4 → 0.2 → 0.1 ve `noise` −25/−30/−40
+  dB kombinasyonları denendi: en iyi sonuç 4/10 (varsayılanda 2/10). Kayıp
+  eşikten değil, çıpasızlıktan geliyor. Bu yüzden ayrı/düşük eşikli ikinci bir
+  silencedetect koşusu **backlog'da bırakıldı** — maliyeti (ikinci ffmpeg
+  koşusu) getirisinden büyük.
+- **`Bugün` hiçbir kurulumda düzelmez:** ham aralık (120–4180) referansla
+  (4262–4497) HİÇ kesişmiyor. Kırpma daraltır, kaydıramaz.
+- **Boydan geçme kuralı ölçümle seçildi.** Kelime bir sessizliği tümüyle
+  yuttuğunda gerçek konuşma iki yanda da olabilir. Üç varyantın 10 vakadaki
+  toplam mutlak sapması:
+
+  | kural | toplam sapma | not |
+  |---|---|---|
+  | uzun kalan parça korunur (**seçilen**) | **11143 ms** | `umarım` +2/+344, `çalışır` +1118/+897 |
+  | her zaman `end = sessizlik.start` (ilk spec) | 11461 ms | `umarım` −1014/−1297, `çalışır` +344/−24 |
+  | geçmede dokunma | 11381 ms | ikisi de ham hâlinde kalır |
+
+  Seçilen kural `umarım`'ı kazanıp `çalışır`'ı kaybediyor; toplamda en iyisi.
+  Hangi tarafın gerçek konuşmayı taşıdığını ayırt eden bir sinyal re-anchor'ın
+  bilgi kümesinde YOK — bu bir ödünleşmedir, kesinlik değil.
+
+- **Kalan sınırlar:** (1) <400 ms duraklamalar haritada yok → o ölçekteki
+  şişmeler kırpılmaz. (2) Zincir kayması sınıfı açık. (3) Ghost kelimeler
+  (tamamen sessizlik içindeki uydurma) bu fazda silinmez/flag'lenmez.
+- **Referans:** `tests/test_reanchor.py` (saf kurallar, 32 birim testi);
+  `tests/test_wcpp.py::TestGercekModel::test_kelime_sinirlari_elle_dogrulanmis_referansla`
+  ve `::test_reanchor_temiz_akis_kelimelerine_zarar_vermez`
+  (`@pytest.mark.wcpp` + `@pytest.mark.ffmpeg`).
+
 ## KI-2 — Aggressive mod gerçek kelimeyi kesebilir (false positive)
 
 - **Belirti:** `aggressive=True` iken "bir şey söyleyeceğim" gibi gerçek
@@ -247,6 +317,13 @@ CUDA binary (resmi cublas-12.4 paketi, aynı tag) ile aynı kayıtta kıyasland�
   `timestamp-anomali koruması` notu düşülür. Sessizlikle çakışan uzun
   kesimlere bilinçli dokunulmaz (sessiz bölge kesimi zararsızdır); değme
   (uç uca) çakışma kanıt sayılmaz.
+- **v0.4.0 — yedek savunmaya çekildi (KALDIRILMADI):** artık ilk savunma
+  `transcribe/reanchor.py`'nin sessizlik haritasına çapalamasıdır; şişmiş uç
+  DETECT'e gitmeden kırpılır. Anomali koruması aynen yerinde durur ve
+  re-anchor'ın çıpası olmadığı bölgelerde (zincir kayması, <400 ms
+  duraklamalar) tek savunma odur. `FILLER_ANOMALI_MS` / `filler_anomali_ms`
+  isimleri ve 3000 ms eşiği değişmedi. İki savunmanın sınır semantiği aynıdır:
+  değme (uç uca) çakışma kanıt sayılmaz.
 - **Kalan risk:** İndirgenen 3000 ms'lik pencerede de konuşma olabilir
   (sınırlı kayıp). Eşik modül sabitidir (`FILLER_ANOMALI_MS`).
 - **Olası iyileştirme:** v0.2 review katmanında indirgenen kesimlerin ayrıca

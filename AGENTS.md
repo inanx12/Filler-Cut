@@ -69,6 +69,14 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
    3000 ms'den uzunsa silencedetect çıktısıyla çapraz doğrulanır; sessizlikle
    çakışmıyorsa kesim 3000 ms'e indirgenir ve reason'a not düşülür. Çakışan
    uzun kesimlere (sessiz bölge) dokunulmaz; değme çakışma kanıt sayılmaz.
+9. **Re-anchor (v0.4.0):** silencedetect haritası pipeline'da **BİR KEZ**
+   hesaplanır (WAV'dan, TRANSCRIBE'dan önce — transkriptten bağımsızdır) ve
+   hem kelime çapalamasını hem DETECT'in sessizlik yarısını besler; **ikinci
+   bir ffmpeg koşusu YOKTUR**. Çapalama TRANSCRIBE ile DETECT ARASINDA,
+   backend-bağımsız uygulanır ve `silence_min_ms` süzgecinden GEÇMEMİŞ ham
+   haritayı kullanır (süzgeç kesim politikasıdır, konuşma haritası değil).
+   Sınır semantiği KI-5 ile aynı: değme (uç uca) kesişim kırpma sayılmaz.
+   Tamamen sessizlik içindeki ghost kelimeye dokunulmaz.
 
 ## İş Akışı
 
@@ -86,7 +94,7 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
-## Mevcut Durum (2026-08-21)
+## Mevcut Durum (2026-08-23)
 
 **v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
 gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
@@ -129,6 +137,16 @@ AMF yarısı açık. (b) Yönlendirilmiş stdout (`> log.txt`, pipe) Windows-TR'
 `✓` yüzünden `UnicodeEncodeError` ile koşuyu öldürüyordu — `main_entry`
 akışları `errors="replace"`e ayarlıyor, `console_scripts` hedefi
 `cli:main_entry` oldu (bu paketleme değişikliği `pip install -e .` ister).
+
+**v0.4.0 TAMAMLANDI** — zincir şişmesi re-anchor'ı (KI-1): ASR kelime
+sınırları artık silencedetect haritasına yeniden çapalanıyor
+(`transcribe/reanchor.py`, saf fonksiyon; TRANSCRIBE ile DETECT arasında,
+backend-bağımsız). Şişmenin **duraklama komşuluğu** sınıfı kapandı (`şey` end
+sapması 702 → 3 ms), **zincir kayması** sınıfı açık kaldı — o bölgede
+sessizlik yoktur, çapalamanın çıpası yoktur (ölçüm tablosu KI-1'de).
+Davranış değişikliği: kesim sınırları sıkılaşır ve `<ad>_transkript.json`
+re-anchor'lı sınırları taşır. KI-5 anomali koruması kaldırılmadı, yedek
+savunmaya çekildi.
 
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
@@ -203,15 +221,26 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `cli.py`: `main_entry` — stdout/stderr `errors="replace"` (yönlendirilmiş çıktı crash'i), `console_scripts` hedefi değişti + 7 kilit testi | `243442f` |
 | `CHANGELOG.md` v0.3.3 + `pyproject.toml` `0.3.3`'e bump | `706742e`, `a3d159a` |
 
-**Test sayısı:** 431 (`python -m pytest` → 429 passed, 2 skipped). Bunun 421'i
-marker'sız; 8'i `ffmpeg`, 2'si `wcpp` marker'lı (gerçek ffmpeg / gerçek
-whisper-cli+model) — CI `-m "not ffmpeg and not wcpp"` ile atlar, donanım/model
-yoksa ilgili testler kendi kendine skip eder.
+**v0.4.0**
 
-**Sıradaki:** **v0.4 — zincir şişmesi re-anchor'ı (planlandı, BAŞLANMADI).**
-KI-1'in gerçek koşusunda belgelenen vaka: whisper kelime zincirinde bir
-timestamp şişince sonraki kelimeler de kayıyor; KI-5 koruması tek kelimelik
-kesimi kırpar ama zincirin kendisini yeniden çıpalamaz. v0.4'ün konusu budur.
+| Modül | Commit |
+|---|---|
+| `transcribe/reanchor.py` (saf çapalama fonksiyonu: end/start kırpma, boydan geçmede uzun parça, ghost kelimeye dokunma; değme kırpma sayılmaz) + 32 birim testi | `b270b4b`, `796ea39` |
+| `pipeline.py`: silence haritası TRANSCRIBE'dan önceye alındı (tek koşu), re-anchor wiring'i, transkript kaydı re-anchor'dan sonra + 4 kilit testi | `82cce86` |
+| `tests/data/wcpp_reference_tr.json`: 10 şişme vakası kıyas setinde (`sinif` + ölçülen sapma alanları); `tests/test_wcpp.py` re-anchor'lı kabul testi + temiz akış regresyon kilidi | `67a51f7` |
+
+**Test sayısı:** 468 (`python -m pytest` → 462 passed, 6 skipped). Bunun 457'si
+marker'sız; 10'u `ffmpeg`, 3'ü `wcpp` marker'lı (gerçek ffmpeg / gerçek
+whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
+kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
+atlar, donanım/model yoksa ilgili testler kendi kendine skip eder.
+
+**Sıradaki:** **filler kaçağı (KI-1 ana kaydı)** — ASR'ın uydurma yazımı
+filler'ı kaçırıyor (`ııı` → `ığılarımı`); metin eşleşmesi bunu düzeltemez.
+Ayrı faz, v0.4 kapsamına bilinçli olarak alınmadı. İkinci aday: **zincir
+kayması** — v0.4.0 re-anchor'ının kapsamı DIŞINDA kalan sınıf (konuşmadan
+konuşmaya kayan sınırlar; sessizlik çıpası yok, ölçüm KI-1'de). Bunun için
+sessizlik dışı bir hizalama sinyali (DTW veya forced alignment) gerekir.
 
 Devam eden küçük iş (v0.3 kuyruğu): interaktif review'un `wcpp_backend` ile
 uçtan uca doğrulanması — `@pytest.mark.wcpp` referansı
