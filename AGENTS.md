@@ -229,7 +229,8 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pipeline.py`: silence haritası TRANSCRIBE'dan önceye alındı (tek koşu), re-anchor wiring'i, transkript kaydı re-anchor'dan sonra + 4 kilit testi | `82cce86` |
 | `tests/data/wcpp_reference_tr.json`: 10 şişme vakası kıyas setinde (`sinif` + ölçülen sapma alanları); `tests/test_wcpp.py` re-anchor'lı kabul testi + temiz akış regresyon kilidi | `67a51f7` |
 
-**Test sayısı:** 468 (`python -m pytest` → 462 passed, 6 skipped). Bunun 457'si
+**Test sayısı:** 477 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 466'sı
 marker'sız; 10'u `ffmpeg`, 3'ü `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
