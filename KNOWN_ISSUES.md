@@ -138,16 +138,18 @@ muadili beklenir. DTW hizası isteniyorsa **non-turbo `large-v3`** gerekir
   (`tests/data/wcpp_reference_tr.json`, template) kıyaslar; binary/model/kayıt
   yoksa skip.
 
-### KI-1 Vulkan koşusu (2026-08, RTX 4050 — Filler-Cut Vulkan build)
+### KI-1 Vulkan koşusu (2026-08 — Filler-Cut Vulkan build; RTX 4050, RX 9060 XT)
 
 whisper.cpp resmi release'lerinde Vulkan paketi olmadığından (upstream #3673)
 Filler-Cut'ın kendi workflow'uyla derlenen Vulkan binary
 (`.github/workflows/vulkan-build.yml`, whisper.cpp v1.9.1, `-DGGML_VULKAN=ON`),
 CUDA binary (resmi cublas-12.4 paketi, aynı tag) ile aynı kayıtta kıyaslandı:
 `test_konusma.wav`, `ggml-large-v3-turbo-q5_0.bin`, `-l tr -ml 1 -sow -ojf`,
-3'er koşu. **Tek makine — bulgular bu kayıtla sınırlıdır, genelleme yok.**
+3'er koşu. Aşağıdaki hız ölçümü **yalnız RTX 4050 makinesine** aittir;
+transkript tablosuna sonradan ikinci bir cihaz (AMD RDNA4 — RX 9060 XT)
+eklendi. **Bulgular bu kayıtla sınırlıdır, genelleme yok.**
 
-**Hız (ılık koşular, 2.-3. koşu ortalaması):**
+**Hız (RTX 4050, ılık koşular, 2.-3. koşu ortalaması):**
 
 | Metrik | Vulkan | CUDA |
 |---|---|---|
@@ -169,16 +171,24 @@ CUDA binary (resmi cublas-12.4 paketi, aynı tag) ile aynı kayıtta kıyasland�
 
 **Transkript (uydurma kimliği compute backend'ine göre değişiyor):**
 
-| | CUDA (2026-07 ve 2026-08) | Vulkan (2026-08) |
+| Backend + cihaz | Uydurma kelime | Not |
 |---|---|---|
-| Uydurma kelime | `filir`, `kat`, `wishfur`, `ığılarımı` (4) | `filir`, `kağıt`, `Vişvır`, `ığılarımı` (4) |
+| CUDA (NVIDIA RTX 4050) | `filir`, `kat`, `wishfur`, `ığılarımı` (4) | 2026-07 ve 2026-08 koşuları birebir aynı |
+| Vulkan (NVIDIA RTX 4050) | `filir`, `kağıt`, `Vişvır`, `ığılarımı` (4) | aynı sayı, farklı kimlik |
+| Vulkan (AMD RDNA4 — RX 9060 XT) | `filir`, `kat`, `wishfur`, `ığılarımı` (4) | kimlik **CUDA ile aynı**, NVIDIA-Vulkan'dan farklı; örnek drift `kat` −408/+43 ms; ardışık 2 koşu birebir aynı (deterministik) |
 
 - CUDA çıktısı iki ay arayla **kelimesi kelimesine aynı** — deterministic;
-  regresyon referansı olarak kullanılabilir.
+  regresyon referansı olarak kullanılabilir. AMD Vulkan koşusu da kendi
+  içinde deterministik (ardışık iki koşu birebir).
 - Vulkan aynı sayıda ama **farklı** uydurma üretti (`kat`→`kağıt`,
   `wishfur`→`Vişvır`): kayan nokta toplama sırası farkı uydurmanın kimliğini
-  değiştiriyor, sayısını değil. False negative iki backend'de de aynı (4
+  değiştiriyor, sayısını değil. False negative üç kombinasyonda da aynı (4
   kaçak) — KI-1 ana kaydı güçlendi: uydurma model seviyesinde bir kusur.
+- **Halüsinasyon kimliği backend+cihaz kombinasyonuna bağlıdır; aynı backend
+  farklı cihazda farklı kimlik üretebilir. Bu yüzden referans harness
+  varyantlar alanı taşır.** AMD RDNA4 üzerindeki Vulkan koşusu bunu doğrudan
+  gösterdi: "Vulkan" tek başına kimliği belirlemiyor — RX 9060 XT'de çıkan
+  kimlik NVIDIA-Vulkan'ınkiyle değil CUDA'nınkiyle örtüşüyor.
 - `Bugün` timestamp şişmesi (4060 ms) iki backend'de de birebir aynı —
   KI-5 anomalisi compute yolundan bağımsız, modele ait.
 - Uçtan uca doğrulama: `backend = "whispercpp"` + Vulkan binary ile
