@@ -37,8 +37,9 @@ genelleme yok.** Sayım kuralı: kelime-bazlı; "Filler-Cut"ın bozuk hali
 **Bulgular:**
 
 - **fw hayalet segment uydurdu:** kayıtta geçmeyen `abone ol abone ol`
-  (4 kelime) başlangıçtaki konuşmasız bölgeye (ilk ~4.2 sn) uyduruldu.
-  wcpp aynı bölgeyi boş bıraktı (dürüst davranış).
+  (4 kelime) başlangıçtaki konuşmasız bölgeye (ilk ~4.2 sn) uyduruldu —
+  tek kelime uydurmadan ağır kusur. wcpp aynı bölgeyi boş bıraktı
+  (dürüst davranış).
 - **Filler kaçağı çözülmedi:** `ııı` üç backend'de de uydurma kelimeye
   çevrildi (`ılır` / `ığılarımı` / `ııılarımı`). Backend değişimi uydurma
   tipini değiştirir, false negative'i çözmez — KI-1 ana kaydı geçerli.
@@ -53,6 +54,10 @@ genelleme yok.** Sayım kuralı: kelime-bazlı; "Filler-Cut"ın bozuk hali
   ölçeğindeki kaymalar filler + sonrası duraklamayı birlikte keser
   (zararsız, hızlandırıcı); &gt;3 sn şişmeler `FILLER_ANOMALI_MS`
   korumasına takılır.
+- **Şişme her iki wcpp koşusunda da `Bugün` kelimesinde:** kelime sonu
+  takip eden sessizliğe taşmış (KI-5 mekanizması; tüm kelime sınırları
+  uç uca). Kesim güvenliği DTW'ye değil cutplan'daki `FILLER_ANOMALI_MS`
+  (3000 ms) korumasına dayanır — bu koruma tam bu vaka için vardı.
 - **Şişme savunması DTW'ye değil KI-5 korumasına dayanır** (aşağıya bak).
 - **v0.4.0: pipeline seviyesinde re-anchor eklendi — KISMEN çözüldü**
   (aşağıdaki "KI-1 zincir şişmesi re-anchor'ı" bölümüne bak).
@@ -69,33 +74,6 @@ yapılmadı, getiri düşük, KI-5 koruması yeterli).
 - **Referans:** `tests/test_wcpp.py::TestGercekModel` (`@pytest.mark.wcpp`);
   elle doğrulanmış kelime sınırı referansı `tests/data/wcpp_reference_tr.json`
   (6 kelime kıyasta; 10 şişme vakası `_kiyas_disi` notunda ölçüleriyle belgeli).
-
-**Bulgular:**
-
-- **fw hayalet segment uydurdu:** kayıtta geçmeyen `abone ol abone ol`
-  (4 kelime) başlangıca eklendi — tek kelime uydurmadan ağır kusur.
-  wcpp aynı bölgeyi boş bıraktı (dürüst davranış).
-- **Filler kaçağı çözülmedi:** `ııı` üç backend'de de uydurma kelimeye
-  çevrildi (`ılır` / `ığılarımı` / `ııılarımı`). Backend değişimi uydurma
-  tipini değiştirir, false negative'i çözmez — KI-1 ana kaydı geçerli.
-- **Uydurmada bu kayıtta sıralama:** wcpp large-v3 (2) &lt; wcpp turbo (4)
-  &lt; fw (8). wcpp non-turbo üstüne proje adını doğru yazdı.
-- **Şişme her iki wcpp koşusunda da `Bugün` kelimesinde:** kelime sonu
-  takip eden sessizliğe taşmış (KI-5 mekanizması; tüm kelime sınırları
-  uç uca). Kesim güvenliği DTW'ye değil cutplan'daki `FILLER_ANOMALI_MS`
-  (3000 ms) korumasına dayanır — bu koruma tam bu vaka için vardı.
-
-**DTW notu (güncellendi):** Önceki sürümdeki "turbo DTW'yi mimari olarak
-desteklemez" iddiası **yanlıştı** — whisper.cpp kaynağında `large.v3` ve
-`large.v3.turbo` preset'leri mevcut (cli.cpp). Ancak DTW **varsayılan
-kapalıdır**, `--dtw &lt;preset&gt;` gerekir. Deneysel koşu (v1.9.1 CUDA binary,
-q5_0, her iki preset): 30/30 token'da `t_dtw = -1`, segment `offsets`
-DTW'siz haliyle birebir aynı — bu kurulumda DTW zaman üretmiyor.
-GGML q5_0 aheads verisi / CUDA backend kısıtı olası sebep; derin
-araştırma yapılmadı (getiri düşük, KI-5 koruması yeterli).
-
-- **Referans:** `tests/test_wcpp.py::TestGercekModel` (`@pytest.mark.wcpp`);
-  elle doğrulanmış kelime sınırı referansı `tests/data/wcpp_reference_tr.json`.
 
 v0.3 whisper.cpp backend'i (`transcribe/wcpp_backend.py`) eklendi; ASR
 kaynaklı kaçak/anomalinin backend'e göre değişip değişmediği aynı kayıtta
