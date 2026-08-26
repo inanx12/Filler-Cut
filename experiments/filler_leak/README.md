@@ -42,11 +42,13 @@ ffmpeg/ffprobe PATH'te olmalıdır. faster-whisper ilk koşuda modeli indirir
 ## Çalıştırma
 
 ```bash
-python experiments/filler_leak/baseline.py
+python experiments/filler_leak/baseline.py         # Adım 1 — baseline
+python experiments/filler_leak/faz1_confidence.py  # Adım 2 — Faz 1
 ```
 
 Çıktılar `sonuclar/` altına yazılır (markdown tablo + ham JSON) ve konsola
-basılır.
+basılır. Script'ler birbirinden bağımsız koşar; ikisi de aynı `_cache/`i
+kullanır.
 
 ## Dosyalar
 
@@ -55,6 +57,7 @@ basılır.
 | `korpus.py` | Korpus konumu, ground-truth okuma, eşleştirme kuralı (`kesisir`), çıktı yazıcıları |
 | `asr_runner.py` | `pipeline.run()`'ın PLAN'a kadarki **in-process aynası** + ASR enstrümanı + cache |
 | `baseline.py` | **Adım 1** — 4 klip × 2 mod × 2 backend = 16 koşu; yakalama/kaçak/YP tabloları |
+| `faz1_confidence.py` | **Adım 2** — güven skoru dağılımı + tek-eşik taraması |
 | `sonuclar/` | Ölçüm çıktıları (repoya girer — kayıt) |
 | `_cache/` | WAV, sessizlik haritası, ham ASR çıktısı (repoya **girmez**) |
 
@@ -89,6 +92,23 @@ REVIEW ve RENDER **çağrılmaz** (spike'ın konusu değil, pahalı).
   `reason` zincirinde gerçekten `kesin filler:` geçiyor mu — geçmiyorsa kesim
   doğru yerdedir ama yanlış gerekçeyle (komşu `şey`in aday kesimi) oradadır.
   Ham "yakalama" sayısı bu sütun olmadan yanıltır.
+
+## Faz 1 — hangi sinyaller gerçekten var?
+
+Ezberden bayrak yok: kurulu `whisper-cli`'nin `--help` ve `-oj`/`-ojf`
+çıktısına bakıldı.
+
+| sinyal | fw | wcpp (`-ojf`) |
+|---|---|---|
+| kelime olasılığı | `word.probability` | token `p` ortalaması (üretimin `confidence`'ı) |
+| en zayıf token | — (kelime başına tek olasılık) | token `p` minimumu |
+| `avg_logprob` | segment seviyesi | **YOK** |
+| `no_speech_prob` | segment seviyesi | **YOK** |
+
+Kurulu binary'de `-ojf` segment alanları `timestamps/offsets/text/tokens`,
+token alanları `text/timestamps/offsets/id/p/t_dtw`'dir. `-oj` **hiçbir**
+olasılık alanı vermez — `-ojf` gerekliliğinin sebebi budur. `t_dtw` her
+token'da `-1`'dir (KI-1'deki DTW notuyla tutarlı).
 
 ## Bilinen ölçüm sınırları
 
