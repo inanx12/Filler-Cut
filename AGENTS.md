@@ -265,12 +265,23 @@ NVIDIA'da, `TestGercekQsvProbe` yalnız Intel iGPU'da (hibrit kip açıkken),
 makinesinde (RX 9060 XT) AMF sınıfı **skip DEĞİL, koştu ve geçti** —
 NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 
-**Sıradaki:** **filler kaçağı (KI-1 ana kaydı)** — ASR'ın uydurma yazımı
-filler'ı kaçırıyor (`ııı` → `ığılarımı`); metin eşleşmesi bunu düzeltemez.
-Ayrı faz, v0.4 kapsamına bilinçli olarak alınmadı. İkinci aday: **zincir
-kayması** — v0.4.0 re-anchor'ının kapsamı DIŞINDA kalan sınıf (konuşmadan
-konuşmaya kayan sınırlar; sessizlik çıpası yok, ölçüm KI-1'de). Bunun için
-sessizlik dışı bir hizalama sinyali (DTW veya forced alignment) gerekir.
+**Sıradaki:** **v1.0 UI (localhost web)** — KI-1 spike'ı tamamlandı
+(Faz 1+2 ölçüldü ve öldü; bkz. KI-1).
+
+Spike'ın bıraktığı tablo (ayrıntı ve tüm sayılar `KNOWN_ISSUES.md` KI-1'de,
+harness `experiments/filler_leak/`): varsayılan modda kesin filler yakalama
+**1/8**, 16 koşunun hiçbirinde yanlış pozitif yok. Kaçak PLAN'dan değil
+TRANSCRIBE'dan geliyor (`plan_kacagi` 0). Faz 1 (confidence ayrıştırma) ve
+Faz 2 (numpy-only akustik vowel-run) ölçülüp **öldü** — ikisi de
+ürünleştirilmedi, üretim koduna hiç dokunulmadı. KI-1 ana kaydı AÇIK kalır:
+kaçak çözülmedi, ölçülü hâliyle belgelendi.
+
+**Backlog (kapsam dışı, sırası gelmedi):** (1) **zincir kayması** — v0.4.0
+re-anchor'ının kapsamı DIŞINDA kalan sınıf (konuşmadan konuşmaya kayan
+sınırlar; sessizlik çıpası yok, ölçüm KI-1'de). Sessizlik dışı bir hizalama
+sinyali (DTW veya forced alignment) gerekir. (2) Spike'ın ölçümde görüp
+uygulamadığı adaylar: `ııı` → `şey` yazım kalıbının aday kademesiyle
+etkileşimi, `metinde_yok` sınıfı (VAD/segment sınırı).
 
 Devam eden küçük iş (v0.3 kuyruğu): interaktif review'un `wcpp_backend` ile
 uçtan uca doğrulanması — `@pytest.mark.wcpp` referansı
