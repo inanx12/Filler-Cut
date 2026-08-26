@@ -229,9 +229,9 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pipeline.py`: silence haritası TRANSCRIBE'dan önceye alındı (tek koşu), re-anchor wiring'i, transkript kaydı re-anchor'dan sonra + 4 kilit testi | `82cce86` |
 | `tests/data/wcpp_reference_tr.json`: 10 şişme vakası kıyas setinde (`sinif` + ölçülen sapma alanları); `tests/test_wcpp.py` re-anchor'lı kabul testi + temiz akış regresyon kilidi | `67a51f7` |
 
-**Test sayısı:** 477 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 466'sı
-marker'sız; 10'u `ffmpeg`, 3'ü `wcpp` marker'lı (gerçek ffmpeg / gerçek
+**Test sayısı:** 485 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 471'i
+marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
 atlar, donanım/model yoksa ilgili testler kendi kendine skip eder.
@@ -281,10 +281,12 @@ girer. `ffmpeg -encoders` listesi YETMEZ: geliştirme makinesinde `h264_amf` ve
 `h264_qsv` listede görünüp sürücüde patlıyordu (`amfrt64.dll failed to open`,
 `MFX session: -9`) — DESIGN.md §5'in probe gerekçesi birebir doğrulandı. QSV'nin
 sonradan (hibrit kip açılınca, `-encoders` listesi hiç değişmeden) ÇALIŞIR hale
-gelmesi aynı gerekçeyi ikinci kez doğruladı. NVENC değerleri
-(`-preset p5 -cq {crf-2}`) RTX 4050'de, QSV değerleri
-(`-preset medium -q:v {crf}`, CQP) Intel UHD iGPU'da gerçek encode + SSIM
-ölçümüyle kalibre edildi (tablolar KI-6'da); QSV'de `-q` DEĞİL `-q:v` — belirteçsiz
-biçim ses encoder'ına sızıp `-b:a` hedefini bozuyor.
-**AMF kalite argümanları kalibre EDİLMEDİ — AMD donanımı bulunana kadar
-bekliyor (KI-6, "AMD günü")**.
+gelmesi aynı gerekçeyi ikinci kez doğruladı. Üç donanım
+yolunun da değerleri gerçek encode + SSIM ölçümüyle kalibre edildi (tablolar
+KI-6'da): NVENC (`-preset p5 -cq {crf-2}`) RTX 4050'de, QSV
+(`-preset medium -q:v {crf}`, CQP) Intel UHD iGPU'da, AMF
+(`-quality quality -rc cqp -qp_i/-qp_p {crf}`) Radeon RX 9060 XT'de.
+İki encoder'a özgü tuzak koda kilitlendi: QSV'de `-q` DEĞİL `-q:v` —
+belirteçsiz biçim ses encoder'ına sızıp `-b:a` hedefini bozuyor; AMF'de
+`-preset` `-quality`'nin alias'ıdır ve x264 sözlüğünü BİLMEZ (`-preset medium`
+127 koduyla patlar), bu yüzden `render.preset` o yola bağlanmaz.
