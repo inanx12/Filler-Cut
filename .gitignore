@@ -26,3 +26,6 @@ kiyas_ki1.py
 
 # Kişisel config (yerel binary/model yolları) — repo'ya girmez
 filler-cut.toml
+
+# Spike ara dosyaları (experiments/filler_leak) — WAV, ham ASR çıktısı, cache
+experiments/filler_leak/_cache/
