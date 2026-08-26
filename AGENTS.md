@@ -94,7 +94,7 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
-## Mevcut Durum (2026-08-23)
+## Mevcut Durum (2026-08-26)
 
 **v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
 gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
@@ -147,6 +147,19 @@ sessizlik yoktur, çapalamanın çıpası yoktur (ölçüm tablosu KI-1'de).
 Davranış değişikliği: kesim sınırları sıkılaşır ve `<ad>_transkript.json`
 re-anchor'lı sınırları taşır. KI-5 anomali koruması kaldırılmadı, yedek
 savunmaya çekildi.
+
+**v0.4.1 TAMAMLANDI** — AMD donanım kalibrasyonu + bir giriş noktası
+düzeltmesi: (a) `h264_amf` kalite argümanları ilk kez gerçek AMD donanımında
+ölçüldü (Radeon RX 9060 XT / Ryzen 5 7500F, iki klip × 4 aday,
+boyut/süre/SSIM) → `-quality balanced` yerine `quality`, qp ofseti 0
+(`AMF_QP_OFFSET`); **KI-6 tamamen kapandı** (QSV yarısı v0.3.3'te kapanmıştı).
+Ölçülen iki tuzak koda kilitlendi: AMF'nin `-preset`'i `-quality`'nin
+alias'ıdır ve x264 sözlüğünü bilmez (`-preset medium` → 127), ve bu arg
+setiyle B-frame üretilmediği için `-qp_b` yazılmaz. **AMD makinelerde çıktı
+kalitesi/boyutu değişir**; NVENC/QSV/libx264 satırlarına dokunulmadı.
+(b) `python -m fillercut.cli` `__main__` guard'ı yokken modülü import edip
+hiçbir şey yapmadan 0 koduyla çıkıyordu (sessiz no-op: exit 0, boş stdout) —
+guard `main_entry`'ye bağlandı, kilidi red-first doğrulandı.
 
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
@@ -229,12 +242,28 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pipeline.py`: silence haritası TRANSCRIBE'dan önceye alındı (tek koşu), re-anchor wiring'i, transkript kaydı re-anchor'dan sonra + 4 kilit testi | `82cce86` |
 | `tests/data/wcpp_reference_tr.json`: 10 şişme vakası kıyas setinde (`sinif` + ölçülen sapma alanları); `tests/test_wcpp.py` re-anchor'lı kabul testi + temiz akış regresyon kilidi | `67a51f7` |
 
-**Test sayısı:** 485 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 471'i
+**v0.4.1**
+
+| Modül | Commit |
+|---|---|
+| `render/encoder.py`: `h264_amf` kalibrasyonu — `-quality quality -rc cqp -qp_i/-qp_p {crf}` (RX 9060 XT'de iki klip × 4 aday boyut/süre/SSIM); `AMF_QUALITY` + `AMF_QP_OFFSET` sabitleri, `TestGercekAmfProbe` ve 6 değer kilidi (x264 preset sözlüğü ve `-qp_b` dahil) | `6f7af51` |
+| `KNOWN_ISSUES.md` KI-6: ana başlık "Çözüldü"; AMF bölümü envanter + ölçüm tabloları + seçim gerekçesi + ölçülen tuzaklar, ardından uçtan uca doğrulama | `6b30ced`, `6fe56c2` |
+| `cli.py`: `__main__` guard'ı → `main_entry` (`python -m fillercut.cli` sessiz no-op'tu) + `TestModulGirisNoktasi` subprocess kilidi (red-first) | `7c6cfc0` |
+| `CHANGELOG.md` v0.4.1 (+ v0.4.0'ın eksik link referansı) | `02845f6` |
+
+**Test sayısı:** 486 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 472'si
 marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
 atlar, donanım/model yoksa ilgili testler kendi kendine skip eder.
+
+`ffmpeg` marker'lı üç probe sınıfının hangisinin KOŞTUĞU makineye bağlıdır ve
+üçü birden yeşil olan tek bir makine yoktur: `TestGercekNvencProbe` yalnız
+NVIDIA'da, `TestGercekQsvProbe` yalnız Intel iGPU'da (hibrit kip açıkken),
+`TestGercekAmfProbe` yalnız AMD'de koşar; kalanlar skip eder. Kalibrasyon
+makinesinde (RX 9060 XT) AMF sınıfı **skip DEĞİL, koştu ve geçti** —
+NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 
 **Sıradaki:** **filler kaçağı (KI-1 ana kaydı)** — ASR'ın uydurma yazımı
 filler'ı kaçırıyor (`ııı` → `ığılarımı`); metin eşleşmesi bunu düzeltemez.
