@@ -22,10 +22,10 @@ encoder seçtirir. Probe `pipeline.run()` başında BİR KEZ yapılır ve sonucu
 (`EncoderSelection`) katmanlar arasında taşınır; process içi tek probe yeterli.
 
 **Kalite argümanları tek tabloda** (`_KALITE_ARGS`): kalibrasyon tek yerden
-yapılsın diye codec başına tek fonksiyon vardır. NVENC değerleri RTX 4050'de,
-QSV değerleri Intel UHD (i5-12450HX, hibrit kip) üzerinde gerçek encode +
-SSIM ölçümüyle doğrulandı; AMF kalibrasyonu AMD donanımı olmadığı için
-bekliyor (KNOWN_ISSUES.md KI-6).
+yapılsın diye codec başına tek fonksiyon vardır. Üç donanım yolunun da
+değerleri gerçek encode + SSIM ölçümüyle doğrulandı: NVENC RTX 4050'de, QSV
+Intel UHD'de (i5-12450HX, hibrit kip), AMF Radeon RX 9060 XT'de (ölçüm
+tabloları KNOWN_ISSUES.md KI-6'da).
 
 **`[render].video_codec` gerilimi:** v0.2'de video encoder'ı `preference`
 zincirinden gelir ve codec ailesi h264'te sabittir; `video_codec` alanı bu
@@ -79,6 +79,27 @@ NVENC_PRESET = "p5"
 #: (x264 sözlüğü, "ultrafast"/"placebo" içerebilir) buraya BAĞLANMAZ — geçersiz
 #: isim encode'u patlatırdı. `medium` = TargetUsage 4, ölçümün yapıldığı değer.
 QSV_PRESET = "medium"
+
+#: AMF kalite preset'i: `balanced` / `speed` / `quality` — bu ÜÇ isim geçerlidir.
+#: `-preset` bu seçeneğin alias'ıdır ve x264 sözlüğünü BİLMEZ: `-preset medium`
+#: ffmpeg'de `Unable to parse "preset" option value "medium"` ile 127 kodunda
+#: patlar (ölçüldü). Bu yüzden `render.preset` buraya BAĞLANMAZ — QSV'deki
+#: aynı gerekçe (orada isimler tesadüfen çakışıyor, burada hiç çakışmıyor).
+#: `quality`, kalibrasyonda `balanced`'a göre hem daha küçük dosya hem (marjinal)
+#: daha yüksek SSIM verdi; bedeli süre (KLIP_A'da 21.2 vs 12.7 sn) — yine de
+#: yazılım x264'ün yarısından hızlı.
+AMF_QUALITY = "quality"
+
+#: AMF `-qp_i`/`-qp_p` (CQP) = `crf` + bu ofset. Ofset 0: kalibrasyonda
+#: `qp = crf` adayı, x264 crf 23 referansının SSIM'ine iki klipte de en yakın
+#: KABUL EDİLEBİLİR aday çıktı (720p30 facecam: −0.00062; 1080p60 düşük
+#: hareket: −0.00101). Daha düşük qp'ler SSIM'i referansın üstüne çıkarıyor ama
+#: dosyayı %43-59 şişiriyor.
+#: **Ölçüm sapması (KI-6):** CQP sabit kuantizasyondur, x264'ün crf'i gibi
+#: içeriğe göre uyarlanmaz — ofset 0'da dosya iki klipte de referansı ~%23
+#: aşar. Sapma kalite yönünde bırakıldı (NVENC/QSV ofsetleriyle aynı tercih:
+#: bedeli daha büyük dosya).
+AMF_QP_OFFSET = 0
 
 #: QSV `-q:v` (CQP) = `crf` + bu ofset. Ofset 0: kalibrasyonda `-q:v = crf`
 #: adayı, x264 crf 23 referansının SSIM'ine iki klipte de en yakın çıktı
@@ -326,21 +347,26 @@ def _nvenc_args(render: RenderConfig) -> list[str]:
 
 
 def _amf_args(render: RenderConfig) -> list[str]:
-    """AMF: makul default — `balanced` kalite + CQP (sabit kuantizasyon).
+    """AMF: CQP sabit kuantizasyon, crf'e ofsetli (bkz. `AMF_QP_OFFSET`).
 
     AMF'nin varsayılan rate control'ü hedef bitrate'e bakar ve düşük bitrate'te
-    sessizce kalite düşürür; CQP crf mantığına en yakın davranışı verir.
-    Değerler KALİBRE EDİLMEMİŞTİR — AMD donanımı yok (KNOWN_ISSUES.md KI-6).
+    sessizce kalite düşürür; CQP crf mantığına en yakın davranışı verir. Mod
+    ezberden değil envanterden doğrulandı (`ffmpeg -h encoder=h264_amf`:
+    `cqp`, `cbr`, `vbr_peak`, `vbr_latency`, `qvbr`, `hqvbr`, `hqcbr`).
+
+    `-qp_b` bilinçli olarak YAZILMAZ: bu arg setiyle üretilen akışta B-frame
+    çıkmıyor (ölçüldü — yalnız I ve P), yani ayarlanacak bir şey yok.
+    Değerler RX 9060 XT'de iki klip × 4 aday ölçümüyle seçildi (KI-6).
     """
     return [
         "-quality",
-        "balanced",
+        AMF_QUALITY,
         "-rc",
         "cqp",
         "-qp_i",
-        _q(render.crf),
+        _q(render.crf + AMF_QP_OFFSET),
         "-qp_p",
-        _q(render.crf),
+        _q(render.crf + AMF_QP_OFFSET),
     ]
 
 

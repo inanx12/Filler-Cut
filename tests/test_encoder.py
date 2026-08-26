@@ -5,10 +5,10 @@ testleriyle aynı desen). Sahte run, komuttaki `-c:v <ad>`'a bakıp "bu encoder
 çalışıyor/çalışmıyor" senaryosunu kurar — böylece zincir sırası, atlama ve
 fallback davranışı donanımdan bağımsız doğrulanır.
 
-`TestGercekNvencProbe` (NVIDIA) ve `TestGercekQsvProbe` (Intel iGPU) gerçek
-ffmpeg + donanım ister: `@pytest.mark.ffmpeg` ile işaretlidirler (CI'da
-`-m "not ffmpeg"` ile atlanır) ve donanım yoksa çalışma anında `pytest.skip`
-ederler — donanımsız makinede suite yeşil kalır.
+`TestGercekNvencProbe` (NVIDIA), `TestGercekQsvProbe` (Intel iGPU) ve
+`TestGercekAmfProbe` (AMD) gerçek ffmpeg + donanım ister: `@pytest.mark.ffmpeg`
+ile işaretlidirler (CI'da `-m "not ffmpeg"` ile atlanır) ve donanım yoksa
+çalışma anında `pytest.skip` ederler — donanımsız makinede suite yeşil kalır.
 """
 
 from __future__ import annotations
@@ -24,6 +24,8 @@ import pytest
 
 from fillercut.config import EncoderConfig, RenderConfig
 from fillercut.render.encoder import (
+    AMF_QP_OFFSET,
+    AMF_QUALITY,
     ENCODER_MAP,
     NVENC_PRESET,
     PIX_FMT,
@@ -350,12 +352,42 @@ class TestBuildEncodeArgs:
         args = build_video_args("h264_nvenc", RenderConfig(crf=crf))
         assert args[args.index("-cq") + 1] == beklenen_cq
 
-    def test_amf_cqp_ile_makul_default(self) -> None:
-        args = build_video_args("h264_amf", RenderConfig(crf=20))
-        assert args[args.index("-quality") + 1] == "balanced"
+    def test_amf_cqp_crf_ofsetli(self) -> None:
+        # Kalibrasyon (KI-6, RX 9060 XT): `balanced` → `quality`, qp = crf.
+        args = build_video_args("h264_amf", RenderConfig(crf=23))
+        assert args[args.index("-quality") + 1] == AMF_QUALITY
         assert args[args.index("-rc") + 1] == "cqp"
-        assert args[args.index("-qp_i") + 1] == "20"
-        assert args[args.index("-qp_p") + 1] == "20"
+        assert args[args.index("-qp_i") + 1] == str(23 + AMF_QP_OFFSET)
+        assert args[args.index("-qp_p") + 1] == str(23 + AMF_QP_OFFSET)
+        assert "-crf" not in args  # AMF crf bilmez
+
+    def test_amf_x264_preset_sozlugu_baglanmaz(self) -> None:
+        """AMF'nin `-preset`'i `-quality`'nin alias'ıdır, x264 sözlüğünü bilmez.
+
+        `render.preset` buraya bağlansaydı `-preset medium` ffmpeg'de
+        `Unable to parse "preset" option value "medium"` ile 127 kodunda
+        patlardı (ölçüldü) — QSV'de isimler tesadüfen çakışır, AMF'de hiç
+        çakışmaz.
+        """
+        args = build_video_args("h264_amf", RenderConfig(preset="veryslow"))
+        assert "-preset" not in args
+        assert "veryslow" not in args
+        assert args[args.index("-quality") + 1] in {"balanced", "speed", "quality"}
+
+    def test_amf_qp_b_yazilmaz(self) -> None:
+        """Bu arg setiyle üretilen akışta B-frame yok (ölçüldü: yalnız I ve P).
+
+        Ayarlanacak bir şey olmadığı için `-qp_b` bilinçli olarak dışarıda —
+        ezberden arg yazılmaz (KI-6).
+        """
+        assert "-qp_b" not in build_video_args("h264_amf", RenderConfig())
+
+    @pytest.mark.parametrize(("crf", "beklenen_qp"), [(0, "0"), (51, "51"), (99, "51")])
+    def test_amf_degeri_aralikta_kirpilir(self, crf: int, beklenen_qp: str) -> None:
+        # config uç değer verebilir: qp [0, 51] dışına taşmamalı.
+        args = build_video_args("h264_amf", RenderConfig(crf=crf))
+        assert args[args.index("-qp_i") + 1] == beklenen_qp
+        assert args[args.index("-qp_p") + 1] == beklenen_qp
 
     def test_qsv_cqp_crf_ofsetli(self) -> None:
         # Kalibrasyon (KI-6): ICQ (`-global_quality`) değil CQP kazandı.
@@ -500,6 +532,59 @@ class TestGercekQsvProbe:
             str(cikti),
         ]
         # errors="replace": NVENC muadiliyle aynı gerekçe (v0.3.2 decode fix'i).
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, errors="replace", check=False
+        )
+        assert proc.returncode == 0, proc.stderr[-400:]
+        assert cikti.is_file() and cikti.stat().st_size > 0
+
+
+#: Gerçek ffmpeg + AMD AMF gerektiren test — CI'da `-m "not ffmpeg"` ile
+#: atlanır; AMD GPU/sürücü yoksa çalışma anında skip eder. NVENC/QSV
+#: muadillerinin AMD karşılığı (KI-6 AMF kalibrasyon notu).
+@pytest.mark.ffmpeg
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg PATH'te yok")
+class TestGercekAmfProbe:
+    @staticmethod
+    def _amf_veya_skip() -> ProbeAttempt:
+        deneme = probe_encoder("amf")
+        if not deneme.ok:
+            pytest.skip(f"AMF donanımı/sürücüsü yok: {deneme.error}")
+        return deneme
+
+    def test_amf_probe_donanimda_calisir(self) -> None:
+        deneme = self._amf_veya_skip()
+        assert deneme.ffmpeg_name == "h264_amf"
+        assert deneme.error == ""
+
+    def test_secim_amf_tercihini_bulur(self) -> None:
+        self._amf_veya_skip()
+        secim = select_encoder(EncoderConfig(preference=["amf", "libx264"]))
+        assert secim.name == "amf"
+        assert secim.fallback is False
+
+    def test_uretilen_arglarla_gercek_encode_gecer(self, tmp_path: Path) -> None:
+        """Kalite argümanları sürücü tarafından KABUL ediliyor mu?
+
+        NVENC/QSV muadillerinin AMD karşılığı: probe encoder'ın açıldığını
+        gösterir, bu test `-quality quality -rc cqp -qp_i/-qp_p <crf>` setinin
+        de geçerli olduğunu gösterir. Arg setinin x264 preset sözlüğünü
+        TAŞIMADIĞI saf tarafta sabitlenir
+        (`TestBuildEncodeArgs::test_amf_x264_preset_sozlugu_baglanmaz`) —
+        `-preset medium` bu encoder'da 127 koduyla patlar.
+        """
+        deneme = self._amf_veya_skip()
+        cikti = tmp_path / "amf.mp4"
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=0.5",
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=0.5",
+            *build_encode_args(
+                EncoderSelection(name="amf", ffmpeg_name=deneme.ffmpeg_name), RenderConfig()
+            ),
+            str(cikti),
+        ]
+        # errors="replace": NVENC/QSV muadilleriyle aynı gerekçe (v0.3.2 decode fix'i).
         proc = subprocess.run(
             cmd, capture_output=True, text=True, errors="replace", check=False
         )
