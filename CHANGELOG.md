@@ -7,6 +7,105 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [0.4.1] — 2026-08-26
+
+AMD donanım kalibrasyonu + bir giriş noktası düzeltmesi. `h264_amf` kalite
+argümanları ilk kez gerçek AMD donanımında ölçüldü — **KNOWN_ISSUES.md KI-6'nın
+kalan yarısı kapandı, kayıt tamamen "Çözüldü"**. Yeni bağımlılık yok.
+**AMD makinelerde çıktı kalitesi/boyutu değişir** (aşağıda).
+
+### Düzeltildi
+
+- **`render/encoder.py` — `h264_amf` kalite argümanları kalibre edildi.**
+  Değerler v0.2'den beri ölçülmemiş "makul default"lardı. Radeon RX 9060 XT +
+  Ryzen 5 7500F üzerinde, QSV kalibrasyonunun (v0.3.3) deseniyle ölçüldü:
+  libx264 `-preset medium -crf 23` referansı, ffmpeg'in kendi `ssim` filtresi,
+  iki klip × 4 aday, tam klip, video-only. Seçilen set
+  `-quality quality -rc cqp -qp_i {crf} -qp_p {crf}`:
+  - **`-quality balanced` → `quality`:** aynı qp'de iki klipte de hem daha
+    küçük dosya (KLIP_A 92.86 vs 95.04 MB) hem marjinal daha yüksek SSIM.
+    Bedeli ~1.7-2× süre; kabul edildi, `quality` bile yazılım x264'ün
+    yarısından hızlı (21.2 vs 48.8 sn) ve bu araçta darboğaz encode değil ASR.
+  - **qp ofseti 0 (`qp = crf`), `AMF_QP_OFFSET` sabitine bağlandı.** Boyut
+    süzgeci `qp 21`'i iki klipte de eliyor (+58.6% / +42.5%); kalanlar
+    arasında `qp 23` iki klipte de SSIM'de daha yakın. QSV'de klip başına
+    kazananlar çatışıp karar tek klibe yaslanmak zorunda kalmıştı — AMF'de
+    tek doğrusal eşleme iki klipte de doğrudan kazanıyor.
+  - **`-rc cqp` sabitlemesi korundu** (gerekçe KI-6'da: varsayılan bitrate
+    hedefli mod düşük bitrate'te sessizce kalite düşürür). Mod adayları
+    ezberden değil `ffmpeg -h encoder=h264_amf` envanterinden doğrulandı.
+
+  Ölçülen iki encoder'a özgü tuzak koda ve testlere kilitlendi:
+  - **AMF'nin `-preset`'i `-quality`'nin alias'ıdır ve x264 sözlüğünü
+    BİLMEZ** — yalnız `balanced`/`speed`/`quality`. `-preset medium` ffmpeg'de
+    **127 koduyla patlar** (ölçüldü), bu yüzden `render.preset` bu yola
+    bağlanmaz. QSV'de isimler tesadüfen çakıştığı için tuzak orada
+    görünmüyordu.
+  - **`-qp_b` yazılmaz:** seçilen arg setiyle üretilen akışta B-frame yok
+    (ölçüldü: 60 karede 1×I + 59×P), ayarlanacak bir şey yok.
+
+  QSV'nin `-q` sızıntısının **AMF muadili YOKTUR**: dört bayrak da encoder'a
+  özel AVOption'dır, generic `-q` gibi tüm akışlara bağlanmaz. Uçtan uca
+  koşuda çıktının ses akışı 196 kbps ölçüldü (config hedefi 192k korunuyor).
+- **`cli.py` — `python -m fillercut.cli` giriş noktası.** `__main__` guard'ı
+  yoktu: bu yol modülü import edip HİÇBİR ŞEY YAPMADAN 0 koduyla çıkıyordu —
+  exit 0, boş stdout, üretilen dosya yok. Dışarıdan başarılı koşu gibi görünen
+  sessiz bir no-op. `console_scripts` hedefi (`fillercut`) doğru çalıştığı için
+  kusur yalnız bu yolda görünüyordu. Guard `app`'e değil `main_entry`'ye
+  bağlanır — v0.3.3'ün konsol akışı ayarı ilk `echo`'dan önce çalışmalı, yoksa
+  yönlendirilmiş çıktı bu yolda yine patlardı.
+
+### Değişti
+
+- **AMD makinelerde render çıktısı değişir (davranış değişikliği).** Aynı
+  `crf` ile üretilen dosya artık farklı: `balanced` yerine `quality` preset'i
+  ve kalibre edilmiş qp eşlemesi kullanılıyor. NVIDIA (NVENC), Intel (QSV) ve
+  yazılım (libx264) yollarına DOKUNULMADI — o satırlar bit-birebir aynı.
+
+### Test
+
+- Toplam test sayısı 477 → 486; `ffmpeg` marker'lı test 10 → 13.
+- **`TestGercekAmfProbe`** (yeni): NVENC/QSV muadillerinin AMD karşılığı —
+  probe + seçim + üretilen arg setiyle gerçek encode. AMD donanımı yoksa
+  çalışma anında skip eder; kalibrasyon makinesinde skip DEĞİL, koştu.
+- **`TestModulGirisNoktasi`** (yeni): `python -m fillercut.cli --version`
+  subprocess'te exit 0 verip sürümü basmalı. Red-first doğrulandı — fix'ten
+  önce `assert '' == 'fillercut, version 0.4.0'` ile kırmızıydı, yani
+  belirtinin kendisini (exit 0 + boş stdout) yakalıyor. Subprocess şart:
+  `-m` yolu ancak ayrı yorumlayıcı koşusunda sınanır, `runner.invoke(app, …)`
+  guard'ı hiç çalıştırmaz.
+- `TestBuildEncodeArgs`'ın AMF değer kilitleri yeni sete güncellendi; ayrıca
+  x264 preset sözlüğünün bağlanmadığı ve `-qp_b`'nin yazılmadığı kilitlendi.
+
+### Belgeler
+
+- `KNOWN_ISSUES.md` KI-6: ana başlık **"Çözüldü"** işaretlendi (kayıt
+  silinmedi), "AMF yarısı — AÇIK" bölümü QSV'ninkiyle aynı formatta ölçüm
+  kaydına dönüştü — donanım künyesi, seçenek envanteri, iki klip için tam
+  boyut/Δboyut/SSIM/ΔSSIM/süre tabloları, mod + preset + değer seçiminin ayrı
+  ayrı gerekçesi, ölçülen tuzaklar ve uçtan uca doğrulama. İki tablonun yan
+  yana okunabilmesinin dayanağı kayda geçti: referans satırları QSV
+  ölçümüyle birebir aynı çıktı (KLIP_A 75.22 vs 75.21 MB / 0.99073;
+  KLIP_B 12.45 MB / 0.99770). "AMD günü" notu güncellendi: AMF bitti,
+  whisper.cpp HIP derlemesi sırada.
+- `AGENTS.md`: RENDER encoder notundaki "AMF kalite argümanları kalibre
+  EDİLMEDİ" ifadesi kaldırıldı; üç donanım yolunun da kalibre olduğu ve iki
+  encoder'a özgü tuzak (QSV `-q:v`, AMF `-preset`) yazıldı.
+
+### Bilinen sınırlar
+
+- **`-usage` hiç ölçülmedi.** Envanterde `high_quality` ve `transcoding`
+  dahil altı değer var; grid'i küçük tutmak için kapsam dışı bırakıldı.
+  Kalite/boyut eğrisini kaydırabilir — ölçülmeden değiştirilmemeli.
+- **Kalibrasyon tek makinede yapıldı** (RX 9060 XT). Başka nesil AMF
+  silikonunda (eski GCN/Polaris) değerler sapabilir; ölçüm yöntemi KI-6'da
+  kayıtlı ve tekrarlanabilir.
+- **CQP içeriğe uyarlanmaz.** Ofset 0'da dosya iki klipte de referansı ~%23
+  aşıyor. Sapma bilinçli olarak kalite yönünde bırakıldı — NVENC (`-2`) ve
+  QSV ofsetleriyle aynı tercih: "bedeli daha büyük dosya".
+
+[0.4.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v0.4.1
+
 ## [0.4.0] — 2026-08-23
 
 Kelime sınırlarının silencedetect haritasına **yeniden çapalanması**
@@ -63,6 +162,8 @@ seviyesinde savunması. **Kullanıcıya görünür davranış değişikliği var
   tabanlı çapalama düzeltemez. Ölçüm: 16 referans kelimesinin 8'i tolerans
   içinde (6 temiz akış + 2 duraklama komşuluğu), 8'i `zincir_kaymasi`.
 - **Filler kaçağı (KI-1 ana kaydı) bu sürümde ÇÖZÜLMEDİ** — ayrı faz.
+
+[0.4.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v0.4.0
 
 ## [0.3.3] — 2026-08-22
 
