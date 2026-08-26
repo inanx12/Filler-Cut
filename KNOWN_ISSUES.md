@@ -91,9 +91,10 @@ Filler-Cut'ın kendi workflow'uyla derlenen Vulkan binary
 (`.github/workflows/vulkan-build.yml`, whisper.cpp v1.9.1, `-DGGML_VULKAN=ON`),
 CUDA binary (resmi cublas-12.4 paketi, aynı tag) ile aynı kayıtta kıyaslandı:
 `test_konusma.wav`, `ggml-large-v3-turbo-q5_0.bin`, `-l tr -ml 1 -sow -ojf`,
-3'er koşu. Aşağıdaki hız ölçümü **yalnız RTX 4050 makinesine** aittir;
-transkript tablosuna sonradan ikinci bir cihaz (AMD RDNA4 — RX 9060 XT)
-eklendi. **Bulgular bu kayıtla sınırlıdır, genelleme yok.**
+3'er koşu. Hem hız hem transkript tablosuna sonradan ikinci bir cihaz
+(AMD RDNA4 — RX 9060 XT) eklendi; **her hız bloğu kendi cihazına aittir**,
+cihazlar arası okuma için RDNA4 bloğundaki uyarıya bakın.
+**Bulgular bu kayıtla sınırlıdır, genelleme yok.**
 
 **Hız (RTX 4050, ılık koşular, 2.-3. koşu ortalaması):**
 
@@ -114,6 +115,52 @@ eklendi. **Bulgular bu kayıtla sınırlıdır, genelleme yok.**
 - **Kısa kayıtta load baskın:** ~15 sn'lik kayıtta total'in ~%60'ı model
   yükleme — kara-kutu subprocess mimarisinin sabit maliyeti (her video için
   bir kez ödenir).
+
+**Hız (AMD RDNA4 — RX 9060 XT / Ryzen 5 7500F; 2026-08-26).** Aynı Vulkan
+binary'si (v1.9.1), aynı model, aynı bayraklar (`-l tr -ml 1 -sow -ojf`).
+Girdi başına 4 koşu: 1. koşu ayrı, 2.-4. koşuların **medyanı** ılık değer.
+Ölçüm `Measure-Command` ile doğrudan `whisper-cli`ye — pipeline üzerinden
+değil. `duvar` = süreç duvar saati; `load`/`encode`/`total` whisper-cli'nin
+kendi `whisper_print_timings` çıktısıdır (RTX 4050 tablosuyla kıyaslanabilir
+olan sütunlar bunlardır).
+
+| Girdi | Süre | duvar (medyan) | total | encode | load |
+|---|---|---|---|---|---|
+| `test_konusma.wav` | 14.81 sn | 1024 ms | 849.5 ms | 125.3 ms | 493.2 ms |
+| `test1.wav` (Test1.mp4'ten) | 25.66 sn | 1028 ms | 840.4 ms | 126.3 ms | 469.5 ms |
+
+- **İki girdi aynı maliyette — çünkü ikisi de TEK 30 sn'lik pencereye sığıyor.**
+  25.66 sn'lik kayıt 14.81 sn'likle aynı süreyi harcıyor (840 vs 850 ms, fark
+  gürültü içinde). whisper 30 sn'lik parçalar hâlinde çalışır; maliyet süreyle
+  doğrusal değil **pencere sayısıyla kademelidir**. Bu tablo bu yüzden süre
+  ölçeklemesi hakkında hiçbir şey söylemez — iki girdi de aynı kademede.
+  30 sn'yi aşan girdi ölçülmedi.
+- **İlk koşu cezası: bu koşuda shader derlemesi YOK.** Vulkan pipeline cache
+  (`%LOCALAPPDATA%\AMD\VkCache`) bu makinede zaten doluydu (KI-1 transkript
+  koşusundan kalma), yani RTX 4050'de ölçülen ~11.2 sn'lik shader cezası
+  **burada yeniden ölçülemedi** — "cihaz başına tek seferlik" iddiası bu
+  kayıtta sınanmadı, yalnızca çelişmedi. Gözlenen tek ilk-koşu maliyeti **OS
+  dosya cache'i**: `load` 1147.6 → 493.2 ms, `total` 1590.9 → 849.5 ms
+  (+741 ms). `encode` 140.1 → 125.3 ms — encode tarafında ceza yok, yani
+  shader'ların derli olduğunun doğrudan kanıtı.
+- **Deterministik:** girdi başına 4 koşunun ürettiği `.json` dosyalarının
+  SHA-256'sı **tek** (`918EF3B5…` ve `4ACFA88E…`) — KI-1'in "AMD Vulkan kendi
+  içinde deterministik" notu 2 koşu yerine 4 koşuyla doğrulandı.
+- **Cihazlar arası karşılaştırma uyarısı:** RX 9060 XT sayıları RTX 4050
+  sayılarından düşük (total 849.5 vs ~1221, encode 125.3 vs ~191, load 493.2
+  vs ~720) ama bu **GPU karşılaştırması DEĞİLDİR** — iki ayrı makine
+  (masaüstü Ryzen 5 7500F vs dizüstü), farklı disk ve RAM. `load` tamamen
+  disk/CPU'ya bağlıdır, GPU'yla ilgisi yoktur. GPU'ya en yakın sütun
+  `encode`'dur (125.3 vs ~191 ms). Yöntem de birebir aynı değil: RTX 4050
+  bloğu 2.-3. koşunun **ortalaması**, bu blok 2.-4. koşunun **medyanı**.
+  Adil bir CPU/Vulkan/HIP karşılaştırması üç yollu tablo ister — o tur
+  **koşulamadı** (bkz. KI-7).
+- **Ölçüm aracı tuzağı (kaydedildi ki tekrarlanmasın):** ilk denemede
+  `Start-Process -Wait` kullanıldı; duvar saati her koşuda ~2009 ms'e
+  sabitlendi — whisper'ın kendi `total`'i 60 ms oynarken duvar yalnız 4 ms
+  oynuyordu. Bu sabitlik gerçek iş değil **araç artefaktıydı** (~1 sn).
+  `Measure-Command` + `cmd /c` yönlendirmesiyle aynı iş 1024 ms ölçüldü.
+  Duvar saati ölçen aracın kendisi doğrulanmadan sayı yazılmaz.
 
 **Transkript (uydurma kimliği compute backend'ine göre değişiyor):**
 
