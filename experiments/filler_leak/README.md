@@ -44,6 +44,7 @@ ffmpeg/ffprobe PATH'te olmalıdır. faster-whisper ilk koşuda modeli indirir
 ```bash
 python experiments/filler_leak/baseline.py         # Adım 1 — baseline
 python experiments/filler_leak/faz1_confidence.py  # Adım 2 — Faz 1
+python experiments/filler_leak/faz2_vowel_run.py   # Adım 3 — Faz 2
 ```
 
 Çıktılar `sonuclar/` altına yazılır (markdown tablo + ham JSON) ve konsola
@@ -58,6 +59,7 @@ kullanır.
 | `asr_runner.py` | `pipeline.run()`'ın PLAN'a kadarki **in-process aynası** + ASR enstrümanı + cache |
 | `baseline.py` | **Adım 1** — 4 klip × 2 mod × 2 backend = 16 koşu; yakalama/kaçak/YP tabloları |
 | `faz1_confidence.py` | **Adım 2** — güven skoru dağılımı + tek-eşik taraması |
+| `faz2_vowel_run.py` | **Adım 3** — numpy-only akustik vowel-run + 81'lik parametre ızgarası |
 | `sonuclar/` | Ölçüm çıktıları (repoya girer — kayıt) |
 | `_cache/` | WAV, sessizlik haritası, ham ASR çıktısı (repoya **girmez**) |
 
@@ -109,6 +111,18 @@ Kurulu binary'de `-ojf` segment alanları `timestamps/offsets/text/tokens`,
 token alanları `text/timestamps/offsets/id/p/t_dtw`'dir. `-oj` **hiçbir**
 olasılık alanı vermez — `-ojf` gerekliliğinin sebebi budur. `t_dtw` her
 token'da `-1`'dir (KI-1'deki DTW notuyla tutarlı).
+
+## Faz 2 — akustik özellikler
+
+Yalnız numpy + stdlib `wave`. 25 ms pencere / 10 ms adım, Hann pencereli
+`rfft`. Kare başına: **enerji (dBFS)**, **sıfır-geçiş oranı (ZCR)** ve
+**spektral akış** (ardışık normalize spektrumlar arası kosinüs uzaklığı —
+"sürekli-monoton"un sayısal karşılığı). Aday koşular sessizlik maskesiyle
+(üretimin ham silencedetect haritası) çakışıyorsa elenir.
+
+Tek bir ayar değil, **81'lik ızgara** taranır (enerji düşüşü × ZCR × akış ×
+min süre) — "benim ayarım tutmadı" ile "hiçbir ayar tutmuyor" farklı
+hükümlerdir, kill kararı ikincisini gerektirir.
 
 ## Bilinen ölçüm sınırları
 

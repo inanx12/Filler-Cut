@@ -71,6 +71,21 @@ Tolerans ±300 ms. `beklenen=hayır` satırları o modda kesilmemeli (invariant 
 | Test3.mp4 | ııı | kesin | 16050-16800 | aggressive | wcpp | evet | kaçak | 30 saniye olacak | -/-/- | yazim_kacagi | — |
 | Test3.mp4 | şey | aday | 16800-17200 | aggressive | wcpp | evet | yakalandı | saniye olacak şey | -/-/aday | — | aday filler: 'şey' [padding +80/-120ms] |
 
+## Kısmi kapsama — damganın ne kadarı gerçekten kesiliyor?
+
+`yakalandı/kaçak` İKİLİ bir sayıdır; kulakla duyulan sonuç değildir. Sessizlik kuralı, sessiz bir tereddüdün bir kısmını filler etiketi olmadan zaten atabilir. Aşağıda her damganın kaç ms'i **herhangi** bir kesimle örtüşüyor (sessizlik dahil) — kaçak sayılan damgalarda bile.
+
+| klip | backend | GT damga | süre ms | herhangi kesimle kapsanan | filler kesimiyle | sonuç |
+|---|---|---|---|---|---|---|
+| Test1.mp4 | fw | ııı@3200 | 1100 | 0 (%0) | 0 | kaçak |
+| Test1.mp4 | fw | ııı@22000 | 1000 | 208 (%20) | 0 | kaçak |
+| Test1.mp4 | wcpp | ııı@3200 | 1100 | 0 (%0) | 0 | kaçak |
+| Test1.mp4 | wcpp | ııı@22000 | 1000 | 208 (%20) | 0 | kaçak |
+| Test2.mp4 | fw | ııı@10700 | 750 | 0 (%0) | 0 | kaçak |
+| Test2.mp4 | wcpp | ııı@10700 | 750 | 620 (%82) | 620 | yakalandı |
+| Test3.mp4 | fw | ııı@16050 | 750 | 423 (%56) | 0 | kaçak |
+| Test3.mp4 | wcpp | ııı@16050 | 750 | 423 (%56) | 0 | kaçak |
+
 ## Kaçak sınıfı dağılımı (yalnız beklenen damgalar)
 
 | mod | backend | metinde_yok | yazim_kacagi | kademe_kacagi | plan_kacagi |

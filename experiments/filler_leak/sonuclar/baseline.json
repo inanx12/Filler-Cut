@@ -241,7 +241,9 @@
       "asr_kademe": "-/-/-",
       "kacak_sinifi": "yazim_kacagi",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -257,7 +259,9 @@
       "asr_kademe": "-/aday/-",
       "kacak_sinifi": "",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -273,7 +277,9 @@
       "asr_kademe": "aday",
       "kacak_sinifi": "",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -289,7 +295,9 @@
       "asr_kademe": "aday",
       "kacak_sinifi": "kademe_kacagi",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 208,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -305,7 +313,9 @@
       "asr_kademe": "-/-/-",
       "kacak_sinifi": "yazim_kacagi",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -324,7 +334,9 @@
         9720,
         10920
       ],
-      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]"
+      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]",
+      "kapsanan_ms": 1020,
+      "kapsanan_filler_ms": 1020
     },
     {
       "klip": "Test1.mp4",
@@ -343,7 +355,9 @@
         20460,
         21780
       ],
-      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]"
+      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]",
+      "kapsanan_ms": 480,
+      "kapsanan_filler_ms": 480
     },
     {
       "klip": "Test1.mp4",
@@ -362,7 +376,9 @@
         20460,
         21780
       ],
-      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]"
+      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]",
+      "kapsanan_ms": 208,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -378,7 +394,9 @@
       "asr_kademe": "-",
       "kacak_sinifi": "yazim_kacagi",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -394,7 +412,9 @@
       "asr_kademe": "-/aday",
       "kacak_sinifi": "",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -410,7 +430,9 @@
       "asr_kademe": "-/aday/-",
       "kacak_sinifi": "",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -426,7 +448,9 @@
       "asr_kademe": "aday/-",
       "kacak_sinifi": "kademe_kacagi",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 208,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -442,7 +466,9 @@
       "asr_kademe": "-",
       "kacak_sinifi": "yazim_kacagi",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test1.mp4",
@@ -461,7 +487,9 @@
         10750,
         12611
       ],
-      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms] + min_keep: 120ms ara parça kesime katıldı (< 300ms) + sessizlik 1113ms (noise=-35dB, min=0.4s)"
+      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms] + min_keep: 120ms ara parça kesime katıldı (< 300ms) + sessizlik 1113ms (noise=-35dB, min=0.4s)",
+      "kapsanan_ms": 250,
+      "kapsanan_filler_ms": 250
     },
     {
       "klip": "Test1.mp4",
@@ -480,7 +508,9 @@
         21160,
         22020
       ],
-      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]"
+      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]",
+      "kapsanan_ms": 700,
+      "kapsanan_filler_ms": 700
     },
     {
       "klip": "Test1.mp4",
@@ -499,7 +529,9 @@
         21160,
         22020
       ],
-      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]"
+      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]",
+      "kapsanan_ms": 228,
+      "kapsanan_filler_ms": 20
     },
     {
       "klip": "Test2.mp4",
@@ -515,7 +547,9 @@
       "asr_kademe": "-",
       "kacak_sinifi": "metinde_yok",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test2.mp4",
@@ -531,7 +565,9 @@
       "asr_kademe": "-",
       "kacak_sinifi": "",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 150,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test2.mp4",
@@ -547,7 +583,9 @@
       "asr_kademe": "-",
       "kacak_sinifi": "metinde_yok",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test2.mp4",
@@ -563,7 +601,9 @@
       "asr_kademe": "-",
       "kacak_sinifi": "metinde_yok",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 150,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test2.mp4",
@@ -582,7 +622,9 @@
         10024,
         11320
       ],
-      "kesim_reason": "sessizlik 546ms (noise=-35dB, min=0.4s) + min_keep: 80ms ara parça kesime katıldı (< 300ms) + kesin filler: 'ııı' [padding +80/-120ms]"
+      "kesim_reason": "sessizlik 546ms (noise=-35dB, min=0.4s) + min_keep: 80ms ara parça kesime katıldı (< 300ms) + kesin filler: 'ııı' [padding +80/-120ms]",
+      "kapsanan_ms": 620,
+      "kapsanan_filler_ms": 620
     },
     {
       "klip": "Test2.mp4",
@@ -598,7 +640,9 @@
       "asr_kademe": "aday",
       "kacak_sinifi": "",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 150,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test2.mp4",
@@ -617,7 +661,9 @@
         10024,
         13682
       ],
-      "kesim_reason": "sessizlik 546ms (noise=-35dB, min=0.4s) + min_keep: 80ms ara parça kesime katıldı (< 300ms) + kesin filler: 'ııı' [padding +80/-120ms] + min_keep: 200ms ara parça kesime katıldı (< 300ms) + aday filler: 'şey' [padding +80/-120ms] + min_keep: 120ms ara parça kesime katıldı (< 300ms) + sessizlik 1382ms (noise=-35dB, min=0.4s)"
+      "kesim_reason": "sessizlik 546ms (noise=-35dB, min=0.4s) + min_keep: 80ms ara parça kesime katıldı (< 300ms) + kesin filler: 'ııı' [padding +80/-120ms] + min_keep: 200ms ara parça kesime katıldı (< 300ms) + aday filler: 'şey' [padding +80/-120ms] + min_keep: 120ms ara parça kesime katıldı (< 300ms) + sessizlik 1382ms (noise=-35dB, min=0.4s)",
+      "kapsanan_ms": 750,
+      "kapsanan_filler_ms": 750
     },
     {
       "klip": "Test2.mp4",
@@ -636,7 +682,9 @@
         10024,
         13682
       ],
-      "kesim_reason": "sessizlik 546ms (noise=-35dB, min=0.4s) + min_keep: 80ms ara parça kesime katıldı (< 300ms) + kesin filler: 'ııı' [padding +80/-120ms] + min_keep: 200ms ara parça kesime katıldı (< 300ms) + aday filler: 'şey' [padding +80/-120ms] + min_keep: 120ms ara parça kesime katıldı (< 300ms) + sessizlik 1382ms (noise=-35dB, min=0.4s)"
+      "kesim_reason": "sessizlik 546ms (noise=-35dB, min=0.4s) + min_keep: 80ms ara parça kesime katıldı (< 300ms) + kesin filler: 'ııı' [padding +80/-120ms] + min_keep: 200ms ara parça kesime katıldı (< 300ms) + aday filler: 'şey' [padding +80/-120ms] + min_keep: 120ms ara parça kesime katıldı (< 300ms) + sessizlik 1382ms (noise=-35dB, min=0.4s)",
+      "kapsanan_ms": 600,
+      "kapsanan_filler_ms": 600
     },
     {
       "klip": "Test3.mp4",
@@ -652,7 +700,9 @@
       "asr_kademe": "aday",
       "kacak_sinifi": "kademe_kacagi",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 423,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test3.mp4",
@@ -668,7 +718,9 @@
       "asr_kademe": "aday/-",
       "kacak_sinifi": "",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test3.mp4",
@@ -687,7 +739,9 @@
         16026,
         17000
       ],
-      "kesim_reason": "sessizlik 447ms (noise=-35dB, min=0.4s) + min_keep: 80ms ara parça kesime katıldı (< 300ms) + aday filler: 'şey' [padding +80/-120ms]"
+      "kesim_reason": "sessizlik 447ms (noise=-35dB, min=0.4s) + min_keep: 80ms ara parça kesime katıldı (< 300ms) + aday filler: 'şey' [padding +80/-120ms]",
+      "kapsanan_ms": 750,
+      "kapsanan_filler_ms": 750
     },
     {
       "klip": "Test3.mp4",
@@ -706,7 +760,9 @@
         16026,
         17000
       ],
-      "kesim_reason": "sessizlik 447ms (noise=-35dB, min=0.4s) + min_keep: 80ms ara parça kesime katıldı (< 300ms) + aday filler: 'şey' [padding +80/-120ms]"
+      "kesim_reason": "sessizlik 447ms (noise=-35dB, min=0.4s) + min_keep: 80ms ara parça kesime katıldı (< 300ms) + aday filler: 'şey' [padding +80/-120ms]",
+      "kapsanan_ms": 200,
+      "kapsanan_filler_ms": 200
     },
     {
       "klip": "Test3.mp4",
@@ -722,7 +778,9 @@
       "asr_kademe": "-/-/-",
       "kacak_sinifi": "yazim_kacagi",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 423,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test3.mp4",
@@ -738,7 +796,9 @@
       "asr_kademe": "-/-/aday",
       "kacak_sinifi": "",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test3.mp4",
@@ -754,7 +814,9 @@
       "asr_kademe": "-/-/-",
       "kacak_sinifi": "yazim_kacagi",
       "kesim_ms": null,
-      "kesim_reason": ""
+      "kesim_reason": "",
+      "kapsanan_ms": 423,
+      "kapsanan_filler_ms": 0
     },
     {
       "klip": "Test3.mp4",
@@ -773,7 +835,9 @@
         17220,
         17490
       ],
-      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]"
+      "kesim_reason": "aday filler: 'şey' [padding +80/-120ms]",
+      "kapsanan_ms": 0,
+      "kapsanan_filler_ms": 0
     }
   ]
 }

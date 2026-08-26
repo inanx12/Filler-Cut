@@ -89,6 +89,12 @@ class FillerSonucu:
     #: cevabı. Kesin tier bir damganın ADAY bir kelimeyle yakalanması
     #: "doğru yerde, yanlış gerekçe" demektir; sayı yanıltmasın diye tabloda.
     kesim_reason: str
+    #: Damga aralığının HERHANGİ bir kesimle (sessizlik dahil) örtüşen ms'i.
+    #: "Yakalandı/kaçak" ikili bir sayıdır; kulakla duyulan sonuç değildir —
+    #: sessizlik kuralı sessiz bir duraklamanın bir kısmını zaten atabilir.
+    kapsanan_ms: int
+    #: Yalnız FILLER etiketli kesimlerle örtüşen ms.
+    kapsanan_filler_ms: int
 
 
 @dataclass(frozen=True)
@@ -118,6 +124,19 @@ def _filler_kesimleri(cut: list[Segment]) -> list[Segment]:
     şişmenin YP sayısına etkisi raporda ayrıca tartışılır.
     """
     return [s for s in cut if s.kind == "filler"]
+
+
+def _kapsanan_ms(kesimler: list[Segment], bas_ms: int, bit_ms: int) -> int:
+    """Damga aralığının verilen kesimlerle örtüşen toplam ms'i.
+
+    Kesimler çakışmaz (CutPlan invariantı), bu yüzden örtüşmeler toplanabilir.
+    """
+    toplam = 0
+    for c in kesimler:
+        a, b = max(c.start_ms, bas_ms), min(c.end_ms, bit_ms)
+        if b > a:
+            toplam += b - a
+    return toplam
 
 
 def _asr_bilgisi(
@@ -180,6 +199,8 @@ def kosu(
         if beklenen and yakalandi:
             yakalanan += 1
         metin, kademe = _asr_bilgisi(words, f, tol)
+        kapsanan = _kapsanan_ms(list(p.cut), f.bas_ms, f.bit_ms)
+        kapsanan_filler = _kapsanan_ms(filler_kesimler, f.bas_ms, f.bit_ms)
         damgalar.append(
             FillerSonucu(
                 klip=klip,
@@ -198,6 +219,8 @@ def kosu(
                 ),
                 kesim_ms=(eslesen.start_ms, eslesen.end_ms) if eslesen else None,
                 kesim_reason=eslesen.reason if eslesen else "",
+                kapsanan_ms=kapsanan,
+                kapsanan_filler_ms=kapsanan_filler,
             )
         )
 
@@ -381,6 +404,47 @@ def rapor(
                 ]
                 for d in damgalar
             ],
+        )
+    )
+    parcalar.append("")
+
+    parcalar.append("## Kısmi kapsama — damganın ne kadarı gerçekten kesiliyor?")
+    parcalar.append("")
+    parcalar.append(
+        "`yakalandı/kaçak` İKİLİ bir sayıdır; kulakla duyulan sonuç değildir. "
+        "Sessizlik kuralı, sessiz bir tereddüdün bir kısmını filler etiketi "
+        "olmadan zaten atabilir. Aşağıda her damganın kaç ms'i **herhangi** bir "
+        "kesimle örtüşüyor (sessizlik dahil) — kaçak sayılan damgalarda bile."
+    )
+    parcalar.append("")
+    kapsam_satirlar: list[list[str]] = []
+    for d in damgalar:
+        if d.mod != "default" or not d.beklenen:
+            continue
+        sure = d.bit_ms - d.bas_ms
+        kapsam_satirlar.append(
+            [
+                d.klip,
+                d.backend,
+                f"{d.kelime}@{d.bas_ms}",
+                str(sure),
+                f"{d.kapsanan_ms} (%{100 * d.kapsanan_ms // sure})",
+                str(d.kapsanan_filler_ms),
+                "yakalandı" if d.yakalandi else "kaçak",
+            ]
+        )
+    parcalar.append(
+        _tablo(
+            [
+                "klip",
+                "backend",
+                "GT damga",
+                "süre ms",
+                "herhangi kesimle kapsanan",
+                "filler kesimiyle",
+                "sonuç",
+            ],
+            kapsam_satirlar,
         )
     )
     parcalar.append("")
