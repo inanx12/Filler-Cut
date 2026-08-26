@@ -495,6 +495,14 @@ KLIP_B — `nokta1.mp4`, 1920x1080@60, 222 sn, düşük hareketli mouse inceleme
   gerçek encode'da çıktının ses akışı **194.8 kbps** (config hedefi 192k
   korunuyor; QSV'de sızıntı 241 kbps'e çıkarmıştı).
 
+**Uçtan uca doğrulama:** `[encoder].preference = ["amf", "libx264"]` ile
+KLIP_A üzerinde tam `fillercut` koşusu (ASR tarafı whisper.cpp/Vulkan) —
+konsol satırı `[6/6] RENDER — encoder: h264_amf (probe: amf ✓)`, rapor.json
+`encoder` alanında `fallback: false` (libx264'e düşülmedi), çıktı baştan sona
+hatasız decode oldu (h264 1280x720 + aac 196 kbps, 503.95 sn). Süre ve ses bit
+hızı QSV uçtan uca koşusuyla birebir aynı çıktı — encoder değişimi pipeline'ın
+geri kalanını etkilemiyor.
+
 **"AMD günü" durumu:** AMF yarısı bitti. Sırada **whisper.cpp HIP
 derlemesi** (ASR tarafı, KI-1 sonrası backlog) var — ayrı silikon (AMF video
 motoru ≠ ROCm compute ünitesi), bu kaydı etkilemez.
