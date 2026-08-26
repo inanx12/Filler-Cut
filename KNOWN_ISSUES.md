@@ -224,6 +224,118 @@ sonrası sınır − elle doğrulanmış referans, `start/end`:
   ve `::test_reanchor_temiz_akis_kelimelerine_zarar_vermez`
   (`@pytest.mark.wcpp` + `@pytest.mark.ffmpeg`).
 
+### KI-1 filler-kaçağı spike'ı (2026-08-26) — iki faz da ÖLDÜ
+
+Soru: *ASR metnine güvenmeden filler yakalamanın uygulanabilir bir yolu var
+mı?* Ölçüm harness'i `experiments/filler_leak/` (test süiti DIŞI, README'li,
+tekrar koşulabilir); ground-truth `tests/data/korpus_gt.json` (şema kilidi
+`tests/test_korpus_gt.py`). Korpus `Test1-4.mp4` (~111 sn, tek konuşmacı;
+8 filler: 4× `ııı` kesin, 4× `şey` aday; Test4 filler'sız negatif kontrol).
+Makine: Ryzen 5 7500F + RX 9060 XT — **fw CPU'da koştu** (bu makinede CUDA
+yok, `get_cuda_device_count()=0`, ct2 float16→float32'ye düşüyor), wcpp
+Vulkan. Eşleştirme: kesim ile GT aralığı ±300 ms toleransla kesişiyorsa
+"yakalanan"; kesişim katı `<`. **Tek kayıt — genelleme yok.**
+
+**Baseline (16 koşu: 4 klip × 2 mod × 2 backend):**
+
+| mod | backend | yakalama | YP | kesin tier | kesin GEREKÇELİ |
+|---|---|---|---|---|---|
+| default | fw | 0/4 | 0 | 0/4 | 0/4 |
+| default | wcpp | 1/4 | 0 | 1/4 | 1/4 |
+| aggressive | fw | 5/8 | 0 | 2/4 | 0/4 |
+| aggressive | wcpp | 6/8 | 0 | 2/4 | 1/4 |
+
+- **Ürünün varsayılan modunda kesin filler yakalama 1/8'dir** (fw 0/4,
+  wcpp 1/4) — KI-1 ana kaydı sayısallaştı.
+- `kesin GEREKÇELİ` sütunu: kesin tier damganın eşleştiği kesimin `reason`
+  zincirinde gerçekten `kesin filler:` geçiyor mu. Aggressive'deki kesin-tier
+  "yakalama"ların 3/4'ü geçmiyor — kesim doğru yerde ama **komşu `şey`in aday
+  kesimi** sayesinde orada; tespit değil tesadüf.
+- **Yanlış pozitif 16 koşunun hiçbirinde yok; Test4 dört koşuda da SIFIR
+  kesim üretti.** Kaçak tarafı kötü, taşma tarafı temiz.
+- **Kaçağın sebebi "metinde yok" değil, "yanlış yazıldı":** 12 kaçağın
+  (dört mod×backend kombinasyonunun toplamı) dağılımı `metinde_yok` 3,
+  `yazim_kacagi` 6, `kademe_kacagi` 3, `plan_kacagi` **0**. PLAN/padding hiçbir kaçağa sebep olmuyor — kayıp
+  tamamen TRANSCRIBE'da. Baskın hata kalıbı: `ııı` → **`şey`** (Test1@22000
+  iki backend'de de, Test3 fw'de) ve `ııı` → `abone`/`bu`/`30 saniye olacak`.
+- **Kısmi kapsama:** `yakalandı/kaçak` ikili sayısı kulakla duyulanı fazla
+  karamsar gösteriyor — sessizlik kuralı kaçak damgaların bir kısmını filler
+  etiketi OLMADAN atıyor: Test3 `ııı` %56 (423/750 ms), Test1 `ııı`@22000
+  %20 (208/1000 ms), Test1 `ııı`@3200 ise **%0** (orada gerçekten hiçbir şey
+  kesilmiyor).
+
+**Faz 1 — confidence ayrıştırma: ÖLDÜ.** Transkripte GİREN filler, güven
+skoruyla içerik kelimesinden ayrılmıyor.
+
+Ölçülen sinyaller ezberden değil kurulu araçlardan doğrulandı (`whisper-cli
+--help` + `-oj`/`-ojf` çıktısı): wcpp `-ojf` token başına `p` VERİYOR, ama
+`avg_logprob`/`no_speech_prob` muadili YOKTUR (segment alanları
+`timestamps/offsets/text/tokens`, token alanları
+`text/timestamps/offsets/id/p/t_dtw`; `-oj` hiçbir olasılık alanı vermez).
+`t_dtw` her token'da `-1` — DTW notuyla tutarlı.
+
+| backend | sinyal | en iyi (≤1 içerik YP) | ≥6/8 damganın bedeli |
+|---|---|---|---|
+| fw | `kelime_p` | 0.0297 → **0/5** damga | ULAŞILAMAZ (tavan 5) |
+| fw | `avg_logprob` | — | ULAŞILAMAZ (tavan 5) |
+| fw | `no_speech_prob` | — | ULAŞILAMAZ (tavan 5) |
+| wcpp | `kelime_p` | 0.0451 → **1/7** damga, 0 YP | 0.9233 → **53 içerik YP** |
+| wcpp | `min_token_p` | 0.0451 → 1/7 damga, 1 YP | 0.9233 → **64 içerik YP** |
+
+- Başarı kriterinin (≥6/8 VE ≤1 içerik YP) izin verdiği en yüksek yakalama
+  **1/8**; kill kriteri (≤4/8) karşılandı.
+- **Tavan:** ASR fw'de 8 damganın yalnız 5'ine, wcpp'de 7'sine kelime yazmış.
+  Hiç kelime üretilmeyen damgayı hiçbir eşik yakalayamaz — fw için ≥6 hedefi
+  zaten ulaşılamaz.
+- **Dağılımlar örtüşüyor:** fw `no_speech_prob` korpusun TAMAMINDA 0.0000
+  (ayrıştırma gücü sıfır); fw `avg_logprob` segment seviyesi olduğundan iki
+  sınıfın aralığı birebir aynı (−0.643 … −0.190); fw `kelime_p`'de filler
+  bölgesi min 0.556, içerik min 0.030 — **sıralama ters**, içerik kelimeleri
+  filler'lardan daha düşük güvenli.
+- Tek umut verici vaka kendi içinde çürüdü: wcpp'nin gerçekten `ııı` yazdığı
+  damga `kelime_p=0.491` / `min_token_p=0.236` ile düşük, ama aynı korpusta
+  içerik kelimeleri 0.016'ya iniyor.
+
+**Faz 2 — numpy-only akustik vowel-run: ÖLDÜ.** 25 ms pencere / 10 ms adım,
+Hann pencereli `rfft`; kare başına enerji (dBFS), sıfır-geçiş oranı ve
+spektral akış (ardışık normalize spektrumlar arası kosinüs uzaklığı). Aday
+koşular ham silencedetect maskesiyle çakışırsa elenir. **Tek ayar değil,
+3×3×3×3 = 81 parametre seti tarandı** (numpy + stdlib `wave`; scipy YOK,
+yeni bağımlılık YOK — numpy zaten ctranslate2 üzerinden kurulu).
+
+| yakalama | set sayısı | en az yanlış alarm | bunda Test4 adayı |
+|---|---|---|---|
+| 2/4 | 36 | 2 | 0 |
+| 3/4 | 27 | **10** | 0 |
+| 4/4 | 18 | **26** | 5 |
+
+- **Hiçbir set "≥3/4 + sıfır yanlış alarm" kriterini geçmedi.** Sıfır yanlış
+  alarma en yakın çalışma noktası 2/4 — tam olarak kill kriteri (≤2/4).
+- **Sorun eşikte değil sinyalde.** Eşikten bağımsız tanı: dört `ııı`'dan
+  yalnız BİRİ (Test2, akış 0.011 vs klip konuşma ortalaması 0.062) gerçekten
+  durağan bir uzatma. Test3'ünki klibin konuşma ortalamasından daha DEĞİŞKEN
+  (akış 0.105 vs 0.079) ve 10 dB daha sessiz (−37.2 vs −29.5 dB) —
+  "sürekli-monoton ünlü" tarifine uymuyor. Hipotez korpusun 1/4'ünde doğru.
+- Ters yön de dolu: normal Türkçe konuşma uzun ünlülerle dolu; 4/4 ayarının
+  31 adayının 26'sı sıradan hecelere düşüyor.
+- **Test4'ün sessizlik haritası BOŞ** (`noise=-35dB d=0.4`, 30.7 sn) — o
+  klipte sessizlik maskesinin eleme gücü sıfırdır.
+
+**Hüküm:** Faz 1 **öldü**, Faz 2 **öldü**. KI-1 ana kaydı açık kalır; kaçak
+ölçülü hâliyle belgelidir. Ürünleştirme kararı bu kaydın konusu değildir.
+
+**Bu spike'ın kapsamadığı, ölçümde görünen adaylar** (uygulanmadı, liste):
+(1) ASR'ın `ııı`'yı **`şey`** yazması baskın hata kalıbı — aday kademesinin
+mod davranışıyla etkileşimi ayrı bir konudur; (2) `metinde_yok` sınıfı (3
+damga) yalnızca ASR'ın hiç kelime üretmediği bölgeler — VAD/segment sınırı
+konusu; (3) kısmi kapsama, sessizlik eşiğinin filler tereddütlerini ne kadar
+yakaladığını gösteriyor. (4) Re-anchor harness'ındaki 8 `zincir_kaymasi`
+kelimesi **bu spike'ın konusu değildir** — o zamanlama drifti, bu tespit.
+
+**Referans:** `experiments/filler_leak/README.md` + `sonuclar/baseline.md`,
+`sonuclar/faz1.md`, `sonuclar/faz2.md` (ham JSON'lar yanlarında);
+`tests/test_korpus_gt.py` (GT şema kilidi, marker'sız).
+
 ## KI-2 — Aggressive mod gerçek kelimeyi kesebilir (false positive)
 
 - **Belirti:** `aggressive=True` iken "bir şey söyleyeceğim" gibi gerçek
