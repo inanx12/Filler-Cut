@@ -618,3 +618,158 @@ geri kalanını etkilemiyor.
 **"AMD günü" durumu:** AMF yarısı bitti. Sırada **whisper.cpp HIP
 derlemesi** (ASR tarafı, KI-1 sonrası backlog) var — ayrı silikon (AMF video
 motoru ≠ ROCm compute ünitesi), bu kaydı etkilemez.
+
+## KI-7 — whisper.cpp HIP derlemesi (Windows / RDNA4) engelli — **AÇIK**
+
+- **Belirti:** `-DGGML_HIP=ON` ile whisper.cpp v1.9.1 derlemesi bu makinede
+  **konfigüre bile edilemiyor**. Hedef, Vulkan binary'sine üçüncü bir compute
+  yolu (HIP/ROCm) eklemekti — KI-6 AMF kalibrasyonunun kapanışında sıradaki iş
+  olarak işaretlenmişti. Kapı kontrolünde (Adım 0) durdu; hız tablosu ve
+  kimlik ölçümü **koşulmadı**.
+- **Neden:** İki bağımsız blokaj (aşağıda). İkincisi ROCm'den tamamen
+  bağımsızdır ve CPU derlemesini de engeller.
+- **Etki:** RDNA4'te ASR compute yolu **Vulkan ile sınırlı**. Ürün etkisi
+  yok — Vulkan binary'si RX 9060 XT'de çalışıyor ve uçtan uca doğrulanmış
+  (bkz. KI-1 Vulkan koşusu). HIP yalnızca *potansiyel* bir hız kazancıdır;
+  kazanç olup olmadığı **ölçülmemiştir**, iddia edilmemektedir.
+- **Kalan risk:** Yok (üretim kodu bu yoldan etkilenmiyor). Kayıt, aynı
+  denemenin sıfırdan tekrarlanmaması için tutuluyor.
+- **Referans:** Ölçüm ve doğrulamalar bu kayıttadır; kilitleyecek test yoktur
+  (ortam blokajı, kod davranışı değil). AGENTS.md backlog'u ve KI-6
+  kapanış notu bu kayda bakar.
+
+### (a) gfx hedefi — ölçüm (beklenti değil)
+
+`rocminfo` diskte **yok** (aşağıya bakınız), bu yüzden hedef SDK'nın kendi
+`hipInfo.exe`'siyle okundu:
+
+```
+Name:                             AMD Radeon RX 9060 XT
+major:                            12
+minor:                            0
+gcnArchName:                      gfx1200
+```
+
+```
+HIP version: 7.2.26024-f6f897bd3d
+AMD clang version 22.0.0git (ROCm/llvm-project 6602f325...)
+Target: x86_64-pc-windows-msvc
+```
+
+**gfx1200** — RX 9060 XT beklentisiyle uyuşuyor, ama kayıt çıktıya dayanır.
+
+### (b) İki blokaj
+
+**Blokaj 1 — sistem geneli HIP SDK yok; var olan şey runtime'dır, SDK değil.**
+
+`hipcc` ve `rocminfo` PATH'te yok. Aramada bulunan tek ROCm kurulumu, iki
+ilgisiz Python ortamının içine pip ile gelmiş **TheRock runtime paketleridir**:
+
+| Paket | Konum | Sürüm |
+|---|---|---|
+| `_rocm_sdk_core` | ComfyUI gömülü Python | 7.2.0.dev0 |
+| `_rocm_sdk_core` + `_rocm_sdk_libraries_gfx120X_all` | unsloth studio | 7.13.0 |
+
+- **Yok:** `C:\Program Files\AMD\ROCm` dizini, `HKLM:\SOFTWARE\AMD\ROCm`
+  registry anahtarı, diskte herhangi bir `rocminfo.exe`.
+- **Var:** `hipcc.exe`, HIP başlıkları (`hip/hip_runtime.h`), `amdhip64.lib`,
+  LLVM device libs → HIP kodu *derlenebilir*.
+- **Yok (kritik):** `hipblas` ve `rocblas` — ne başlık, ne `.lib`, ne DLL — ve
+  **hiçbir CMake config paketi** (`hip-config.cmake` araması: sıfır sonuç).
+- SDK'nın kendi aracı bunu doğruluyor:
+
+  ```
+  ERROR: ROCm SDK development package is not installed. This can typically be
+  obtained by installing `rocm-sdk[devel]` from your package manager
+  ```
+
+Yani kurulu olan şey **runtime + derleyici**dir; ggml'in HIP backend'inin
+istediği geliştirme paketi değildir.
+
+**Blokaj 2 — makinede C++ derleme zinciri hiç yok.**
+
+- `cmake` PATH'te yok; `C:\Program Files*` altında `cmake.exe` **sıfır sonuç**.
+- Visual Studio / Build Tools kurulu değil: `vswhere.exe` yok,
+  `C:\Program Files\Microsoft Visual Studio` yok.
+
+Bu blokaj HIP'ten bağımsızdır ve **CPU derlemesini de** öldürür — yani üç yollu
+hız tablosunun (CPU / Vulkan / HIP) yalnız HIP değil, CPU satırı da bu makinede
+üretilemez. Ölçülebilen tek satır Vulkan'dır (ayrı kayıt: KI-1 Vulkan hız).
+
+### (c) v1.9.1 kaynağından doğrulanan tuzak — `-DAMDGPU_TARGETS` Windows'ta inert
+
+Tag `v1.9.1` = `f049fff95a089aa9969deb009cdd4892b3e74916`;
+`ggml/src/ggml-hip/CMakeLists.txt` okundu.
+
+```cmake
+if (WIN32)
+    set(CXX_IS_HIPCC TRUE)     # Windows'ta KOŞULSUZ TRUE
+...
+if (CXX_IS_HIPCC)
+    ...
+else()
+    if(AMDGPU_TARGETS AND NOT GPU_TARGETS)   # AMDGPU_TARGETS SADECE burada okunur
+        set(GPU_TARGETS ${AMDGPU_TARGETS})
+    endif()
+    if(GPU_TARGETS AND NOT CMAKE_HIP_ARCHITECTURES)
+        set(CMAKE_HIP_ARCHITECTURES ${GPU_TARGETS})
+    endif()
+```
+
+`AMDGPU_TARGETS` yalnızca `else()` dalında tüketiliyor; Windows'ta o dal **hiç
+çalışmaz** → `-DAMDGPU_TARGETS=gfx1200` **sessizce yok sayılır**. whisper.cpp
+README'sinin verdiği satır (`cmake -B build -DGGML_HIP=1
+-DAMDGPU_TARGETS="gfx1201"`) ve `rocminfo | grep gfx` yönergesi **Linux
+desenidir**; Windows'ta mimari hipcc'ye ayrıca geçirilmek zorundadır
+(`--offload-arch`). Bu, ezberden argüman yazılsaydı sessizce yanlış binary
+üretebilecek bir tuzaktır.
+
+Aynı dosyadan blokajı kesinleştiren üç sert bağımlılık:
+
+```cmake
+find_package(hip     REQUIRED)
+find_package(hipblas REQUIRED)
+find_package(rocblas REQUIRED)
+...
+target_link_libraries(ggml-hip PRIVATE ggml-base hip::host roc::rocblas roc::hipblas)
+```
+
+`hipblas`/`rocblas` hiç bulunmadığı için configure **ilk `find_package`'ta**
+durur. Ayrıca `if (${hip_VERSION} VERSION_LESS 6.1)` kapısı vardır (kurulu
+HIP 7.2 bunu geçerdi) ve `ROCM_PATH` ortam değişkeni `CMAKE_PREFIX_PATH`'e
+eklenir — SDK kökü oradan bulunur.
+
+### (d) `GGML_HIPBLAS` — v1.9.1 ağacında hiç yok
+
+Bayrağın "ggml 0.9.8'den beri sessiz no-op" olduğu biliniyordu; v1.9.1
+ağacının **tamamında arama sıfır sonuç** verdi. Yani artık no-op bile değil,
+tanımlı değil — kullanılırsa CMake tarafından bilinmeyen değişken olarak
+sessizce yutulur.
+
+### (e) Yeniden deneme koşulları
+
+Bu kayıt, aşağıdaki üçü **birlikte** sağlandığında yeniden açılabilir:
+
+1. **MSVC Build Tools** (C++ iş yükü) — Blokaj 2'nin yarısı.
+2. **cmake** ≥ 3.21 (kaynak `cmake_minimum_required(VERSION 3.21)` istiyor).
+3. **gfx1200 destekli HIP SDK — `hipblas` + `rocblas` + CMake config
+   paketleriyle.** Aday: TheRock `rocm-sdk[devel]` (kurulu runtime'ın kendi
+   hata mesajının işaret ettiği paket). AMD'nin resmi Windows HIP SDK'sının
+   RDNA4/gfx1200 destek durumu **doğrulanmadı** — ezberden sürüm numarası
+   yazılmıyor, kurulum anında kontrol edilecek.
+
+Sağlandığında kullanılacak komut deseni — **doğrulanmamış aday**, (c)'deki
+tuzağa göre düzeltilmiştir, build anında teyit edilecek:
+
+```powershell
+$env:ROCM_PATH = "<SDK kökü>"      # CMakeLists bunu CMAKE_PREFIX_PATH'e ekler
+cmake -B build -DGGML_HIP=ON `
+  -DCMAKE_CXX_COMPILER="<SDK>/bin/hipcc.exe" `
+  -DCMAKE_CXX_FLAGS="--offload-arch=gfx1200" `
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --target whisper-cli -j
+```
+
+`-DAMDGPU_TARGETS=gfx1200` **bilinçli olarak yoktur** — (c)'de ölçüldü, inert.
+Karşılaştırılabilirlik şartı: sürüm v1.9.1'de sabit kalır (Vulkan binary'siyle
+aynı tag).
