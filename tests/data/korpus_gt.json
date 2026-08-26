@@ -1,0 +1,53 @@
+{
+  "surum": 1,
+  "uretici": "Gemini 3.7 Flash (extended thinking) taslağı",
+  "dogrulama": {
+    "dogrulayan": "İnan — Audacity ile kulak kontrolü",
+    "tarih": "2026-08-26",
+    "kapsam": "8 filler damgası + Test4 filler-sizlik + temiz bölge recall kontrolü",
+    "sonuc": "temiz"
+  },
+  "tolerans_ms": 300,
+  "tier_tanimlari": {
+    "kesin": "her modda kesilmeli (ııı/eee/ee/aa/hmm)",
+    "aday": "yalnız aggressive modda kesilmeli (şey/yani/hani/işte)"
+  },
+  "klipler": {
+    "Test1.mp4": {
+      "sure_ms": 25700,
+      "filler": [
+        { "kelime": "ııı", "tier": "kesin", "bas_ms": 3200, "bit_ms": 4300 },
+        { "kelime": "şey", "tier": "aday", "bas_ms": 9900, "bit_ms": 11000 },
+        { "kelime": "şey", "tier": "aday", "bas_ms": 21300, "bit_ms": 22000 },
+        { "kelime": "ııı", "tier": "kesin", "bas_ms": 22000, "bit_ms": 23000 }
+      ],
+      "kapsam_disi": []
+    },
+    "Test2.mp4": {
+      "sure_ms": 21900,
+      "filler": [
+        { "kelime": "ııı", "tier": "kesin", "bas_ms": 10700, "bit_ms": 11450 },
+        { "kelime": "şey", "tier": "aday", "bas_ms": 11850, "bit_ms": 12450 }
+      ],
+      "kapsam_disi": [
+        { "tur": "yarim_kelime", "icerik": "Selam a…", "bas_ms": 0, "bit_ms": 650, "not": "filler listelerinde yok; pipeline'ın filler olarak kesmesi beklenmez" }
+      ]
+    },
+    "Test3.mp4": {
+      "sure_ms": 33540,
+      "filler": [
+        { "kelime": "ııı", "tier": "kesin", "bas_ms": 16050, "bit_ms": 16800 },
+        { "kelime": "şey", "tier": "aday", "bas_ms": 16800, "bit_ms": 17200 }
+      ],
+      "kapsam_disi": [
+        { "tur": "takilma", "icerik": "uy-", "bas_ms": 6200, "bit_ms": 6500, "not": "yarım kelime; filler listelerinde yok, kesilmesi beklenmez" }
+      ]
+    },
+    "Test4.mp4": {
+      "sure_ms": 30000,
+      "filler": [],
+      "kapsam_disi": [],
+      "not": "negatif kontrol — herhangi bir modda filler etiketli kesim = %100 yanlış pozitif"
+    }
+  }
+}
