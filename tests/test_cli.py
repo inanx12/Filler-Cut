@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import io
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -220,6 +221,35 @@ def _cp1254_akis() -> io.TextIOWrapper:
     tarafında iş görür; kodlanamayan `✓` yazımda patlar.
     """
     return io.TextIOWrapper(io.BytesIO(), encoding="cp1254", errors="surrogateescape")
+
+
+class TestModulGirisNoktasi:
+    """`python -m fillercut.cli` gerçekten aracı çalıştırmalı.
+
+    v0.4.0'a kadar modülde `__main__` guard'ı yoktu: `python -m fillercut.cli`
+    modülü import edip HİÇBİR ŞEY YAPMADAN 0 koduyla çıkıyordu — "başarılı"
+    görünen sessiz bir no-op. `console_scripts` hedefi (`fillercut`) doğru
+    çalıştığı için kusur yalnız bu yolda görünüyordu; AMF kalibrasyon
+    oturumunda uçtan uca koşu bu yüzden sessizce hiçbir şey üretmedi.
+
+    Subprocess ŞART: `-m` yolu ancak ayrı bir yorumlayıcı koşusunda sınanır.
+    `runner.invoke(app, ...)` app'i doğrudan çağırır ve guard'ı hiç
+    çalıştırmaz — bu testin mock'lu muadili yoktur.
+    """
+
+    def test_m_bayragiyla_calistirmak_surumu_basar(self) -> None:
+        proc = subprocess.run(
+            [sys.executable, "-m", "fillercut.cli", "--version"],
+            capture_output=True,
+            text=True,
+            # errors="replace": proje konvansiyonu (v0.3.2) — sürücü/locale
+            # kaynaklı çözülemeyen byte subprocess.run'ın KENDİSİNİ patlatmasın.
+            errors="replace",
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr[-400:]
+        beklenen = importlib.metadata.version(fillercut.DIST_NAME)
+        assert proc.stdout.strip() == f"fillercut, version {beklenen}"
 
 
 class TestKonsolAkisiDayanikliligi:

@@ -10,6 +10,9 @@ v0.3.2: ``--version`` (eager) — sürüm `fillercut.__version__`'dan, yani kuru
 dağıtımın metadata'sından gelir. Burada sabit sürüm dizesi YOKTUR; tek
 doğruluk kaynağı `pyproject.toml`'dır (bkz. ``fillercut/__init__.py``).
 
+v0.4.1: dosya sonundaki ``__main__`` guard'ı ``python -m fillercut.cli``
+yolunu ``console_scripts`` hedefiyle aynı yere bağlar (aşağıda).
+
 v0.3.3: konsol akışları ``main_entry``'de ``errors="replace"``e ayarlanır —
 çıktı yönlendirildiğinde (``> log.txt``, pipe) Python locale encoding'ine
 düşer ve konsol süslerini (``✓``) kodlayamayıp koşuyu öldürüyordu. Bu,
@@ -154,3 +157,18 @@ def main(
         f"rapor: {sonuc.report_path}\n"
         f"transkript: {sonuc.transcript_path}"
     )
+
+
+if __name__ == "__main__":  # pragma: no cover - alt süreçte koşar
+    # `python -m fillercut.cli` giriş noktası. Guard OLMADAN bu yol modülü
+    # import edip HİÇBİR ŞEY YAPMADAN 0 koduyla çıkıyordu: sessiz bir no-op,
+    # dışarıdan "başarılı koşu" gibi görünüyordu. `console_scripts`
+    # (`fillercut`) doğru çalıştığı için kusur yalnız burada görünüyordu.
+    #
+    # Hedef `app` DEĞİL `main_entry`: akış ayarı (v0.3.3) ilk `echo`'dan önce
+    # çalışmak zorunda, yoksa yönlendirilmiş çıktı bu yolda yine patlar. İki
+    # giriş noktasının aynı yere bağlanması davranış farkını baştan siler.
+    #
+    # Kilit: `tests/test_cli.py::TestModulGirisNoktasi` (subprocess — `-m`
+    # yolu ancak ayrı yorumlayıcı koşusunda sınanır).
+    main_entry()
