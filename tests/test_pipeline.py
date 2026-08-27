@@ -28,13 +28,14 @@ from fillercut.pipeline import (
     ASAMALAR,
     PipelineError,
     PipelineResult,
+    ReviewKarari,
     default_output_path,
     run,
 )
 from fillercut.plan.cutplan import CutPlanError
 from fillercut.render.encoder import EncoderSelection, ProbeAttempt, build_encode_args
 from fillercut.render.render import RenderError
-from fillercut.report.json_report import EncoderInfo, Report, build_report
+from fillercut.report.json_report import EditOzeti, EncoderInfo, Report, build_report
 from fillercut.report.review_server import ReviewDecision
 from fillercut.transcribe.base import Transcriber
 
@@ -644,6 +645,205 @@ class TestProgressCb:
                 progress_cb=gelen.append,
             )
         assert gelen == ["EXTRACT", "TRANSCRIBE", "DETECT", "PLAN"]  # REVIEW/RENDER yok
+
+
+class TestAnalizCb:
+    """v1.0 web: analiz WAV'ı çağırana bir kez gösterilir (waveform peaks)."""
+
+    def test_wav_yolu_bir_kez_verilir(self, girdi: Path, katmanlar: Any) -> None:
+        gelenler: list[Path] = []
+        run(
+            girdi,
+            config=Config(yes=True),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+            analiz_cb=gelenler.append,
+        )
+        assert len(gelenler) == 1
+        assert gelenler[0] == katmanlar.extract.call_args.args[1]
+
+    def test_wav_cagri_aninda_gecici_dizinde(self, girdi: Path, katmanlar: Any) -> None:
+        """Yol yalnız çağrı süresince geçerlidir — dizin sonra silinir."""
+        goruldu: dict[str, bool] = {}
+
+        def kanca(wav: Path) -> None:
+            goruldu["dizin_var"] = wav.parent.exists()
+            goruldu["gecici"] = wav.parent.name.startswith("fillercut_")
+
+        run(
+            girdi,
+            config=Config(yes=True),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+            analiz_cb=kanca,
+        )
+        assert goruldu == {"dizin_var": True, "gecici": True}
+
+    def test_extractten_sonra_transcribeden_once(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        sira = katmanlar.sira
+        run(
+            girdi,
+            config=Config(yes=True),
+            transcriber=_SahteTranscriber(sira),
+            analiz_cb=lambda _: sira.append("analiz_cb"),
+        )
+        assert sira.index("extract") < sira.index("analiz_cb")
+        assert sira.index("analiz_cb") < sira.index("transcribe")
+
+    def test_ikinci_ffmpeg_kosusu_yok(self, girdi: Path, katmanlar: Any) -> None:
+        # Peaks aynı WAV'dan üretilir; çıkarım tek koşudur (v0.4.0 invariant'ı
+        # sessizlik haritası için; burada da ikinci extract eklenmediği kilidi).
+        run(
+            girdi,
+            config=Config(yes=True),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+            analiz_cb=lambda _: None,
+        )
+        assert katmanlar.extract.call_count == 1
+        assert katmanlar.silence.call_count == 1
+
+
+class TestReviewCb:
+    """v1.0 web: REVIEW'da pipeline'ı bekleten üçüncü dal (Dilim 2)."""
+
+    #: review_cb'nin döndüreceği plan — orijinalden FARKLI (uygulanmış plan).
+    UYGULANMIS = CutPlan(
+        original_duration_ms=TOPLAM_MS,
+        keep=[Segment(start_ms=0, end_ms=4_000, kind="keep", reason="konuşma")],
+        cut=[
+            Segment(
+                start_ms=4_000, end_ms=5_000, kind="manuel",
+                reason="manuel: kullanıcı elle ekledi",
+            )
+        ],
+    )
+
+    def test_baglam_plan_report_ve_ham_haritayi_tasir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        gelen: list[Any] = []
+
+        def cb(baglam: Any) -> Any:
+            gelen.append(baglam)
+            return ReviewKarari(plan=baglam.plan)
+
+        run(girdi, config=Config(yes=False),
+            transcriber=_SahteTranscriber(katmanlar.sira), review_cb=cb)
+        baglam = gelen[0]
+        assert baglam.plan is PLAN
+        assert baglam.report is REPORT
+        assert baglam.total_ms == TOPLAM_MS
+        assert baglam.video_path == girdi
+        # HAM harita (silence_min_ms süzgecinden GEÇMEMİŞ) — snap-to-silence
+        # bunu kullanır; süzgeç "hangi sessizlik kesilir" politikasıdır.
+        assert baglam.ham_sessizlikler == (SIL_HAM,)
+
+    def test_donen_plan_rendera_gider(self, girdi: Path, katmanlar: Any) -> None:
+        run(
+            girdi,
+            config=Config(yes=False),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+            review_cb=lambda b: ReviewKarari(plan=self.UYGULANMIS),
+        )
+        assert katmanlar.render.call_args.args[1] is self.UYGULANMIS
+
+    def test_rapor_uygulanmis_plandan_yazilir(self, girdi: Path, katmanlar: Any) -> None:
+        ozet = EditOzeti(devre_disi=1, sinir_degisen=2, manuel_eklenen=1)
+        run(
+            girdi,
+            config=Config(yes=False),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+            review_cb=lambda b: ReviewKarari(plan=self.UYGULANMIS, duzenleme=ozet),
+        )
+        assert katmanlar.json.call_args.args[0] is self.UYGULANMIS
+        assert katmanlar.json.call_args.kwargs["duzenleme"] == ozet
+        assert katmanlar.json.call_args.kwargs["approved"] is None
+
+    def test_iptal_render_yok_kod_0(self, girdi: Path, katmanlar: Any) -> None:
+        with pytest.raises(typer.Exit) as exc_info:
+            run(
+                girdi,
+                config=Config(yes=False),
+                transcriber=_SahteTranscriber(katmanlar.sira),
+                review_cb=lambda b: ReviewKarari(plan=None),
+            )
+        assert exc_info.value.exit_code == 0  # kullanıcı iptali hata değildir
+        katmanlar.render.assert_not_called()
+        katmanlar.json.assert_not_called()
+        assert (girdi.parent / "video_transkript.json").is_file()  # ASR korunur
+
+    def test_konsol_onayi_ve_statik_html_atlanir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        sonuc = run(
+            girdi,
+            config=Config(yes=False),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+            review_cb=lambda b: ReviewKarari(plan=PLAN),
+        )
+        katmanlar.confirm.assert_not_called()  # [y/N] sorulmaz
+        assert sonuc.review_html_path is None  # statik HTML üretilmez
+        assert not (girdi.parent / "video_review.html").exists()
+
+    def test_interaktif_review_server_acilmaz(self, girdi: Path, katmanlar: Any) -> None:
+        # review_cb, --interactive'in YERİNE geçer (v0.3 sunucusu açılmaz).
+        with patch("fillercut.pipeline.ReviewServer") as mock_sunucu:
+            run(
+                girdi,
+                config=Config(yes=False),
+                interactive=True,
+                transcriber=_SahteTranscriber(katmanlar.sira),
+                review_cb=lambda b: ReviewKarari(plan=PLAN),
+            )
+        mock_sunucu.assert_not_called()
+
+    def test_yes_true_review_cb_yi_hic_cagirmaz(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        # --yes "kimseye sorma" demektir: headless koşu beklemez.
+        cagrildi: list[int] = []
+
+        def cb(baglam: Any) -> Any:
+            cagrildi.append(1)
+            return ReviewKarari(plan=PLAN)
+
+        run(girdi, config=Config(yes=True),
+            transcriber=_SahteTranscriber(katmanlar.sira), review_cb=cb)
+        assert cagrildi == []
+        katmanlar.render.assert_called_once()
+
+    def test_konsol_ozeti_basilmaz(
+        self, girdi: Path, katmanlar: Any, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        run(
+            girdi,
+            config=Config(yes=False),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+            review_cb=lambda b: ReviewKarari(plan=PLAN),
+        )
+        cikti = capsys.readouterr().out
+        assert "İlk 5 kesim" not in cikti  # tablo tarayıcıda, terminalde değil
+        assert "tarayıcıda gözden geçirme bekleniyor" in cikti
+
+
+class TestReviewCbParity:
+    """review_cb=None iken CLI akışı BİT-BİREBİR aynı (Dilim 1 parity deseni)."""
+
+    def test_konsol_ciktisi_degismedi(
+        self, girdi: Path, katmanlar: Any, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        run(girdi, config=Config(yes=False), transcriber=_SahteTranscriber(katmanlar.sira))
+        cikti = capsys.readouterr().out
+        assert "[5/6] REVIEW" in cikti
+        assert "İlk 5 kesim" in cikti  # konsol özeti CLI'da YERİNDE duruyor
+        katmanlar.confirm.assert_called_once()
+
+    def test_rapor_hala_orijinal_plandan_yazilir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        assert katmanlar.json.call_args.args[0] is PLAN
+        assert katmanlar.json.call_args.kwargs["duzenleme"] is None
 
 
 class TestPipelineError:

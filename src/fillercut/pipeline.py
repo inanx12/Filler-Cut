@@ -36,6 +36,16 @@ dışı bildirir (``ASAMALAR`` sırasıyla, aşama BAŞLARKEN). Kanal konsola hi
 ``tests/test_pipeline.py::TestProgressCb``. Katman hataları ``PipelineError``
 ile fırlatılır: ``typer.Exit(1)`` alt sınıfıdır (CLI akışı değişmez), Türkçe
 mesajı ``mesaj`` alanında taşır (web job'ı UI'a bu metni düşürür).
+
+REVIEW KANALI (v1.0 web, Dilim 2): ``run(review_cb=...)`` REVIEW adımında
+pipeline'ı BEKLETİR — çağrılan taraf (web job'ı) kullanıcı kesimleri gözden
+geçirip onaylayana kadar döndürmez, sonra RENDER'a girilecek planı
+``ReviewKarari`` olarak verir. Konsol ``[y/N]`` akışı ve v0.3 interaktif
+review server'ı AYNEN durur; ``review_cb`` üçüncü, ayrı bir daldır ve
+yalnız verildiğinde çalışır. ``analiz_cb`` ise analiz WAV'ını (EXTRACT
+çıktısı, geçici dizinde) çağırana bir kez gösterir — web waveform peaks'ini
+oradan üretir; ikinci bir ffmpeg/çıkarım koşusu YOKTUR. İki kanal da
+``None`` iken CLI davranışı bit-birebir aynıdır.
 """
 
 from __future__ import annotations
@@ -56,12 +66,13 @@ from fillercut.audio.silence import SilenceDetectionError, detect_silence
 from fillercut.config import AsrConfig, Config
 from fillercut.detect.fillers import count_aday_fillers, detect_fillers
 from fillercut.detect.silence import filter_silence
-from fillercut.models import CutPlan
+from fillercut.models import CutPlan, Segment
 from fillercut.plan.cutplan import build_cutplan, filter_cutplan
 from fillercut.render.encoder import build_encode_args, select_encoder
 from fillercut.render.render import RenderError, render
 from fillercut.report.html_report import build_interactive_html, write_html_report
 from fillercut.report.json_report import (
+    EditOzeti,
     EncoderInfo,
     Report,
     build_report,
@@ -92,6 +103,38 @@ class PipelineError(typer.Exit):
     def __init__(self, mesaj: str) -> None:
         super().__init__(code=1)
         self.mesaj = mesaj
+
+
+@dataclass(frozen=True)
+class ReviewBaglam:
+    """``review_cb``'ye verilen review bağlamı — saf veri, bellekte kalır.
+
+    ``plan.json`` diske YAZILMAZ (invariant): plan buradan çağırana geçer ve
+    onun belleğinde yaşar. ``ham_sessizlikler`` re-anchor'ın kullandığı,
+    TRANSCRIBE'dan ÖNCE bir kez hesaplanan HAM haritadır (``silence_min_ms``
+    süzgecinden geçmemiş) — web review'unda "sınırı en yakın sessizlik
+    kenarına yapıştır" için aynı harita kullanılır, yeniden hesaplanmaz.
+    """
+
+    plan: CutPlan
+    report: Report
+    total_ms: int
+    ham_sessizlikler: tuple[Segment, ...]
+    video_path: Path
+
+
+@dataclass(frozen=True)
+class ReviewKarari:
+    """``review_cb``'nin döndürdüğü karar — RENDER'a girecek plan.
+
+    ``plan is None`` iptaldir: video ve rapor yazılmaz, pipeline ``typer.Exit(0)``
+    ile çıkar (konsol/interaktif review'un ret yolunun aynısı). Plan verilirse
+    RENDER onu uygular ve rapor.json UYGULANMIŞ plandan yazılır — ``duzenleme``
+    özeti "kullanıcı neyi değiştirdi" sorusunu raporda ayrı tutar.
+    """
+
+    plan: CutPlan | None
+    duzenleme: EditOzeti | None = None
 
 
 @dataclass(frozen=True)
@@ -208,6 +251,8 @@ def run(
     open_review: bool = False,
     interactive: bool = False,
     progress_cb: Callable[[str], None] | None = None,
+    analiz_cb: Callable[[Path], None] | None = None,
+    review_cb: Callable[[ReviewBaglam], ReviewKarari] | None = None,
 ) -> PipelineResult:
     """6 katmanı sırayla çalıştırır: video → temiz MP4 + rapor.json.
 
@@ -234,6 +279,17 @@ def run(
             ``None`` (default) CLI davranışını bit-birebir korur (kilit:
             ``TestProgressCb``). v1.0 web job'ları SSE ilerlemesini buradan
             üretir.
+        analiz_cb: EXTRACT'ın ürettiği analiz WAV'ı hazır olunca BİR KEZ
+            çağrılır (yol yalnız çağrı süresince geçerlidir — geçici dizin
+            sonra silinir). Web waveform peaks'ini buradan üretir; ikinci bir
+            çıkarım koşusu yoktur. Hook İSTİSNA FIRLATMAMALIDIR: yan bir
+            görselleştirme adımı koşuyu öldürmemeli (çağıran kendi hatasını
+            yutar).
+        review_cb: REVIEW adımında pipeline'ı BEKLETEN kanal (v1.0 web).
+            Verilirse konsol ``[y/N]`` ve ``--interactive`` dallarının YERİNE
+            geçer; ``yes=True`` (headless) iken hiç çağrılmaz — "kimseye
+            sorma" demektir. Döndürdüğü ``ReviewKarari.plan`` RENDER'a girer
+            (``None`` → iptal, kod 0); rapor.json o plandan yazılır.
 
     Returns:
         Üretilen video/rapor/transkript yolları ve rapor.
@@ -274,6 +330,11 @@ def run(
             extract_audio(src, wav)
         except (ExtractionError, FileNotFoundError) as exc:
             _fail(f"EXTRACT başarısız: {exc}")
+
+        # Analiz WAV'ı yalnız bu blok boyunca vardır (geçici dizin). Web
+        # waveform peaks'ini burada üretir — çıkarımı ikinci kez koşmamak için.
+        if analiz_cb is not None:
+            analiz_cb(wav)
 
         # Sessizlik haritası — DETECT'in dalga formu yarısı, ama TRANSCRIBE'dan
         # ÖNCE hesaplanır (v0.4.0): harita WAV'dan üretilir, transkriptten
@@ -385,11 +446,52 @@ def run(
     _bildir(progress_cb, "REVIEW")
     review_html: Path | None = None
     approved_flags: list[bool] | None = None
+    duzenleme: EditOzeti | None = None
     render_plan = plan
+    #: rapor.json'un yazılacağı plan. CLI akışlarında ORİJİNAL plandır
+    #: (reddedilen kesimler approved:false ile görünmeye devam eder); web
+    #: review'unda UYGULANMIŞ plandır — sınır sürükleme ve elle eklenen
+    #: kesimlerden sonra rapor rendere gidenle aynı olmak zorunda.
+    rapor_plani = plan
     if not yes:
         _out.print("[cyan][5/6] REVIEW[/cyan]")
-        _print_review(report)
-        if interactive:
+        if review_cb is None:
+            # Konsol özeti CLI akışlarınındır (konsol [y/N] ve --interactive).
+            # Web review'unda terminale kimse bakmıyor; özet tarayıcıda.
+            _print_review(report)
+        if review_cb is not None:
+            # v1.0 web: pipeline burada BEKLER; karar tarayıcıdan gelir.
+            # Konsol özeti basılmaz — bu koşuda kimse terminale bakmıyor.
+            _out.print("[dim]      tarayıcıda gözden geçirme bekleniyor…[/dim]")
+            # Ad `karar`dan ayrı: aşağıdaki --interactive dalı ReviewDecision
+            # (v0.3) taşır, bu dal ReviewKarari — iki tip aynı değişkende
+            # buluşmamalı (mypy bunu yakaladı).
+            web_karari = review_cb(
+                ReviewBaglam(
+                    plan=plan,
+                    report=report,
+                    total_ms=total_ms,
+                    ham_sessizlikler=tuple(ham_sessizlikler),
+                    video_path=src,
+                )
+            )
+            if web_karari.plan is None:
+                _out.print(
+                    "[yellow]İptal edildi[/yellow] — video ve rapor yazılmadı; "
+                    f"transkript korundu: {transkript_yolu}"
+                )
+                raise typer.Exit(code=0)
+            render_plan = web_karari.plan
+            rapor_plani = web_karari.plan
+            duzenleme = web_karari.duzenleme
+            report = build_report(
+                rapor_plani,
+                total_ms,
+                skipped_aday_filler=atlanan_aday,
+                encoder=encoder_bilgisi,
+                duzenleme=duzenleme,
+            )
+        elif interactive:
             # İnteraktif: sunucu karar gelene kadar pipeline'ı bekletir; tarayıcı
             # otomatik açılır. Reddedilen kesimler plandan düşülür, raporda
             # approved:false olarak görünmeye devam eder (şeffaflık).
@@ -440,8 +542,11 @@ def run(
                 raise typer.Exit(code=0)
 
     # [6] RENDER — render_plan (interaktif modda reddedilen kesimler düşmüş
-    # olabilir); rapor.json ORİJİNAL plandan yazılır ki reddedilen kesimler
-    # approved:false olarak görünmeye devam etsin (şeffaflık).
+    # olabilir); rapor.json CLI akışlarında ORİJİNAL plandan yazılır ki
+    # reddedilen kesimler approved:false olarak görünmeye devam etsin
+    # (şeffaflık). Web review'unda (review_cb) rapor UYGULANMIŞ plandan yazılır
+    # — sınır sürükleme/elle ekleme sonrası rapor rendere gidenle aynı olmalı;
+    # reddin sayısı `duzenleme.devre_disi` alanında kayıtta kalır.
     _bildir(progress_cb, "RENDER")
     _out.print(
         f"[cyan][6/6] RENDER[/cyan] — encoder: {encoder_secimi.ffmpeg_name} "
@@ -453,12 +558,13 @@ def run(
         _fail(f"RENDER başarısız: {exc}")
     try:
         rapor_dosyasi = write_json_report(
-            plan,
+            rapor_plani,
             total_ms,
             rapor_yolu,
             skipped_aday_filler=atlanan_aday,
             encoder=encoder_bilgisi,
             approved=approved_flags,
+            duzenleme=duzenleme,
         )
     except OSError as exc:
         _fail(f"rapor.json yazılamadı: {exc}")
