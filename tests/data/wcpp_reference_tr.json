@@ -85,7 +85,7 @@
       "wcpp_ham_ms": [8040, 8760],
       "reanchor_ms": [8040, 8760],
       "olculen_sapma_ms": [-125, 160],
-      "varyantlar": ["Vişvır"],
+      "varyantlar": ["Vişvır", "vışver"],
       "not": "Sessizlikle kesişmiyor; zaten tolerans içindeydi, re-anchor dokunmadı (regresyon kilidi). Uydurma yazım — KI-1: CUDA 'wishfur', Vulkan 'Vişvır' (varyant listesi yalnızca eşleştirme metadatası; sınırlar değişmez)."
     },
     {
@@ -102,6 +102,7 @@
       "start_ms": 9037,
       "end_ms": 9868,
       "sinif": "zincir_kaymasi",
+      "varyantlar": ["ırılarımı"],
       "wcpp_ham_ms": [9220, 10240],
       "reanchor_ms": [9220, 10240],
       "olculen_sapma_ms": [183, 372]

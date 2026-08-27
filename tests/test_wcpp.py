@@ -483,12 +483,21 @@ class TestVaryantEslestirme:
         assert _referans_adaylari(self._by_text(words), beklenen) == []
 
     def test_referans_dosyasindaki_varyantlar_ki1_ile_uyumlu(self) -> None:
-        """Referans dosyası KI-1'de belgeli iki varyantı taşımalı (belge kilidi)."""
+        """Referans dosyası KI-1'de belgeli varyantları taşımalı (belge kilidi).
+
+        Üç compute yolu üç kimlik üretti (KI-1): CUDA `kat`/`wishfur`/`ığılarımı`,
+        Vulkan `kağıt`/`Vişvır`, HIP `kağıt`/`vışver`/`ırılarımı`. HIP turu
+        `ığılarımı` için İLK varyantı ekledi — o kelime daha önce tek yazımlıydı.
+        """
         ref = json.loads(_REFERANS_JSON.read_text(encoding="utf-8"))
         varyantli = {
             k["text"]: k["varyantlar"] for k in ref["words"] if k.get("varyantlar")
         }
-        assert varyantli == {"kat": ["kağıt"], "wishfur": ["Vişvır"]}
+        assert varyantli == {
+            "kat": ["kağıt"],
+            "wishfur": ["Vişvır", "vışver"],
+            "ığılarımı": ["ırılarımı"],
+        }
 
 
 # ─── Gerçek model (marker'lı) ─────────────────────────────────────────────────
