@@ -153,8 +153,9 @@ olan sütunlar bunlardır).
   disk/CPU'ya bağlıdır, GPU'yla ilgisi yoktur. GPU'ya en yakın sütun
   `encode`'dur (125.3 vs ~191 ms). Yöntem de birebir aynı değil: RTX 4050
   bloğu 2.-3. koşunun **ortalaması**, bu blok 2.-4. koşunun **medyanı**.
-  Adil bir CPU/Vulkan/HIP karşılaştırması üç yollu tablo ister — o tur
-  **koşulamadı** (bkz. KI-7).
+  Adil bir CPU/Vulkan/HIP karşılaştırması üç yollu tablo ister; o tablo
+  2026-08-27'de **aynı makinede** koşuldu ve KI-7'dedir (sıralama:
+  Vulkan < HIP < CPU).
 - **Ölçüm aracı tuzağı (kaydedildi ki tekrarlanmasın):** ilk denemede
   `Start-Process -Wait` kullanıldı; duvar saati her koşuda ~2009 ms'e
   sabitlendi — whisper'ın kendi `total`'i 60 ms oynarken duvar yalnız 4 ms
@@ -885,35 +886,56 @@ CMAKE_CXX_FLAGS       = --offload-arch=gfx1200
    çalışan build onu hiç kullanmadı, mimari `--offload-arch=gfx1200` ile
    geçti. Öngörü doğrulandı.
 
-**Hız — HIP vs Vulkan (RX 9060 XT / Ryzen 5 7500F, 2026-08-27).** Aynı model,
-aynı bayraklar (`-l tr -ml 1 -sow -ojf`), 5 girdi × 4 koşu; aşağıdakiler
-2.-4. koşuların **medyanı** (ilk koşu ayrı tutuldu, tutarlı bir ceza
-göstermedi). Ölçüm `Measure-Command` + `cmd /c` ile doğrudan binary'ye.
-**CPU build'i hâlâ yok** — bu iki yollu bir tablodur, Adım 3'ün üç yollu
-tablosu değil.
+**Hız — CPU vs Vulkan vs HIP (RX 9060 XT / Ryzen 5 7500F, 2026-08-27).**
+Aynı model, aynı bayraklar (`-l tr -ml 1 -sow -ojf`), 5 girdi × 4 koşu;
+aşağıdakiler **2.-4. koşuların medyanıdır** (üç ılık koşu; ilk koşu ayrı
+tutuldu, hiçbir yolda tutarlı bir ceza göstermedi). Ölçüm `Measure-Command` +
+`cmd /c` ile doğrudan binary'ye — pipeline üzerinden değil.
+**Adım 3'ün üç yollu tablosu bununla tamamlandı.**
 
-| Girdi | Süre | Pencere | Vulkan total | HIP total | HIP/Vulkan |
-|---|---|---|---|---|---|
-| `test_konusma` | 14.81 sn | 1 | 820.9 ms | 1811.3 ms | 2.21× |
-| `test2` | 22.40 sn | 1 | 896.0 ms | 1889.7 ms | 2.11× |
-| `test1` | 25.66 sn | 1 | 825.5 ms | 1826.4 ms | 2.21× |
-| `test4` | 30.72 sn | 2 | 1127.4 ms | 2200.6 ms | 1.95× |
-| `test3` | 33.54 sn | 2 | 1216.5 ms | 2276.2 ms | 1.87× |
+| Girdi | Süre | Pencere | Vulkan total | HIP total | CPU total | HIP/Vulkan | CPU/Vulkan |
+|---|---|---|---|---|---|---|---|
+| `test_konusma` | 14.81 sn | 1 | 820.9 ms | 1811.3 ms | 12936.0 ms | 2.21× | 15.8× |
+| `test2` | 22.40 sn | 1 | 896.0 ms | 1889.7 ms | 13189.0 ms | 2.11× | 14.7× |
+| `test1` | 25.66 sn | 1 | 825.5 ms | 1826.4 ms | 12652.7 ms | 2.21× | 15.3× |
+| `test4` | 30.72 sn | 2 | 1127.4 ms | 2200.6 ms | 25452.1 ms | 1.95× | 22.6× |
+| `test3` | 33.54 sn | 2 | 1216.5 ms | 2276.2 ms | 25809.7 ms | 1.87× | 21.2× |
+
+**Sıralama her girdide aynı: Vulkan < HIP < CPU.** CPU, HIP'in de ~7–11.6×
+gerisinde.
 
 Kırılım (aynı koşuların medyanları, ms):
 
-| Bileşen | Vulkan (1 pencere) | HIP (1 pencere) | Vulkan (2 pencere) | HIP (2 pencere) |
-|---|---|---|---|---|
-| `encode` | ~127 | ~976 | ~246 | ~1177 |
-| `batchd` (toplu decode) | 65–108 | 88–133 | ~163 | ~206 |
-| `decode` (tek token) | 0–3.1 | 0–12.1 | ~2.8 | ~4–5.6 |
-| `load` | ~457 | ~644 | ~457 | ~648 |
+| Bileşen | Vulkan 1p | HIP 1p | CPU 1p | Vulkan 2p | HIP 2p | CPU 2p |
+|---|---|---|---|---|---|---|
+| `encode` | ~127 | ~976 | ~11693 | ~246 | ~1177 | ~23314 |
+| `batchd` (toplu decode) | 65–108 | 88–133 | 518–907 | ~163 | ~206 | 1394–1726 |
+| `decode` (tek token) | 0–3.1 | 0–12.1 | 0–10.7 | ~2.8 | ~4–5.6 | 0–5.2 |
+| `load` | ~457 | ~644 | ~388 | ~457 | ~648 | ~387–391 |
+
+- **CPU'nun `load`'u en hızlısı (~388 ms)** — GPU yollarındaki fark model
+  okumadan değil backend init'inden geliyor (Vulkan ~457, HIP ~644 ms).
 
 - **HIP her bileşende geride — lehine tek bir kalem yok.** `encode`'da fark
   1 pencerede **7.6–7.8×**, 2 pencerede **4.7–4.8×**. `batchd`'de HIP
   %20–35 yavaş. `load` bile ~190 ms daha uzun (HIP runtime init'i buraya
   düşüyor).
-- **Farkın kaynağı sabit maliyet, per-pencere iş değil.** İki pencere
+- **Üç yolun sabit/pencere ayrışımı** (`encode = sabit + pencere×birim`, iki
+  pencere seviyesinden çözüldü):
+
+  | Backend | sabit (ms) | pencere başına (ms) | pencere işi, Vulkan'a göre |
+  |---|---|---|---|
+  | Vulkan | ~7.6 | ~119.5 | 1× |
+  | HIP | ~775.8 | ~200.7 | 1.68× |
+  | CPU | ~72.2 | ~11621.1 | **97.2×** |
+
+  **İki farklı kusur tipi:** HIP'in sorunu per-pencere iş değil, süreç başına
+  ~776 ms'lik **sabit** ceza (Vulkan'ın 102 katı). CPU'nun sabit maliyeti
+  ihmal edilebilir (~72 ms, Vulkan mertebesinde) — onun sorunu tamamen
+  **per-pencere iş**. Yani CPU uzun videolarda daha da geriye düşer (tablo:
+  2 pencerede CPU/Vulkan 15× → 22×), HIP ise tersine bir miktar toparlar
+  (2.21× → 1.87×), çünkü sabit cezası daha uzun işe yayılır.
+- **Farkın kaynağı sabit maliyet, per-pencere iş değil (HIP).** İki pencere
   seviyesinden çözülünce: `encode = sabit + pencere×birim` →
   **Vulkan sabit ~7.6 ms / pencere ~119.5 ms**,
   **HIP sabit ~775.8 ms / pencere ~200.7 ms**. Yani HIP'in per-pencere işi
@@ -930,6 +952,37 @@ Kırılım (aynı koşuların medyanları, ms):
   backend'de de 0–12 ms, yani gürültü seviyesinde; oradaki oranlar anlamsız.
   Decode tarafının anlamlı ölçüsü `batchd`'dir ve orada da **Vulkan
   öndedir**. Bu turda HIP'in önde olduğu hiçbir bileşen ölçülmedi.
+
+**CPU satırının tarifi ve iki uyarısı.** GPU'suz build aynı zincirle
+(VS Build Tools 2022 + cmake 4.4.2 + ninja 1.13.2) aynı kaynaktan üretildi:
+
+```
+cmake -S D:\dev\whisper.cpp -B D:\dev\whisper.cpp\build-cpu -G Ninja ^
+      -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+```
+
+GPU bayrağı YOK (`GGML_VULKAN` / `GGML_HIP` / `GGML_CUDA` hepsi OFF, cache'ten
+doğrulandı); `GGML_NATIVE=ON` ve `BUILD_SHARED_LIBS=ON` **HIP build'iyle
+birebir aynı** tutuldu — yani CPU'ya bu makinede en iyi şansı veren ayar.
+Üretilen `bin/` yalnız `whisper.dll` + `ggml*.dll` içerir, GPU DLL'i yoktur.
+
+1. **İş parçacığı: whisper-cli varsayılanı 4/12.** `system_info: n_threads =
+   4 / 12` — binary 12 mantıksal çekirdeğin yalnız 4'ünü kullanıyor ve
+   Filler-Cut `-t` geçmediği için **ürünün gerçekte gördüğü sayı budur**.
+   Handikabın bedeli elle ölçüldü (test_konusma, 3'er koşu): `-t 8` → total
+   9348.7 ms, `-t 12` → 9249.4 ms; yani 8 çekirdekte doyuyor, kazanç
+   **1.40×**. Handikap tamamen kaldırılsa bile CPU Vulkan'ın **~11.3×
+   gerisinde** kalıyor — **sıralama değişmiyor**, bu yüzden tablo ürünün
+   gerçekten kullandığı varsayılanla bırakıldı.
+2. **Ölçüm hijyeni — `test2` epizodu.** İlk CPU turunda `test2`'nin encode'u
+   14.5–17.6 sn arasında oynadı (%21 yayılım; diğer girdilerde ≤%5) ve
+   1-pencere grubunun belirgin üstünde durdu — girdiye ait bir özellik
+   sanılabilirdi. **3 koşu daha alındı: 11750 / 11636 / 11688 ms** — %1
+   yayılımla tam 1-pencere grubunun içinde. İlk turdaki yükseklik geçici
+   sistem gürültüsüydü; tabloya temiz tekrar girdi. (CPU ve Vulkan `test2`
+   için aynı segment sayısını üretiyor — 29/29 — yani pencere sayısı farkı
+   değildi.) **Tek turun medyanı, o tur gürültülüyse medyan olmaktan çıkar;
+   yayılıma bakılmadan sayı yazılmaz.**
 
 **Karar: HIP release asset'e girmiyor.** Kriter ">%20 daha hızlıysa aday"dı;
 HIP **~2× daha yavaş** çıktı. Üstelik dağıtım maliyeti Vulkan'dan yüksek:
@@ -948,6 +1001,7 @@ tekrarlanmalı:
 2. `GGML_HIP_ROCWMMA_FATTN`'in gfx1200'de düzelmesi — flash-attention açık
    hâlde encode tablosu tamamen değişebilir.
 
-**Retest notu:** `D:\opt\rocm` ve `D:\dev\whisper.cpp\build-hip` **saklı**.
+**Retest notu:** `D:\opt\rocm`, `D:\dev\whisper.cpp\build-hip` ve
+`build-cpu` **saklı**.
 Yeniden ölçüm sıfırdan kurulum istemez; `PATH`'e `D:\opt\rocm\bin` eklenip
 ninja ile artımlı build + bu bölümdeki 5 girdilik koşu **~15 dakikadır**.
