@@ -178,6 +178,13 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 
 .bos { padding: 18px; color: var(--soluk); text-align: center; }
 
+.karsilama {
+  color: var(--soluk);
+  margin: 0 0 16px;
+  max-width: 58ch;
+  font-size: 14px;
+}
+
 /* ── mod seçimi ───────────────────────────────────────────────────────── */
 
 .modlar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

@@ -574,6 +574,105 @@ class TestHataYollari:
         assert exc_info.value.exit_code == 1
 
 
+class TestHataEnvanteri:
+    """v1.0: HER katman hatası Türkçe + EYLEME DÖKÜLEBİLİR olmalı.
+
+    Mesajlar hem CLI konsoluna hem web arayüzüne aynen düşer ve kullanıcı
+    stack trace görmez — dolayısıyla "ne yapmalı" bilgisi mesajın KENDİSİNDE
+    olmak zorunda. Bu envanter yeni bir hata yolu eklendiğinde de ipucusuz
+    kalmasın diye tablo hâlinde tutulur.
+    """
+
+    @pytest.mark.parametrize(
+        ("katman", "hata", "beklenen_ipucu"),
+        [
+            ("probe", ProbeError("ffprobe yok"), "ffmpeg.org/download"),
+            ("extract", ExtractionError("ffmpeg patladı"), "ffmpeg.org/download"),
+            (
+                "silence",
+                SilenceDetectionError("silencedetect patladı"),
+                "ffmpeg.org/download",
+            ),
+            ("filtre", ValueError("negatif eşik"), "silence_min_ms"),
+            ("cutplan", CutPlanError("plan tüm videoyu kesiyor"), "tüm videoyu"),
+            ("render", RenderError("segment 1/2 patladı"), "encoder"),
+            ("json", OSError("disk dolu"), "disk alanı"),
+        ],
+        ids=["probe", "extract", "silence", "filtre", "cutplan", "render", "rapor"],
+    )
+    def test_her_hata_eyleme_dokulebilir(
+        self,
+        girdi: Path,
+        katmanlar: Any,
+        katman: str,
+        hata: Exception,
+        beklenen_ipucu: str,
+    ) -> None:
+        getattr(katmanlar, katman).side_effect = hata
+        with pytest.raises(PipelineError) as exc_info:
+            run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        mesaj = exc_info.value.mesaj
+        assert beklenen_ipucu in mesaj, mesaj
+        assert "Traceback" not in mesaj
+        assert 'File "' not in mesaj  # dosya/satır izi de sızmamalı
+
+    def test_girdi_yok_mesaji_yol_kontrolu_soyluyor(self, tmp_path: Path) -> None:
+        with pytest.raises(PipelineError) as exc_info:
+            run(tmp_path / "yok.mp4", config=Config(yes=True), transcriber=Mock())
+        assert "yolu kontrol edin" in exc_info.value.mesaj
+
+    def test_transcribe_ipucu_backende_gore_fw(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        class _Patan(Transcriber):
+            def transcribe(self, wav_path: str | Path) -> list[Word]:
+                raise RuntimeError("CUDA kütüphaneleri yüklenemedi")
+
+        with pytest.raises(PipelineError) as exc_info:
+            run(girdi, config=Config(yes=True), transcriber=_Patan())
+        mesaj = exc_info.value.mesaj
+        assert "RuntimeError" in mesaj  # sınıf adı ayırt edici, kalır
+        assert "cuda" in mesaj  # faster-whisper ipucu
+        assert "whispercpp_binary" not in mesaj  # yanlış yola yönlendirmez
+
+    def test_transcribe_ipucu_backende_gore_wcpp(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        class _Patan(Transcriber):
+            def transcribe(self, wav_path: str | Path) -> list[Word]:
+                raise RuntimeError("whisper-cli bulunamadı")
+
+        cfg = Config(yes=True, asr=AsrConfig(backend="whispercpp"))
+        with pytest.raises(PipelineError) as exc_info:
+            run(girdi, config=cfg, transcriber=_Patan())
+        mesaj = exc_info.value.mesaj
+        assert "whispercpp_binary" in mesaj
+        assert "pip install" not in mesaj  # fw ipucusu sızmadı
+
+    def test_bilinmeyen_backend_gecerli_listeyi_verir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        with pytest.raises(PipelineError) as exc_info:
+            run(
+                girdi,
+                config=Config(yes=True, asr=AsrConfig(backend="whisperx")),
+                transcriber=None,
+            )
+        assert "geçerli: faster-whisper, whispercpp" in exc_info.value.mesaj
+
+    def test_transkript_yazilamadi_disk_ipucu(
+        self, girdi: Path, katmanlar: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _patlat(self: Path, *a: Any, **k: Any) -> None:
+            raise OSError("izin yok")
+
+        monkeypatch.setattr(Path, "write_text", _patlat)
+        with pytest.raises(PipelineError) as exc_info:
+            run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        assert "transkript yazılamadı" in exc_info.value.mesaj
+        assert "yazma izni" in exc_info.value.mesaj
+
+
 class TestProgressCb:
     """v1.0 web: opsiyonel bant dışı ilerleme kanalı — CLI parity kilitli.
 

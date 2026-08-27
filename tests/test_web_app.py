@@ -62,6 +62,17 @@ class TestUcEkran:
         ):
             assert ekran_id in r.text, ekran_id
 
+    def test_bos_durum_ve_karsilama_yuzeyleri(self) -> None:
+        r = TestClient(create_app()).get("/")
+        assert 'class="karsilama"' in r.text  # ana ekran karşılaması
+        assert 'id="gezgin-bos"' in r.text  # boş klasör yüzeyi (metni JS yazar)
+        assert 'id="ekran-yok"' in r.text  # iş bulunamadı
+
+    def test_istatistik_paneli_ogeleri(self) -> None:
+        r = TestClient(create_app()).get("/")
+        for oge in ('id="tur-kirilim"', 'id="filler-dagilim"', 'id="duzenleme-kirilim"'):
+            assert oge in r.text, oge
+
     def test_review_ekrani_gerekli_ogeleri_tasir(self) -> None:
         r = TestClient(create_app()).get("/")
         for oge in (

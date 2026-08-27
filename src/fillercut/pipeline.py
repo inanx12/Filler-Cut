@@ -188,6 +188,23 @@ def _make_transcriber(asr: AsrConfig) -> Transcriber:
     )
 
 
+#: Hata mesajı ipuçları — her katman hatası "ne oldu" kadar "ne yapmalı"yı da
+#: söyler (v1.0: mesajlar CLI konsoluna VE web arayüzüne aynen düşer; kullanıcı
+#: stack trace görmez, dolayısıyla eylem bilgisi mesajın kendisinde olmalı).
+IPUCU_FFMPEG = (
+    "ffmpeg ve ffprobe PATH üzerinde mi? Kurulum: https://ffmpeg.org/download.html"
+)
+IPUCU_DISK = "hedef klasörde yazma izni ve yeterli disk alanı olduğundan emin olun"
+IPUCU_FW = (
+    "ilk koşuda ~1 GB model indirilir (internet bağlantısı) ve CUDA kurulumu "
+    "gerekebilir: pip install -e \".[cuda]\""
+)
+IPUCU_WCPP = (
+    "[asr].whispercpp_binary ve whispercpp_model yollarını kontrol edin "
+    "(whisper-cli ve GGML .bin dosyası sistem bağımlılığıdır)"
+)
+
+
 def _fail(mesaj: str) -> NoReturn:
     """Kırmızı hata mesajı + temiz çıkış (kullanıcı traceback görmez)."""
     _err.print(f"[bold red]Hata:[/bold red] {mesaj}")
@@ -303,7 +320,7 @@ def run(
     yes = cfg.yes
     src = Path(video_path)
     if not src.is_file():
-        _fail(f"girdi dosyası bulunamadı: {src}")
+        _fail(f"girdi dosyası bulunamadı: {src} — yolu kontrol edin")
     dst = Path(output_path) if output_path is not None else default_output_path(src)
     rapor_yolu = dst.with_suffix(".json")
 
@@ -318,7 +335,7 @@ def run(
     try:
         total_ms = probe_duration_ms(src)
     except (ProbeError, FileNotFoundError) as exc:
-        _fail(f"süre okunamadı (ffprobe): {exc}")
+        _fail(f"süre okunamadı (ffprobe): {exc} — {IPUCU_FFMPEG}")
 
     with tempfile.TemporaryDirectory(prefix="fillercut_") as tmp_str:
         wav = Path(tmp_str) / "analiz.wav"
@@ -329,7 +346,7 @@ def run(
         try:
             extract_audio(src, wav)
         except (ExtractionError, FileNotFoundError) as exc:
-            _fail(f"EXTRACT başarısız: {exc}")
+            _fail(f"EXTRACT başarısız: {exc} — {IPUCU_FFMPEG}")
 
         # Analiz WAV'ı yalnız bu blok boyunca vardır (geçici dizin). Web
         # waveform peaks'ini burada üretir — çıkarımı ikinci kez koşmamak için.
@@ -344,7 +361,7 @@ def run(
         try:
             ham_sessizlikler = detect_silence(wav, total_duration_ms=total_ms)
         except (SilenceDetectionError, FileNotFoundError, ValueError) as exc:
-            _fail(f"DETECT (sessizlik) başarısız: {exc}")
+            _fail(f"DETECT (sessizlik haritası) başarısız: {exc} — {IPUCU_FFMPEG}")
 
         # [2] TRANSCRIBE
         _bildir(progress_cb, "TRANSCRIBE")
@@ -368,7 +385,12 @@ def run(
                 words = transcriber.transcribe(wav)
         except Exception as exc:
             # ASR backend'i keyfi hata üretebilir (CUDA/driver/model indirme)
-            _fail(f"TRANSCRIBE başarısız: {exc.__class__.__name__}: {exc}")
+            # Sınıf adı KALIR (CUDA/DLL hatalarında ayırt edici); stack trace
+            # yok. İpucu seçili backend'e göre: yanlış yola bakmayalım.
+            ipucu = IPUCU_FW if cfg.asr.backend == "faster-whisper" else IPUCU_WCPP
+            _fail(
+                f"TRANSCRIBE başarısız: {exc.__class__.__name__}: {exc} — {ipucu}"
+            )
 
         # RE-ANCHOR (v0.4.0) — backend-bağımsız, TRANSCRIBE ile DETECT ARASINDA:
         # ASR kelime sınırları duraklamaları yutar (KI-1 zincir şişmesi, KI-5);
@@ -398,7 +420,7 @@ def run(
         try:
             transkript_yolu.write_text(words_to_json(words) + "\n", encoding="utf-8")
         except OSError as exc:
-            _fail(f"transkript yazılamadı: {exc}")
+            _fail(f"transkript yazılamadı: {exc} — {IPUCU_DISK}")
 
         # [3] DETECT — filler (re-anchor'lı transkript) + sessizlik (yukarıda
         # çıkarılan ham harita; burada yalnızca süre süzgeci uygulanır).
@@ -414,7 +436,10 @@ def run(
                 min_silence_ms=cfg.detect.silence_min_ms,
             )
         except ValueError as exc:
-            _fail(f"DETECT (sessizlik) başarısız: {exc}")
+            _fail(
+                f"DETECT (sessizlik süzgeci) başarısız: {exc} — "
+                "[detect].silence_min_ms değerini gözden geçirin"
+            )
 
     # [4] PLAN — merge + padding + min-keep → saf veri CutPlan
     _bildir(progress_cb, "PLAN")
@@ -528,7 +553,7 @@ def run(
             try:
                 review_html = write_html_report(report, review_yolu)
             except OSError as exc:
-                _fail(f"review HTML yazılamadı: {exc}")
+                _fail(f"review HTML yazılamadı: {exc} — {IPUCU_DISK}")
             _out.print(f"[bold]Review HTML:[/bold] {review_html}")
             if open_review:
                 import webbrowser
@@ -555,7 +580,10 @@ def run(
     try:
         render(src, render_plan, dst, encode_args=build_encode_args(encoder_secimi, cfg.render))
     except (RenderError, FileNotFoundError) as exc:
-        _fail(f"RENDER başarısız: {exc}")
+        _fail(
+            f"RENDER başarısız: {exc} — {IPUCU_DISK}; sorun encoder'daysa "
+            "[encoder].preference sırasını değiştirip (örn. libx264) tekrar deneyin"
+        )
     try:
         rapor_dosyasi = write_json_report(
             rapor_plani,
@@ -567,7 +595,7 @@ def run(
             duzenleme=duzenleme,
         )
     except OSError as exc:
-        _fail(f"rapor.json yazılamadı: {exc}")
+        _fail(f"rapor.json yazılamadı: {exc} — {IPUCU_DISK}")
 
     return PipelineResult(
         output_path=dst,

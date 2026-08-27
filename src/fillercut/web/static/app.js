@@ -179,7 +179,24 @@ async function gezginYukle(yol) {
     li.addEventListener("dblclick", () => { videoSec(v, li); baslat(); });
     liste.appendChild(li);
   }
-  el("gezgin-bos").classList.toggle("gizli", veri.videolar.length > 0 || veri.dizinler.length > 0);
+  bosDurumYaz(veri);
+}
+
+function bosDurumYaz(veri) {
+  /* Boş durum ne olduğunu SÖYLER ve ne yapılacağını gösterir. Önceki hâli
+     yalnızca "hem klasör hem video yok" iken görünüyordu; oysa asıl sık
+     durum "alt klasörler var ama video yok". */
+  const kutu = el("gezgin-bos");
+  const videoVar = veri.videolar.length > 0;
+  const dizinVar = veri.dizinler.length > 0;
+  if (videoVar) {
+    kutu.classList.add("gizli");
+    return;
+  }
+  kutu.textContent = dizinVar
+    ? "Bu klasörde video yok — bir alt klasöre inin."
+    : "Bu klasör boş. Yukarıdaki yol çubuğundan başka bir klasöre geçin.";
+  kutu.classList.remove("gizli");
 }
 
 async function baslat() {
