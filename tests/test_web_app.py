@@ -47,6 +47,39 @@ class TestIskelet:
         assert uygulama.state.config == Config()
 
 
+class TestUcEkran:
+    """Dilim 1'in üç ekranı tek sayfada (SPA hissi) — statik dosya kilitleri."""
+
+    def test_index_uc_ekrani_da_icerir(self) -> None:
+        r = TestClient(create_app()).get("/")
+        assert 'lang="tr"' in r.text
+        for ekran_id in ("ekran-baslangic", "ekran-kosu", "ekran-sonuc"):
+            assert ekran_id in r.text, ekran_id
+
+    def test_stil_ve_script_baglari_servis_edilir(self) -> None:
+        client = TestClient(create_app())
+        css = client.get("/static/style.css")
+        assert css.status_code == 200
+        assert "text/css" in css.headers["content-type"]
+        js = client.get("/static/app.js")
+        assert js.status_code == 200
+        assert "javascript" in js.headers["content-type"]
+
+    def test_js_asama_aynasi_pipeline_sozlesmesiyle_ayni(self) -> None:
+        """app.js'teki ASAMALAR aynası pipeline.ASAMALAR ile ad ve SIRA olarak
+        birebir olmalı — kayarsa koşu ekranı yanlış aşamayı vurgular."""
+        from pathlib import Path
+
+        from fillercut.pipeline import ASAMALAR
+        from fillercut.web import app as web_app
+
+        js = (Path(web_app.__file__).parent / "static" / "app.js").read_text(
+            encoding="utf-8"
+        )
+        konumlar = [js.index(f'"{asama}"') for asama in ASAMALAR]
+        assert konumlar == sorted(konumlar)  # hepsi var VE aynı sırada
+
+
 class TestOnReady:
     """on_ready lifespan startup'ta BİR KEZ çağrılır (tarayıcı açma kanalı)."""
 

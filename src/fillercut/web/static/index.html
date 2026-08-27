@@ -4,9 +4,94 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Filler-Cut</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1117'/%3E%3Cpath d='M8 10h12M8 16h16M8 22h9' stroke='%233fb950' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<h1>Filler-Cut</h1>
-<p>UI iskeleti — ekranlar bir sonraki dilim commit'inde gelir.</p>
+<header class="ust">
+  <div class="marka"><span class="marka-isaret"></span>Filler-Cut</div>
+  <div class="marka-alt">filler + sessizlik temizliği · localhost</div>
+</header>
+
+<main>
+  <!-- Ekran 1 — Başlangıç: dosya gezgini + mod + Başlat -->
+  <section id="ekran-baslangic" class="ekran">
+    <h1>Video seç</h1>
+    <div class="kart gezgin">
+      <div class="gezgin-bas">
+        <button id="btn-ust" class="dugme ikincil dar" title="Üst dizine çık" aria-label="Üst dizine çık">&#8593;</button>
+        <div id="gezgin-yol" class="yol mono"></div>
+      </div>
+      <ul id="gezgin-liste" class="liste" aria-label="Dizin içeriği"></ul>
+      <div id="gezgin-bos" class="bos gizli">Bu klasörde video dosyası yok — bir alt klasöre inin.</div>
+    </div>
+
+    <div class="kart">
+      <h2>Kesim modu</h2>
+      <div class="modlar">
+        <label class="mod">
+          <input type="radio" name="mod" value="default" checked>
+          <span class="mod-govde">
+            <span class="mod-ad">Normal</span>
+            <span class="mod-acik">Kesin filler'lar (ııı, eee…) ve uzun sessizlikler kesilir.</span>
+          </span>
+        </label>
+        <label class="mod">
+          <input type="radio" name="mod" value="aggressive">
+          <span class="mod-govde">
+            <span class="mod-ad">Agresif</span>
+            <span class="mod-acik">Aday filler'lar da (şey, yani, hani, işte) kesilir.</span>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <div id="baslangic-hata" class="hata-kutu gizli" role="alert"></div>
+
+    <div class="alt-cubuk">
+      <div id="secim-ozet" class="secim">Dosya seçilmedi</div>
+      <button id="btn-baslat" class="dugme birincil" disabled>Başlat</button>
+    </div>
+  </section>
+
+  <!-- Ekran 2 — Koşu: 6 aşamalı ilerleme + SSE -->
+  <section id="ekran-kosu" class="ekran gizli">
+    <h1>İşleniyor</h1>
+    <div class="kart">
+      <div id="kosu-dosya" class="kosu-dosya mono"></div>
+      <ol id="asamalar" class="asamalar"></ol>
+      <div id="kosu-durum" class="durum-satiri" aria-live="polite"></div>
+    </div>
+    <div id="kosu-hata" class="hata-kutu gizli" role="alert">
+      <div class="hata-baslik">Koşu başarısız</div>
+      <div id="hata-mesaj" class="hata-mesaj"></div>
+      <details id="hata-detay-kapsul" class="gizli">
+        <summary>Log detayı</summary>
+        <pre id="hata-detay" class="mono"></pre>
+      </details>
+      <div class="hata-eylem"><button id="btn-hata-yeni" class="dugme ikincil">Yeni iş</button></div>
+    </div>
+  </section>
+
+  <!-- Ekran 3 — Sonuç: çıktı yolu + süre özeti -->
+  <section id="ekran-sonuc" class="ekran gizli">
+    <h1>Tamamlandı</h1>
+    <div class="kart sonuc-ozet">
+      <div id="sonuc-kazanc" class="buyuk-sayi"></div>
+      <div class="sure-akis"><span id="sonuc-orijinal"></span><span class="ok">&#8594;</span><span id="sonuc-yeni" class="yesil"></span></div>
+      <div id="sonuc-kesim" class="sonuc-alt"></div>
+    </div>
+    <div class="kart">
+      <div class="cikti-satir"><span class="etiket">Çıktı</span><span id="sonuc-cikti" class="mono"></span></div>
+      <div class="cikti-satir"><span class="etiket">Rapor</span><span id="sonuc-rapor" class="mono"></span></div>
+      <div class="cikti-satir"><span class="etiket">Transkript</span><span id="sonuc-transkript" class="mono"></span></div>
+    </div>
+    <div class="alt-cubuk tek">
+      <button id="btn-yeni" class="dugme birincil">Yeni iş</button>
+    </div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
 </body>
 </html>
