@@ -9,14 +9,94 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
-v1.0 UI Dilim 1 — localhost web arayüzü iskeleti + uçtan uca koşu (review
-ekranı Dilim 2'de, sürüm numarası Dilim 3 sonunda). Yeni runtime
+### v1.0 UI Dilim 2 — review ekranı
+
+Pipeline artık PLAN'dan sonra **durur**: kullanıcı kesimleri tarayıcıda
+gözden geçirir, düzenler ve onaylayınca RENDER koşar. **Yeni bağımlılık
+YOK** (npm/build adımı yok; waveform peaks + canvas vanilla JS). `numpy`
+dolaylı bağımlılıktan (faster-whisper/CTranslate2) **doğrudan kullanıma**
+terfi etti — yeni paket değil, `pyproject.toml`'a not düşüldü.
+
+#### Eklendi
+
+- **Review ekranı** — video oynatıcı + zaman çizelgesi (waveform, tür renkli
+  kesim blokları, playhead) + kesim listesi (tür rozeti, aralık, süre, geri
+  al/geri ver). Klavye: Space oynat/dur, ←/→ 5 sn.
+- **Atlamalı oynatma** (tamamen istemcide, sunucu round-trip'i yok): açıkken
+  kesimler atlanır, kapalıyken orijinal kesintisiz oynar (karşılaştırma için).
+- **Tek tık geri alma** — kesim listeden SİLİNMEZ, `aktif=false` olur ve
+  tek tıkla geri gelir. Elle eklenen kesimler de aynı şekilde toggle'lanır.
+- **Sürüklenebilir kesim sınırları + snap-to-silence** (150 ms eşik, ham
+  sessizlik haritasından) ve **sürükleyerek elle kesim ekleme** (`manuel`).
+- **`manuel` kesim türü** — `SegmentKind`/`CutKind`'e eklendi; kademe sayımı
+  (KI-3) `manuel:` önekini DÖRDÜNCÜ kategori olarak tanır, mevcut üç reason
+  kalıbına dokunulmadı (regresyon kilidi testte). Rapora `tiers.manuel` ve
+  `duzenleme` (devre dışı / sınır değişen / elle eklenen) alanları girdi;
+  ikisi de geriye uyumlu default'lu.
+- **API:** `GET /review` (kesim listesi + uygulanmış aralıklar + ham
+  sessizlik haritası), `POST /review/edits` (overlay'in tam anlık görüntüsü),
+  `POST /approve`, `POST /cancel`, `GET /video` (**HTTP Range** — seek şart),
+  `GET /peaks`. Job durum makinesi genişledi:
+  `queued → running → review → rendering → done | failed | iptal`.
+- **"İş bulunamadı" yüzeyi** (Dilim 1 bulgusu) — sunucu yeniden başlatıldıysa
+  SSE sonsuza dek yeniden bağlanmaya çalışıyordu; artık durum sorulur ve 404
+  ise açık bir ekran gösterilir.
+
+#### Kurallar (kodda ve testte kilitli)
+
+- **Düzenlemeler yıkıcı değil:** orijinal plan hiç değişmez; kararlar ayrı bir
+  overlay katmanında durur (`web/review.py`). Render her zaman "plan + overlay
+  uygulanmış" görünümden beslenir.
+- **Doğruluğun kaynağı sunucudur:** istemcideki snap/clamp yalnız UX'tir; ms-int
+  (float reddedilir), sınır doğrulaması, snap, min_keep clamp ve union sunucuda
+  yeniden uygulanır ve saklanan değerler bunlardır.
+- **Kullanıcının sürüklediği sınır padding'i EZER** ve KI-5 anomali koruması
+  o sınıra uygulanmaz — ikisinin de gerekçesi `apply_review_edits`'te yazılı.
+- **min_keep clamp yalnız düzenlenmiş kesimlere** uygulanır (dokunulmamış kesim
+  çıpadır). Ölçülen kural: **snap min_keep'i ihlal edemez** — yasak bölgeye
+  düşen snap iptal edilir, yoksa boşluk bırakmak isteyen kullanıcı komşu
+  kesimle sessizce birleşirdi.
+- **Çakışma union'la çözülür** (reddetme yok), **boş video yasağı onay anında**
+  uygulanır: plan tüm videoyu kesiyorsa onay Türkçe mesajla reddedilir ve
+  pipeline beklemeye devam eder.
+
+#### Düzeltildi
+
+- **`typer.Exit` yutuluyordu.** click'te `RuntimeError` türevidir, web job'ının
+  genel `except Exception`'ı onu yakalıyordu: review'da vazgeçen kullanıcı
+  UI'da "beklenmeyen hata" görürdü. Kod 0 artık temiz iptal.
+- **Sunucu kapanışta asılıyordu.** Review'da bekleyen worker `threading.Event`
+  üzerindeydi ve `ThreadPoolExecutor` thread'leri daemon değildir — Ctrl+C
+  sonrası süreç kapanmıyordu. `JobKayit.kapat` artık bekleyen işleri iptal eder.
+- **Waveform sıfır genişlikte kayboluyordu** (ekran henüz düzenlenmemişken
+  çizim tuvali 1 px'e sabitliyordu) — `ResizeObserver` ile yeniden çizilir.
+
+#### Doğrulandı (gerçek donanım — RX 9060 XT, whispercpp/Vulkan + h264_amf)
+
+- Test1.mp4 PLAN sonrası review'da durdu; 5 kesim tür rozetleriyle listelendi,
+  video Range ile oynadı (süre 25.68 sn), 2000 binlik waveform yüklendi.
+- **Düzenlemesiz onay CLI ile hash-identik** (`F5185E7E…9004`) — Dilim 1'in
+  CLI referansıyla birebir.
+- Snap: 11438 ms'e bırakılan tutamaç 11498 ms'lik sessizlik kenarına yapıştı.
+  min_keep clamp: 250 ms boşluk denemesi 300 ms'e itildi, 65 ms denemesi
+  komşuya değdirilip union oldu.
+- Tek kesim geri alma: kalan süre 20113 → 20543 ms (+430 ms, tam kesim süresi).
+- Elle kesim + geri alma birlikte: çıktı 19.60 sn, raporda `tiers.manuel=1`,
+  `duzenleme={devre_disi:1, sinir_degisen:0, manuel_eklenen:1}`, `rejected=1`.
+- Atlamalı oynatma açıkken kesim atlandı (13.15 sn), kapalıyken kesimin içinde
+  oynamaya devam etti (11.94 sn).
+- Her şeyi kesme denemesi: Türkçe uyarı + onay reddi, iş review'da kaldı.
+- Var olmayan job id → "İş bulunamadı" ekranı.
+
+### v1.0 UI Dilim 1 — iskelet + uçtan uca koşu
+
+Localhost web arayüzü iskeleti + uçtan uca koşu. Yeni runtime
 bağımlılıkları **yalnız `fastapi` + `uvicorn`** (v0.3 review server'ının
 stdlib `http.server`'dan evrimi; şablon motoru / htmx / npm YOK — statik
 HTML + vanilla JS + tek CSS). `httpx` yalnız `dev` extra'sına girdi: FastAPI
 TestClient'ın zorunlu alt bağımlılığıdır, runtime'a girmez.
 
-### Eklendi
+#### Eklendi
 
 - **`fillercut ui` alt komutu** — web arayüzünü YALNIZ `127.0.0.1`'de
   başlatır (0.0.0.0 yok), portu basar, tarayıcıyı sunucu istekleri kabul
@@ -56,7 +136,7 @@ TestClient'ın zorunlu alt bağımlılığıdır, runtime'a girmez.
   genel Türkçe mesaj + ayrı log-detay alanı olur. CLI akışı değişmedi
   (click aynı şekilde yakalar, kod 1).
 
-### Doğrulandı (gerçek donanım — RX 9060 XT, whispercpp/Vulkan + h264_amf)
+#### Doğrulandı (gerçek donanım — RX 9060 XT, whispercpp/Vulkan + h264_amf)
 
 - `fillercut ui` → netstat'ta yalnız `127.0.0.1:PORT LISTENING`
   (0.0.0.0 bind yok).

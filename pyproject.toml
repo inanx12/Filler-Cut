@@ -20,6 +20,11 @@ dependencies = [
     # htmx / npm YOK — arayüz statik HTML + vanilla JS + tek CSS.
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    # numpy YENİ bir bağımlılık DEĞİLDİR: faster-whisper/CTranslate2 zaten
+    # kuruyordu. v1.0 review'un waveform peaks'i (web/waveform.py) onu ilk kez
+    # DOĞRUDAN kullandığı için dolaylı→doğrudan terfi ettirildi — kullandığın
+    # şeyi ilan et; üst zincir bir gün numpy'siz kalırsa hata burada görünsün.
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]

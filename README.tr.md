@@ -158,14 +158,26 @@ fillercut ui
 loopback — localhost dışına asla bağlanmaz) ve tarayıcınızı açar. Videoyu
 sunucu taraflı dosya gezginiyle seçersiniz (dosya tarayıcıya **yüklenmez**;
 araç diskten okur, gezgin ev dizininizle sınırlıdır), Normal/Agresif modu
-seçer ve 6 aşamalı pipeline'ın ilerlemesini canlı izlersiniz. Sonuç ekranı
-çıktı yolunu ve kazanılan süreyi gösterir.
+seçer ve 6 aşamalı pipeline'ın ilerlemesini canlı izlersiniz.
+
+PLAN'dan sonra koşu **gözden geçirme için durur**: video, dalga formlu zaman
+çizelgesi, üzerine çizilmiş kesimler ve kesim listesi karşınıza gelir. Orada
+
+- **atlamalı oynatma** açıkken kesimler atlanır, kapalıyken orijinali
+  kesintisiz dinlersiniz,
+- **tek tıkla bir kesimi geri alırsınız** — listeden silinmez, soluklaşır ve
+  bir tıkla geri gelir,
+- **kesim sınırını sürüklersiniz**; tutamaç en yakın sessizlik kenarına yapışır,
+- **boş alanda sürükleyerek kendi kesiminizi eklersiniz.**
+
+Onaylayınca render başlar; sonuç ekranı çıktı yolunu ve kazanılan süreyi
+gösterir. Düzenlemeleriniz rapora da işlenir (`tiers.manuel`, `duzenleme`).
 
 Opsiyonlar: `--port` (varsayılan 8765), `--config YOL` (CLI ile aynı
 `filler-cut.toml`), `--no-browser`.
 
-> Mevcut dilim: web koşusu review/onay adımı olmadan render eder (`--yes`
-> davranışı); interaktif review ekranı bir sonraki dilimde gelecek.
+> İşler yalnızca bellekte yaşar — sunucuyu yeniden başlatınca kaybolurlar
+> (arayüz asılı kalmak yerine bunu söyler). Üretilmiş dosyalar diskte kalır.
 
 ## Lisans
 

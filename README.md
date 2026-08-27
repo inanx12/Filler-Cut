@@ -161,14 +161,25 @@ Starts a local web interface at `http://127.0.0.1:8765` (loopback only —
 never binds beyond localhost) and opens your browser. Pick a video with the
 server-side file browser (files are **not** uploaded; the tool reads them
 from disk, and browsing is confined to your home directory), choose
-Normal/Aggressive mode, and watch the 6-stage pipeline progress live. The
-result screen shows the output path and the time saved.
+Normal/Aggressive mode, and watch the 6-stage pipeline progress live.
+
+After PLAN the run **pauses for review**: you get the video with a waveform
+timeline, every cut drawn on it, and a cut list. There you can
+
+- play with **skip mode** on (cuts are skipped) or off (hear the original),
+- **undo any cut with one click** — it stays in the list, greyed out, and one
+  more click brings it back,
+- **drag a cut boundary**; it snaps to the nearest silence edge,
+- **drag on empty timeline** to add a cut of your own.
+
+Approving renders; the result screen shows the output path and time saved.
+Your edits are recorded in the report (`tiers.manuel`, `duzenleme`).
 
 Options: `--port` (default 8765), `--config PATH` (the same
 `filler-cut.toml` the CLI uses), `--no-browser`.
 
-> Current slice: the web run renders without the review/approval step
-> (`--yes` behavior); the interactive review screen comes in the next slice.
+> Jobs live in memory only — restarting the server drops them (the tool tells
+> you so instead of hanging). Rendered files stay on disk.
 
 ## License
 

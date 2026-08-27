@@ -148,6 +148,40 @@ Davranış değişikliği: kesim sınırları sıkılaşır ve `<ad>_transkript.
 re-anchor'lı sınırları taşır. KI-5 anomali koruması kaldırılmadı, yedek
 savunmaya çekildi.
 
+**v1.0 UI Dilim 2 TAMAMLANDI** — review ekranı: pipeline PLAN'dan sonra
+**durur** (`pipeline.run(review_cb=...)`), kullanıcı kesimleri tarayıcıda
+gözden geçirip düzenler, onaylayınca RENDER koşar. **Yeni bağımlılık YOK**
+(waveform peaks + canvas vanilla JS; `numpy` dolaylıdan doğrudana terfi
+etti — yeni paket değil). Kapsam: video oynatıcı + waveform + kesim
+işaretleri, atlamalı oynatma, tek tık geri alma (toggle — silme yok),
+sürüklenebilir sınırlar + snap-to-silence (150 ms), sürükleyerek elle kesim
+ekleme (`manuel` türü), "iş bulunamadı" yüzeyi.
+
+**Düzenleme modeli yıkıcı DEĞİL:** orijinal plan hiç değişmez; kararlar ayrı
+overlay katmanında durur (`web/review.py`: devre dışı id'ler, sınır
+güncellemeleri, elle eklenenler; id'ler kalıcı — plan kesimi `k{i}`, manuel
+`m{j}`). **Doğruluğun kaynağı sunucudur:** ms-int (float reddedilir), sınır
+doğrulaması, snap, min_keep clamp ve union sunucuda yeniden uygulanır;
+istemcideki snap/clamp yalnız UX'tir. Kullanıcının sürüklediği sınır
+**padding'i EZER** ve KI-5 anomali koruması o sınıra uygulanmaz
+(`apply_review_edits` — PLAN ile ortak gövde: union, min_keep zinciri, boş
+video yasağı). Ölçülen ek kural: **snap min_keep'i ihlal edemez** (yasak
+bölgeye düşen snap iptal edilir), yoksa boşluk bırakmak isteyen kullanıcı
+komşu kesimle sessizce birleşirdi. Boş video yasağı **onay anında** uygulanır
+ve reddedilen onay pipeline'ı beklemede bırakır.
+
+`manuel` dördüncü kademe kategorisidir (KI-3 parse'ı tek kaynağa çekildi:
+`json_report.reason_kategorileri`); mevcut üç reason kalıbına dokunulmadı,
+regresyon kilidi testte. Rapor web akışında **UYGULANMIŞ** plandan yazılır
+(`tiers.manuel`, `duzenleme`, `rejected`); CLI akışlarında hiçbir şey değişmedi.
+
+Gerçek donanımda doğrulandı (RX 9060 XT): düzenlemesiz onay **CLI ile
+hash-identik** (`F5185E7E…9004`), snap/clamp iki yönde de ölçüldü, tek kesim
+geri alma kalanı tam +430 ms uzattı, elle kesim rapora `manuel` olarak girdi,
+atlamalı oynatma açık/kapalı doğrulandı, her şeyi kesme denemesi Türkçe
+uyarıyla reddedildi. **Sıradaki: Dilim 3** (cilalı istatistik paneli + sürüm
+numarası).
+
 **v1.0 UI Dilim 1 TAMAMLANDI** — localhost web arayüzü iskeleti + uçtan uca
 koşu (`src/fillercut/web/`, FastAPI + uvicorn — yeni runtime bağımlılığı
 YALNIZ bu ikisi; statik HTML + vanilla JS + tek CSS, şablon motoru/npm yok).
@@ -278,8 +312,19 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `web/static/` üç ekran (gezgin+mod / 6 aşamalı stepper / sonuç; vanilla JS, `textContent`-only, JS `ASAMALAR` aynası pipeline ile ad+sıra kilitli) | `a709c69` |
 | `CHANGELOG.md` [Unreleased] + README/README.tr web bölümü | `0dc589f` |
 
-**Test sayısı:** 564 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 550'si
+**v1.0 UI Dilim 2**
+
+| Modül | Commit |
+|---|---|
+| `plan/cutplan.py`: `apply_review_edits` (overlay uygulama — union + min_keep ortak gövdesi, padding/KI-5 bilinçli DIŞARIDA) + `MANUEL_REASON`; `models` `manuel` türü; `json_report` KI-3 parse'ı tek kaynak + `TierCounts.manuel` + `EditOzeti` | `b5d8999` |
+| `pipeline.py`: `review_cb` (PLAN'da bekletme, `ReviewBaglam`/`ReviewKarari`) + `analiz_cb` (waveform WAV kancası) + rapor planı ayrımı; CLI parity kilidi | `e5930bd` |
+| `web/review.py` (overlay + doğrulama + snap + clamp) + `web/waveform.py` + job durum makinesi (`review`/`rendering`/`iptal`) + edits/approve/cancel route'ları | `3ee8234` |
+| `web/jobs.py`: `GET /video` (HTTP Range, testle kilitli) + `GET /peaks` | `541c49c` |
+| `web/static/`: review ekranı (oynatıcı + timeline + kesim listesi), atlamalı oynatma, sürükleme + snap + elle kesim, "iş bulunamadı" yüzeyi | `76ff169` |
+| Dalga formu sıfır genişlik düzeltmesi (`ResizeObserver`) + tek tip "iş bulunamadı" mesajı | `5333d0f` |
+
+**Test sayısı:** 713 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 699'u
 marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
@@ -294,10 +339,19 @@ NVIDIA'da, `TestGercekQsvProbe` yalnız Intel iGPU'da (hibrit kip açıkken),
 makinesinde (RX 9060 XT) AMF sınıfı **skip DEĞİL, koştu ve geçti** —
 NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 
-**Sıradaki:** **v1.0 UI Dilim 2 (review ekranı)** — kesim listesi + timeline
-web'de, onay/ret job'ın bellekteki raporu (`Job.rapor`) üzerinden; Dilim 3:
-cilalı istatistik paneli + sürüm numarası. (KI-1 spike'ı tamamlandı; Faz 1+2
-ölçüldü ve öldü; bkz. KI-1.)
+**Sıradaki:** **v1.0 UI Dilim 3** — cilalı istatistik paneli + sürüm numarası
+(CHANGELOG `[Unreleased]` o dilimin sonunda sürüme bağlanır). (KI-1 spike'ı
+tamamlandı; Faz 1+2 ölçüldü ve öldü; bkz. KI-1.)
+
+**Not (web UI, Dilim 2):** JS test altyapısı KURULMADI (bilinçli tercih,
+handoff kararı): ağır mantık — doğrulama, union, clamp, snap hedefi — sunucuda
+ve pytest ile kilitli; istemcide yalnız canvas çizimi ve sürükleme etkileşimi
+var. Bu ikisi gerçek tarayıcı koşusuyla doğrulandı (bkz. CHANGELOG Dilim 2
+"Doğrulandı"). İki bilinçli sınır daha: (a) review'da bekleyen iş sunucu
+kapanışında iptal edilir (`JobKayit.kapat`) — thread'ler daemon olmadığı için
+şart; (b) tarayıcı review sırasında bağlantıyı kestiğinde Windows/proactor
+konsola zararsız bir `ConnectionResetError` izi basar (uvicorn+asyncio
+davranışı, koşuyu etkilemez).
 
 **Not (web UI, Dilim 1):** UI ince kabuktur — CLI ile aynı `filler-cut.toml`
 yüklenir (`fillercut ui --config`), web koşusu `yes=True` (headless) ile
