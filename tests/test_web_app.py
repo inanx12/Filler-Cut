@@ -50,11 +50,30 @@ class TestIskelet:
 class TestUcEkran:
     """Dilim 1'in üç ekranı tek sayfada (SPA hissi) — statik dosya kilitleri."""
 
-    def test_index_uc_ekrani_da_icerir(self) -> None:
+    def test_index_tum_ekranlari_icerir(self) -> None:
         r = TestClient(create_app()).get("/")
         assert 'lang="tr"' in r.text
-        for ekran_id in ("ekran-baslangic", "ekran-kosu", "ekran-sonuc"):
+        for ekran_id in (
+            "ekran-baslangic",
+            "ekran-kosu",
+            "ekran-review",  # Dilim 2
+            "ekran-yok",  # "iş bulunamadı" yüzeyi
+            "ekran-sonuc",
+        ):
             assert ekran_id in r.text, ekran_id
+
+    def test_review_ekrani_gerekli_ogeleri_tasir(self) -> None:
+        r = TestClient(create_app()).get("/")
+        for oge in (
+            'id="oynatici"',  # video elementi (Range ile beslenir)
+            'id="dalga"',  # waveform canvas'ı
+            'id="kesim-katmani"',  # sürüklenebilir kesim blokları
+            'id="playhead"',
+            'id="atlamali"',  # atlamalı oynatma toggle'ı
+            'id="kesim-listesi"',
+            'id="btn-onayla"',
+        ):
+            assert oge in r.text, oge
 
     def test_stil_ve_script_baglari_servis_edilir(self) -> None:
         client = TestClient(create_app())

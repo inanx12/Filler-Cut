@@ -73,7 +73,76 @@
     </div>
   </section>
 
-  <!-- Ekran 3 — Sonuç: çıktı yolu + süre özeti -->
+  <!-- Ekran 3 — Review: oynatıcı + zaman çizelgesi + kesim listesi -->
+  <section id="ekran-review" class="ekran gizli">
+    <div class="review-bas">
+      <h1>Gözden geçir</h1>
+      <div class="review-eylem">
+        <label class="anahtar" title="Kesilecek bölgeleri oynatmadan atla">
+          <input type="checkbox" id="atlamali" checked>
+          <span class="anahtar-govde"><span class="anahtar-top"></span></span>
+          <span>Atlamalı oynatma</span>
+        </label>
+        <button id="btn-onayla" class="dugme birincil">Onayla ve render et</button>
+      </div>
+    </div>
+
+    <div id="review-hata" class="hata-kutu gizli" role="alert"></div>
+
+    <div class="kart oynatici-kart">
+      <video id="oynatici" class="oynatici" preload="metadata" playsinline></video>
+      <div class="oynatici-alt">
+        <button id="btn-oynat" class="dugme ikincil dar" aria-label="Oynat/Duraklat">&#9654;</button>
+        <span id="zaman" class="zaman mono">00:00.0 / 00:00.0</span>
+        <span class="ipucu">Boşluk: oynat/dur · ←/→: 5 sn</span>
+      </div>
+    </div>
+
+    <div class="kart">
+      <div class="timeline-bas">
+        <span class="baslik-kucuk">Zaman çizelgesi</span>
+        <span class="lejant">
+          <span class="nokta tur-kesin"></span>kesin
+          <span class="nokta tur-aday"></span>aday
+          <span class="nokta tur-sessizlik"></span>sessizlik
+          <span class="nokta tur-manuel"></span>elle
+        </span>
+      </div>
+      <div id="timeline" class="timeline">
+        <canvas id="dalga" class="dalga"></canvas>
+        <div id="kesim-katmani" class="kesim-katmani"></div>
+        <div id="playhead" class="playhead"></div>
+      </div>
+      <div class="timeline-ipucu">
+        Kesim kenarından sürükleyerek sınırı taşı · boş alanda sürükleyerek yeni kesim ekle
+      </div>
+    </div>
+
+    <div class="kart ozet-serit">
+      <div><span class="etiket-kucuk">Kesim</span><span id="review-kesim-sayisi"></span></div>
+      <div><span class="etiket-kucuk">Kesilen</span><span id="review-kesilen"></span></div>
+      <div><span class="etiket-kucuk">Kalan</span><span id="review-kalan" class="yesil"></span></div>
+    </div>
+
+    <div class="kart liste-kart">
+      <ul id="kesim-listesi" class="kesim-listesi" aria-label="Kesim listesi"></ul>
+    </div>
+  </section>
+
+  <!-- Ekran 4 — İş bulunamadı (sunucu yeniden başladıysa) -->
+  <section id="ekran-yok" class="ekran gizli">
+    <h1>İş bulunamadı</h1>
+    <div class="kart">
+      <p>Bu iş artık sunucuda yok — işler bellekte tutulur, sunucu yeniden
+      başlatıldıysa kaybolur.</p>
+      <p class="soluk-metin">Video ve varsa üretilmiş dosyalar diskte durur.</p>
+    </div>
+    <div class="alt-cubuk tek">
+      <button id="btn-yok-yeni" class="dugme birincil">Yeni iş</button>
+    </div>
+  </section>
+
+  <!-- Ekran 5 — Sonuç: çıktı yolu + süre özeti -->
   <section id="ekran-sonuc" class="ekran gizli">
     <h1>Tamamlandı</h1>
     <div class="kart sonuc-ozet">
