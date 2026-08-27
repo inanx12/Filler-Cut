@@ -28,6 +28,7 @@ from fillercut.config import Config
 from fillercut.pipeline import run as pipeline_run
 from fillercut.web import fs, jobs
 from fillercut.web.jobs import Job, JobKayit, JobOzet, Kosucu
+from fillercut.web.waveform import peaks_from_wav
 
 #: Paket içi statik dosya kökü (index.html + app.js + style.css).
 _STATIK = Path(__file__).parent / "static"
@@ -37,14 +38,31 @@ def _pipeline_kosucu(cfg: Config) -> Kosucu:
     """Gerçek pipeline'ı job olarak koşan çağrılabiliri üretir.
 
     UI ince bir kabuktur: CLI ile aynı config kullanılır, üstüne yalnız koşu
-    parametreleri biner — mod (``aggressive``) UI'dan, ``yes=True`` sabittir
-    (Dilim 1'de review ekranı yok; onay akışı Dilim 2'de gelecek). İlerleme
-    ``progress_cb`` kanalından akar (pipeline'a invaziv değişiklik yok).
+    parametreleri biner — mod (``aggressive``) UI'dan gelir, ``yes=False``
+    sabittir çünkü review kancası (Dilim 2) ancak o zaman çalışır: pipeline
+    PLAN'dan sonra durur ve kullanıcının onayını bekler. İlerleme
+    ``progress_cb``, waveform ``analiz_cb``, onay ``review_cb`` kanallarından
+    akar — pipeline'a invaziv değişiklik yok.
     """
 
     def kosucu(job: Job, ilerleme: Callable[[str], None]) -> JobOzet:
-        kosu_cfg = replace(cfg, aggressive=job.aggressive, yes=True)
-        sonuc = pipeline_run(job.video_yolu, config=kosu_cfg, progress_cb=ilerleme)
+        kosu_cfg = replace(cfg, aggressive=job.aggressive, yes=False)
+
+        def analiz_cb(wav: Path) -> None:
+            # Waveform yan bir görselleştirmedir: üretilemezse koşu SÜRER,
+            # UI dalgasız timeline gösterir (peaks None).
+            try:
+                job.peaks = peaks_from_wav(wav)
+            except Exception:  # noqa: BLE001 - koşuyu öldürmemeli
+                job.peaks = None
+
+        sonuc = pipeline_run(
+            job.video_yolu,
+            config=kosu_cfg,
+            progress_cb=ilerleme,
+            analiz_cb=analiz_cb,
+            review_cb=job.review_bekle,
+        )
         # plan.json invariant'ı: plan/rapor DİSKE değil job'ın içine (bellek).
         job.rapor = sonuc.report
         return JobOzet.from_result(sonuc)

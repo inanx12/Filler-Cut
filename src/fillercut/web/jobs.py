@@ -35,13 +35,34 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
+import typer
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
-from fillercut.pipeline import PipelineError, PipelineResult
-from fillercut.report.json_report import Report
+from fillercut.config import Config
+from fillercut.models import CutPlan
+from fillercut.pipeline import (
+    PipelineError,
+    PipelineResult,
+    ReviewBaglam,
+    ReviewKarari,
+)
+from fillercut.plan.cutplan import CutPlanError
+from fillercut.report.json_report import EditOzeti, Report
 from fillercut.web import fs
+from fillercut.web.review import (
+    EditsIstek,
+    Overlay,
+    ReviewGorunumu,
+    ReviewHatasi,
+    dogrula,
+    gorunum_kur,
+    normalize,
+    ozet_cikar,
+    sessizlik_kenarlari,
+    uygulanmis_plan,
+)
 
 router = APIRouter()
 
@@ -102,8 +123,20 @@ class Job:
         self._hata_detay: str | None = None
         self._ozet: JobOzet | None = None
         #: Bellekteki plan/rapor (plan.json invariant'ı — diske yazılmaz);
-        #: Dilim 2 review ekranı buradan okuyacak. Worker thread yazar.
+        #: review ekranı buradan okur. Worker thread yazar.
         self.rapor: Report | None = None
+        #: REVIEW bağlamı (plan + ham sessizlik haritası) — worker thread
+        #: pipeline'ın review kancasında doldurur, event loop okur.
+        self.baglam: ReviewBaglam | None = None
+        #: Kullanıcı düzenlemeleri; orijinal plandan AYRI katman (yıkıcı değil).
+        self.overlay: Overlay = Overlay()
+        #: Waveform peaks (analiz WAV'ından bir kez); üretilemezse None.
+        self.peaks: list[list[int]] | None = None
+        #: Onay/iptal kapısı: worker thread burada bekler, HTTP tarafı açar.
+        self._onay = threading.Event()
+        self._iptal = False
+        self._onaylanan: CutPlan | None = None
+        self._onaylanan_ozet: EditOzeti | None = None
         self._olaylar: list[dict[str, object]] = []
         self._olay_ekle({"tip": "durum", "durum": "queued"})
 
@@ -123,11 +156,55 @@ class Job:
             self._asama = asama
             self._olay_ekle({"tip": "asama", "asama": asama})
 
+    def review_bekle(self, baglam: ReviewBaglam) -> ReviewKarari:
+        """``pipeline.run(review_cb=...)``'nin ucu — worker thread BURADA bekler.
+
+        Job ``review`` durumuna geçer (SSE ile bildirilir) ve kullanıcı
+        ``/approve`` (ya da ``/cancel``) çağırana kadar pipeline ilerlemez.
+        Onay anında uygulanacak plan HTTP tarafında hesaplanıp doğrulanmıştır
+        (boş video yasağı orada uygulanır) — burada yalnız teslim edilir.
+        """
+        with self._lock:
+            self.baglam = baglam
+            self._durum = "review"
+            self._olay_ekle({"tip": "durum", "durum": "review"})
+        self._onay.wait()
+        with self._lock:
+            if self._iptal:
+                return ReviewKarari(plan=None)
+            self._durum = "rendering"
+            self._olay_ekle({"tip": "durum", "durum": "rendering"})
+            return ReviewKarari(plan=self._onaylanan, duzenleme=self._onaylanan_ozet)
+
+    def onayla(self, plan: CutPlan, ozet: EditOzeti) -> None:
+        """Doğrulanmış planı teslim edip worker'ı serbest bırakır (HTTP thread)."""
+        with self._lock:
+            self._onaylanan = plan
+            self._onaylanan_ozet = ozet
+        self._onay.set()
+
+    def iptal_et(self) -> None:
+        """Review'da iptal — pipeline kod 0 ile çıkar, render yapılmaz."""
+        with self._lock:
+            self._iptal = True
+        self._onay.set()
+
+    def overlay_yaz(self, overlay: Overlay) -> None:
+        """Normalize edilmiş overlay'i atomik olarak yerine koyar (HTTP thread)."""
+        with self._lock:
+            self.overlay = overlay
+
     def bitti(self, ozet: JobOzet) -> None:
         with self._lock:
             self._durum = "done"
             self._ozet = ozet
             self._olay_ekle({"tip": "bitti", "ozet": ozet.model_dump()})
+
+    def iptal_edildi(self) -> None:
+        """Kullanıcı review'da vazgeçti — hata DEĞİL, terminal bir sonuç."""
+        with self._lock:
+            self._durum = "iptal"
+            self._olay_ekle({"tip": "iptal"})
 
     def basarisiz(self, mesaj: str, detay: str | None = None) -> None:
         with self._lock:
@@ -141,7 +218,12 @@ class Job:
     @property
     def terminal(self) -> bool:
         with self._lock:
-            return self._durum in ("done", "failed")
+            return self._durum in ("done", "failed", "iptal")
+
+    @property
+    def durum(self) -> str:
+        with self._lock:
+            return self._durum
 
     @property
     def olay_sayisi(self) -> int:
@@ -202,7 +284,23 @@ class JobKayit:
             return self._jobs.get(job_id)
 
     def kapat(self) -> None:
+        """Sunucu kapanışı: kuyruk iptal + review'da BEKLEYEN işleri serbest bırak.
+
+        Review'da bekleyen worker ``threading.Event`` üzerinde asılıdır ve
+        ``ThreadPoolExecutor`` thread'leri daemon DEĞİLDİR — serbest
+        bırakılmazsa yorumlayıcı çıkışta o thread'i bekler ve süreç kapanmaz
+        (Ctrl+C'den sonra asılı kalan sunucu). İptal, pipeline'ı temiz çıkış
+        yoluna (kod 0, render yok) sokar.
+        """
+        for job in self.jobs():
+            if job.durum == "review":
+                job.iptal_et()
         self._executor.shutdown(wait=False, cancel_futures=True)
+
+    def jobs(self) -> list[Job]:
+        """Kayıttaki tüm job'ların anlık kopyası (kilit altında alınır)."""
+        with self._lock:
+            return list(self._jobs.values())
 
     def _kos(self, job: Job) -> None:
         """Worker thread gövdesi — job ASLA sessiz ölmez, her yol kayda geçer."""
@@ -213,6 +311,15 @@ class JobKayit:
             # _fail'in Türkçe, eyleme dökülebilir mesajı (sunucu konsoluna
             # kırmızı satırı pipeline zaten bastı — log detayı orada).
             job.basarisiz(exc.mesaj)
+        except typer.Exit as exc:
+            # `typer.Exit` click'te RuntimeError türevidir, yani aşağıdaki
+            # `except Exception` onu YUTARDI: review'da vazgeçen kullanıcı
+            # UI'da "beklenmeyen hata" görürdü. Kod 0 = temiz iptal
+            # (PipelineError zaten yukarıda yakalandı, o kod 1'dir).
+            if exc.exit_code == 0:
+                job.iptal_edildi()
+            else:
+                job.basarisiz(f"Pipeline {exc.exit_code} koduyla çıktı.")
         except Exception as exc:
             # ASR/driver katmanları keyfi hata üretebilir; UI'a stack trace
             # değil genel mesaj + ayrı detay alanı düşer.
@@ -274,6 +381,121 @@ def job_durum(job_id: str, request: Request) -> dict[str, object]:
     job = _kayit(request).al(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="İş bulunamadı.")
+    return job.snapshot()
+
+
+def _job_al(job_id: str, request: Request) -> Job:
+    """Job'ı bulur ya da Türkçe 404 verir ("iş bulunamadı" yüzeyi)."""
+    job = _kayit(request).al(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "İş bulunamadı — sunucu yeniden başlatılmış olabilir "
+                "(işler bellekte tutulur). Yeni bir iş başlatın."
+            ),
+        )
+    return job
+
+
+def _review_job(job_id: str, request: Request) -> tuple[Job, ReviewBaglam]:
+    """Review durumundaki job + bağlamı; değilse Türkçe 409."""
+    job = _job_al(job_id, request)
+    baglam = job.baglam
+    if baglam is None or job.durum != "review":
+        raise HTTPException(
+            status_code=409,
+            detail=f"İş gözden geçirme aşamasında değil (durum: {job.durum}).",
+        )
+    return job, baglam
+
+
+def _min_keep(request: Request) -> int:
+    """Aktif config'in min_keep değeri — clamp'in sunucu tarafı bunu kullanır."""
+    cfg = cast(Config, request.app.state.config)
+    return cfg.padding.min_keep_ms
+
+
+def _gorunum(job: Job, baglam: ReviewBaglam, *, min_keep_ms: int) -> ReviewGorunumu:
+    """Güncel overlay'le review görünümü; boş video durumunda hata alanı dolar."""
+    hata: str | None = None
+    uygulanan: CutPlan | None = None
+    try:
+        uygulanan = uygulanmis_plan(
+            baglam.plan, job.overlay, total_ms=baglam.total_ms, min_keep_ms=min_keep_ms
+        )
+    except CutPlanError as exc:
+        hata = str(exc)
+    return gorunum_kur(
+        baglam.plan,
+        job.overlay,
+        job_id=job.id,
+        total_ms=baglam.total_ms,
+        min_keep_ms=min_keep_ms,
+        ham_sessizlikler=baglam.ham_sessizlikler,
+        hata=hata,
+        uygulanan=uygulanan,
+    )
+
+
+@router.get("/api/jobs/{job_id}/review", response_model=ReviewGorunumu)
+def review_gorunumu(job_id: str, request: Request) -> ReviewGorunumu:
+    """Review ekranının verisi: kesim listesi + uygulanmış aralıklar + ham sessizlikler."""
+    job, baglam = _review_job(job_id, request)
+    return _gorunum(job, baglam, min_keep_ms=_min_keep(request))
+
+
+@router.post("/api/jobs/{job_id}/review/edits", response_model=ReviewGorunumu)
+def review_edits(job_id: str, istek: EditsIstek, request: Request) -> ReviewGorunumu:
+    """Overlay'in tam anlık görüntüsünü alır, DOĞRULAR, normalize eder ve saklar.
+
+    Doğruluğun kaynağı sunucudur: istemcinin snap/clamp'i yalnız UX'tir,
+    saklanan (ve cevapta dönen) değerler burada üretilenlerdir.
+    """
+    job, baglam = _review_job(job_id, request)
+    min_keep_ms = _min_keep(request)
+    try:
+        overlay = dogrula(baglam.plan, istek, total_ms=baglam.total_ms)
+        overlay = normalize(
+            baglam.plan,
+            overlay,
+            total_ms=baglam.total_ms,
+            min_keep_ms=min_keep_ms,
+            kenarlar=sessizlik_kenarlari(baglam.ham_sessizlikler),
+        )
+    except ReviewHatasi as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    job.overlay_yaz(overlay)
+    return _gorunum(job, baglam, min_keep_ms=min_keep_ms)
+
+
+@router.post("/api/jobs/{job_id}/approve")
+def review_onayla(job_id: str, request: Request) -> dict[str, object]:
+    """Onay: uygulanmış planı doğrulayıp RENDER'ı tetikler.
+
+    Boş video yasağı BURADA uygulanır — plan tüm videoyu kesiyorsa onay
+    reddedilir (Türkçe 400) ve pipeline beklemeye devam eder; kullanıcı
+    düzenlemeye dönebilir.
+    """
+    job, baglam = _review_job(job_id, request)
+    try:
+        plan = uygulanmis_plan(
+            baglam.plan,
+            job.overlay,
+            total_ms=baglam.total_ms,
+            min_keep_ms=_min_keep(request),
+        )
+    except CutPlanError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    job.onayla(plan, ozet_cikar(baglam.plan, job.overlay))
+    return job.snapshot()
+
+
+@router.post("/api/jobs/{job_id}/cancel")
+def review_iptal(job_id: str, request: Request) -> dict[str, object]:
+    """Review'da iptal — render yapılmaz, pipeline kod 0 ile çıkar."""
+    job, _ = _review_job(job_id, request)
+    job.iptal_et()
     return job.snapshot()
 
 

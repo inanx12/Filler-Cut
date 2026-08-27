@@ -333,7 +333,7 @@ class TestVarsayilanKosucu:
         sahte_run = Mock(return_value=sahte_sonuc)
         monkeypatch.setattr("fillercut.web.app.pipeline_run", sahte_run)
 
-        cfg = Config(aggressive=False, yes=False)  # config yes=False bile olsa...
+        cfg = Config(aggressive=False, yes=True)  # config yes=True bile olsa...
         client = TestClient(create_app(cfg, fs_home=ev))
         job_id = _job_baslat(client, ev, aggressive=True)
         veri = _bitene_kadar_bekle(client, job_id)
@@ -342,9 +342,13 @@ class TestVarsayilanKosucu:
         args, kwargs = sahte_run.call_args
         assert args[0] == str((ev / "video.mp4").resolve())
         kosu_cfg = kwargs["config"]
-        assert kosu_cfg.yes is True  # ...web koşusu Dilim 1'de HEP headless
+        # ...web koşusu Dilim 2'den beri HEP review'lidir: yes=True olsaydı
+        # pipeline review kancasını hiç çağırmaz, ekran atlanırdı.
+        assert kosu_cfg.yes is False
         assert kosu_cfg.aggressive is True  # mod UI'dan geldi
         assert kwargs["progress_cb"] is not None
+        assert kwargs["review_cb"] is not None  # PLAN'da durma kanalı bağlı
+        assert kwargs["analiz_cb"] is not None  # waveform kanalı bağlı
         assert veri["ozet"]["original_ms"] == 1_000
 
     def test_rapor_bellekte_jobda_yasar_plan_json_yazilmaz(
