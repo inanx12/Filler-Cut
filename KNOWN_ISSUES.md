@@ -169,6 +169,7 @@ olan sütunlar bunlardır).
 | CUDA (NVIDIA RTX 4050) | `filir`, `kat`, `wishfur`, `ığılarımı` (4) | 2026-07 ve 2026-08 koşuları birebir aynı |
 | Vulkan (NVIDIA RTX 4050) | `filir`, `kağıt`, `Vişvır`, `ığılarımı` (4) | aynı sayı, farklı kimlik |
 | Vulkan (AMD RDNA4 — RX 9060 XT) | `filir`, `kat`, `wishfur`, `ığılarımı` (4) | kimlik **CUDA ile aynı**, NVIDIA-Vulkan'dan farklı; örnek drift `kat` −408/+43 ms; ardışık 2 koşu birebir aynı (deterministik) |
+| HIP (AMD RDNA4 — RX 9060 XT) | `filir`, `kağıt`, `vışver`, `ırılarımı` (4) | **üçüncü kimlik.** `kağıt` NVIDIA-Vulkan ile ortak; `vışver` ve `ırılarımı` YENİ. Aynı sayı (4), yine farklı yazım. 4 koşu birebir aynı (deterministik) |
 
 - CUDA çıktısı iki ay arayla **kelimesi kelimesine aynı** — deterministic;
   regresyon referansı olarak kullanılabilir. AMD Vulkan koşusu da kendi
@@ -177,6 +178,14 @@ olan sütunlar bunlardır).
   `wishfur`→`Vişvır`): kayan nokta toplama sırası farkı uydurmanın kimliğini
   değiştiriyor, sayısını değil. False negative üç kombinasyonda da aynı (4
   kaçak) — KI-1 ana kaydı güçlendi: uydurma model seviyesinde bir kusur.
+- **Aynı cihazda backend değişimi de kimliği değiştiriyor (HIP, 2026-08-27):**
+  RX 9060 XT üzerinde Vulkan `kat`/`wishfur`/`ığılarımı` yazarken HIP
+  `kağıt`/`vışver`/`ırılarımı` yazdı — **aynı silikon, aynı model, farklı
+  compute yolu, üçüncü kimlik.** `ığılarımı` bu turda İLK kez varyant aldı
+  (`ırılarımı`); o kelime üç koşu boyunca tek yazımlı sanılıyordu. Referans
+  dosyasındaki varyant listesi buna göre genişletildi
+  (`tests/data/wcpp_reference_tr.json`; belge kilidi
+  `test_referans_dosyasindaki_varyantlar_ki1_ile_uyumlu`).
 - **Halüsinasyon kimliği backend+cihaz kombinasyonuna bağlıdır; aynı backend
   farklı cihazda farklı kimlik üretebilir. Bu yüzden referans harness
   varyantlar alanı taşır.** AMD RDNA4 üzerindeki Vulkan koşusu bunu doğrudan
@@ -666,9 +675,13 @@ geri kalanını etkilemiyor.
 derlemesi** (ASR tarafı, KI-1 sonrası backlog) var — ayrı silikon (AMF video
 motoru ≠ ROCm compute ünitesi), bu kaydı etkilemez.
 
-## KI-7 — whisper.cpp HIP derlemesi (Windows / RDNA4) engelli — **AÇIK**
+## KI-7 — whisper.cpp HIP derlemesi (Windows / RDNA4) — **Çözüldü**
 
-- **Belirti:** `-DGGML_HIP=ON` ile whisper.cpp v1.9.1 derlemesi bu makinede
+> **Çözüldü (2026-08-27):** build artık çalışıyor; aşağıdaki blokaj kaydı
+> **tarihseldir** (kural: çözülen kayıt silinmez). Çalışan tarif, ölçülen
+> tuzaklar ve "release'e değer mi" kararı en alttaki ÇÖZÜM bölümündedir.
+
+- **Belirti (o günkü):** `-DGGML_HIP=ON` ile whisper.cpp v1.9.1 derlemesi bu makinede
   **konfigüre bile edilemiyor**. Hedef, Vulkan binary'sine üçüncü bir compute
   yolu (HIP/ROCm) eklemekti — KI-6 AMF kalibrasyonunun kapanışında sıradaki iş
   olarak işaretlenmişti. Kapı kontrolünde (Adım 0) durdu; hız tablosu ve
@@ -820,3 +833,121 @@ cmake --build build --config Release --target whisper-cli -j
 `-DAMDGPU_TARGETS=gfx1200` **bilinçli olarak yoktur** — (c)'de ölçüldü, inert.
 Karşılaştırılabilirlik şartı: sürüm v1.9.1'de sabit kalır (Vulkan binary'siyle
 aynı tag).
+
+### KI-7 ÇÖZÜM (2026-08-27) — build çalışıyor, karar: **release'e girmiyor**
+
+Yukarıdaki iki blokaj da kaldırıldı (MSVC Build Tools 2022 + cmake + ninja
+kuruldu; ROCm **7.13.0** TheRock tarball'ı `D:\opt\rocm`'a açıldı). whisper.cpp
+v1.9.1 HIP backend'iyle derlendi ve çalışan `whisper-cli.exe` üretti.
+Yeniden-deneme koşulları (e) karşılandı; **(c)'deki tahmin doğrulandı** —
+mimari `--offload-arch` ile geçirildi, `-DAMDGPU_TARGETS` hiç kullanılmadı.
+
+**Çalışan tarif** (değerler `build-hip/CMakeCache.txt`'ten okundu, ezberden
+değil):
+
+```
+CMAKE_GENERATOR       = Ninja
+CMAKE_BUILD_TYPE      = Release
+GGML_HIP              = ON
+CMAKE_PREFIX_PATH     = D:/opt/rocm
+CMAKE_CXX_COMPILER    = D:/opt/rocm/lib/llvm/bin/amdclang++.exe
+CMAKE_CXX_FLAGS       = --offload-arch=gfx1200
+                        --rocm-device-lib-path=D:/opt/rocm/lib/llvm/amdgcn/bitcode
+                        -D__PRFCHWINTRIN_H
+```
+
+- Derleyici `hipcc` değil **`amdclang++`**; `--rocm-device-lib-path` açıkça
+  verilmek zorunda (tarball kurulumunda bitcode otomatik bulunmuyor).
+- `-D__PRFCHWINTRIN_H` bir başlık çakışması susturucusudur — MSVC intrinsics
+  başlığıyla ROCm clang'inki çarpışıyor.
+
+**Ölçülen üç tuzak.**
+
+1. **Bozan bayrak `GGML_HIP_ROCWMMA_FATTN`'dir — `GGML_HIP_MMQ_MFMA` DEĞİL.**
+   Bu, elde iki build varken doğrudan ölçüldü:
+
+   | Build | `GGML_HIP_MMQ_MFMA` | `GGML_HIP_ROCWMMA_FATTN` | Çıktı |
+   |---|---|---|---|
+   | `build-hip` | ON | **OFF** | doğru transkript |
+   | `build-hip-mfma` | ON | **ON** | tek bir `,` — tamamen bozuk |
+
+   `GGML_HIP_MMQ_MFMA` ggml'de **varsayılan olarak ON'dur**
+   (`option(... ON)`) ve **iki build'de de ON'du** — yani suçlu olamaz;
+   çalışan binary onunla derlendi. İki dizin arasındaki tek gerçek fark
+   `ROCWMMA_FATTN`'dir (`CMakeCache` farkı bunu tek başına gösteriyor).
+   `build-hip-mfma` dizin adı yanıltıcıdır: orada denenen şey rocWMMA
+   flash-attention'dır. **gfx1200'de açma: `GGML_HIP_ROCWMMA_FATTN`.**
+2. **`PATH` tuzağı — `0xC0000135`.** `D:\opt\rocm\bin` PATH'te değilken binary
+   hiçbir mesaj vermeden `-1073741515` (`0xC0000135`,
+   `STATUS_DLL_NOT_FOUND`) ile ölüyor; stderr **boş**. Ölçüldü. Dağıtılsaydı
+   ggml DLL'lerinin yanına ROCm runtime DLL'leri de paketlenmek zorundaydı.
+3. **`-DAMDGPU_TARGETS` gerçekten inert.** (c)'de kaynaktan öngörülmüştü;
+   çalışan build onu hiç kullanmadı, mimari `--offload-arch=gfx1200` ile
+   geçti. Öngörü doğrulandı.
+
+**Hız — HIP vs Vulkan (RX 9060 XT / Ryzen 5 7500F, 2026-08-27).** Aynı model,
+aynı bayraklar (`-l tr -ml 1 -sow -ojf`), 5 girdi × 4 koşu; aşağıdakiler
+2.-4. koşuların **medyanı** (ilk koşu ayrı tutuldu, tutarlı bir ceza
+göstermedi). Ölçüm `Measure-Command` + `cmd /c` ile doğrudan binary'ye.
+**CPU build'i hâlâ yok** — bu iki yollu bir tablodur, Adım 3'ün üç yollu
+tablosu değil.
+
+| Girdi | Süre | Pencere | Vulkan total | HIP total | HIP/Vulkan |
+|---|---|---|---|---|---|
+| `test_konusma` | 14.81 sn | 1 | 820.9 ms | 1811.3 ms | 2.21× |
+| `test2` | 22.40 sn | 1 | 896.0 ms | 1889.7 ms | 2.11× |
+| `test1` | 25.66 sn | 1 | 825.5 ms | 1826.4 ms | 2.21× |
+| `test4` | 30.72 sn | 2 | 1127.4 ms | 2200.6 ms | 1.95× |
+| `test3` | 33.54 sn | 2 | 1216.5 ms | 2276.2 ms | 1.87× |
+
+Kırılım (aynı koşuların medyanları, ms):
+
+| Bileşen | Vulkan (1 pencere) | HIP (1 pencere) | Vulkan (2 pencere) | HIP (2 pencere) |
+|---|---|---|---|---|
+| `encode` | ~127 | ~976 | ~246 | ~1177 |
+| `batchd` (toplu decode) | 65–108 | 88–133 | ~163 | ~206 |
+| `decode` (tek token) | 0–3.1 | 0–12.1 | ~2.8 | ~4–5.6 |
+| `load` | ~457 | ~644 | ~457 | ~648 |
+
+- **HIP her bileşende geride — lehine tek bir kalem yok.** `encode`'da fark
+  1 pencerede **7.6–7.8×**, 2 pencerede **4.7–4.8×**. `batchd`'de HIP
+  %20–35 yavaş. `load` bile ~190 ms daha uzun (HIP runtime init'i buraya
+  düşüyor).
+- **Farkın kaynağı sabit maliyet, per-pencere iş değil.** İki pencere
+  seviyesinden çözülünce: `encode = sabit + pencere×birim` →
+  **Vulkan sabit ~7.6 ms / pencere ~119.5 ms**,
+  **HIP sabit ~775.8 ms / pencere ~200.7 ms**. Yani HIP'in per-pencere işi
+  yalnız 1.7× yavaş; asıl fark **süreç başına ~776 ms'lik sabit cezadır**
+  (muhtemelen kernel yükleme/JIT ısınması). Filler-Cut her video için YENİ
+  bir subprocess açtığı için bu ceza **her videoda yeniden ödenir** —
+  mimarinin en kötü karşılaştığı maliyet tipi.
+- **30 sn penceresi ikinci kez doğrulandı:** ≤30 sn'lik üç girdinin
+  `encode`'u birbirinin aynısı (~127 ms Vulkan), >30 sn'lik ikisinde tam
+  iki katı (~246 ms). Maliyet süreyle değil pencere sayısıyla kademeli —
+  KI-1 Vulkan bloğundaki hipotez artık ölçülmüş durumda.
+- **Determinizm:** 40 koşunun tamamında backend×girdi başına tek SHA-256.
+- **`decode` üzerinden "HIP önde" okuması yapılmamalı:** o alan her iki
+  backend'de de 0–12 ms, yani gürültü seviyesinde; oradaki oranlar anlamsız.
+  Decode tarafının anlamlı ölçüsü `batchd`'dir ve orada da **Vulkan
+  öndedir**. Bu turda HIP'in önde olduğu hiçbir bileşen ölçülmedi.
+
+**Karar: HIP release asset'e girmiyor.** Kriter ">%20 daha hızlıysa aday"dı;
+HIP **~2× daha yavaş** çıktı. Üstelik dağıtım maliyeti Vulkan'dan yüksek:
+ROCm runtime DLL'leri paketlenmeli (tuzak 2), binary tek satıcıya bağlı
+(Vulkan vendor-agnostic), `ggml-hip.dll` tek başına **64.6 MB** (tüm Vulkan
+paketi ~1.5 MB DLL). CI tarafı da değişmedi: GitHub-hosted Windows runner'da
+ROCm yok, self-hosted gerekir — **bu bedel, karşılığında hız kaybı için
+ödenmiş olurdu.**
+
+**Yeniden deneme tetikleyicisi.** Şu ikisinden biri gerçekleşirse ölçüm
+tekrarlanmalı:
+
+1. gfx1200'ü resmî destekleyen **final** ROCm sürümü (kullanılan 7.13.0 bir
+   ön sürümdür; ~776 ms'lik sabit encode cezası olgunlaşmamış kernel
+   seçimine işaret ediyor olabilir).
+2. `GGML_HIP_ROCWMMA_FATTN`'in gfx1200'de düzelmesi — flash-attention açık
+   hâlde encode tablosu tamamen değişebilir.
+
+**Retest notu:** `D:\opt\rocm` ve `D:\dev\whisper.cpp\build-hip` **saklı**.
+Yeniden ölçüm sıfırdan kurulum istemez; `PATH`'e `D:\opt\rocm\bin` eklenip
+ninja ile artımlı build + bu bölümdeki 5 girdilik koşu **~15 dakikadır**.
