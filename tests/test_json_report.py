@@ -26,13 +26,15 @@ import pytest
 from fillercut.detect.fillers import detect_fillers
 from fillercut.detect.silence import filter_silence
 from fillercut.models import CutPlan, Segment, Word
-from fillercut.plan.cutplan import build_cutplan
+from fillercut.plan.cutplan import MANUEL_REASON, build_cutplan
 from fillercut.render.encoder import EncoderSelection, ProbeAttempt
 from fillercut.report.json_report import (
+    EditOzeti,
     EncoderInfo,
     Report,
     TierCounts,
     build_report,
+    reason_kategorileri,
     write_json_report,
 )
 
@@ -248,6 +250,135 @@ class TestKademeAyristirma:
         assert rapor.tiers == TierCounts(kesin_filler=0, aday_filler=1, silence=0)
 
 
+class TestManuelKategori:
+    """v1.0 web: `manuel` DÖRDÜNCÜ kategori — KI-3 regresyon kilidi.
+
+    Kademe sayımı reason METNİNİ parse eder; yeni bir önek eklemek mevcut üç
+    kalıbın davranışını değiştirmemeli. Bu sınıf iki şeyi birden kanıtlar:
+    (a) `manuel:` ayrı sayılır ve sessizliğe yazılmaz, (b) mevcut kalıplar
+    `manuel` varlığında da BİREBİR aynı sonucu verir.
+    """
+
+    @staticmethod
+    def _plan(reason: str) -> CutPlan:
+        return CutPlan(
+            original_duration_ms=10_000,
+            keep=[Segment(start_ms=0, end_ms=2_000, kind="keep", reason="konuşma")],
+            cut=[Segment(start_ms=2_000, end_ms=4_000, kind="manuel", reason=reason)],
+        )
+
+    def test_manuel_kendi_kategorisinde_sayilir(self) -> None:
+        rapor = build_report(self._plan(MANUEL_REASON), 10_000)
+        assert rapor.tiers == TierCounts(
+            kesin_filler=0, aday_filler=0, silence=0, manuel=1
+        )
+
+    def test_manuel_sessizlige_yazilmaz(self) -> None:
+        # Regresyon: 'bilinen önek yoksa sessizliktir' kuralı manuel'i yutuyordu.
+        assert build_report(self._plan(MANUEL_REASON), 10_000).tiers.silence == 0
+
+    def test_manuel_ile_birlesen_zincir_ikisini_de_sayar(self) -> None:
+        reason = f"kesin filler: 'eee' [padding +80/-120ms] + {MANUEL_REASON}"
+        rapor = build_report(self._plan(reason), 10_000)
+        assert rapor.tiers == TierCounts(
+            kesin_filler=1, aday_filler=0, silence=0, manuel=1
+        )
+
+    def test_sessizlik_zinciri_manuel_yaninda_bozulmaz(self) -> None:
+        reason = f"sessizlik 800ms (noise=-35dB, min=0.4s) + {MANUEL_REASON}"
+        rapor = build_report(self._plan(reason), 10_000)
+        assert rapor.tiers == TierCounts(
+            kesin_filler=0, aday_filler=0, silence=1, manuel=1
+        )
+
+    def test_min_keep_hala_sayilmaz(self) -> None:
+        reason = f"{MANUEL_REASON} + min_keep: 120ms ara parça kesime katıldı (< 300ms)"
+        rapor = build_report(self._plan(reason), 10_000)
+        assert rapor.tiers == TierCounts(
+            kesin_filler=0, aday_filler=0, silence=0, manuel=1
+        )
+
+    def test_manuel_reason_sabiti_parse_edilen_onekle_uyumlu(self) -> None:
+        # Sabit ile parse eden kod iki ayrı dosyada: birbirinden kayarlarsa
+        # manuel kesimler sessizce 'sessizlik' sayılmaya başlardı.
+        assert MANUEL_REASON.startswith("manuel:")
+        assert reason_kategorileri(MANUEL_REASON) == ["manuel"]
+
+    def test_manuelsiz_rapor_alani_sifir_kalir(self) -> None:
+        # Geriye uyumluluk: v0.x planlarında alan 0'dır, JSON'a 0 yazılır.
+        plan = self._plan("sessizlik 800ms (noise=-35dB, min=0.4s)")
+        assert build_report(plan, 10_000).tiers.manuel == 0
+
+
+class TestReasonKategorileri:
+    """KI-3 parse'ının tek kaynağı — `_count_tiers` ve web rozeti aynı gövdeyi kullanır."""
+
+    @pytest.mark.parametrize(
+        ("reason", "beklenen"),
+        [
+            ("kesin filler: 'eee' [padding +80/-120ms]", ["kesin_filler"]),
+            ("aday filler: 'şey' [padding +80/-120ms]", ["aday_filler"]),
+            ("sessizlik 800ms (noise=-35dB, min=0.4s)", ["silence"]),
+            ("manuel: kullanıcı elle ekledi", ["manuel"]),
+            ("min_keep: 120ms ara parça kesime katıldı (< 300ms)", []),
+            (
+                "sessizlik 704ms (noise=-35dB, min=0.4s) + kesin filler: 'Eee,'"
+                " [padding +80/-120ms]",
+                ["silence", "kesin_filler"],
+            ),
+        ],
+        ids=["kesin", "aday", "sessizlik", "manuel", "min_keep", "zincir"],
+    )
+    def test_kategori_ayristirma(self, reason: str, beklenen: list[str]) -> None:
+        assert reason_kategorileri(reason) == beklenen
+
+
+class TestDuzenlemeOzeti:
+    """v1.0 web: rapor UYGULANMIŞ plandan yazılır; düzenleme sayıları ayrı alanda."""
+
+    @staticmethod
+    def _plan() -> CutPlan:
+        return CutPlan(
+            original_duration_ms=10_000,
+            keep=[
+                Segment(start_ms=0, end_ms=2_000, kind="keep", reason="konuşma"),
+                Segment(start_ms=4_000, end_ms=10_000, kind="keep", reason="konuşma"),
+            ],
+            cut=[
+                Segment(start_ms=2_000, end_ms=4_000, kind="manuel", reason=MANUEL_REASON)
+            ],
+        )
+
+    def test_ozet_rapora_girer(self) -> None:
+        ozet = EditOzeti(devre_disi=2, sinir_degisen=1, manuel_eklenen=1)
+        rapor = build_report(self._plan(), 10_000, duzenleme=ozet)
+        assert rapor.duzenleme == ozet
+
+    def test_rejected_devre_disidan_gelir(self) -> None:
+        # Uygulanan planda geri alınan kesim YOKTUR; reddin sayısı bu alanda kalır.
+        rapor = build_report(
+            self._plan(), 10_000, duzenleme=EditOzeti(devre_disi=3)
+        )
+        assert rapor.rejected == 3
+
+    def test_verilmezse_none_ve_geriye_uyumlu(self) -> None:
+        rapor = build_report(self._plan(), 10_000)
+        assert rapor.duzenleme is None
+        assert rapor.rejected == 0
+
+    def test_approved_ile_birlikte_verilemez(self) -> None:
+        with pytest.raises(ValueError, match="birlikte verilemez"):
+            build_report(
+                self._plan(), 10_000, approved=[True], duzenleme=EditOzeti()
+            )
+
+    def test_eski_rapor_json_duzenleme_alani_olmadan_yuklenir(self) -> None:
+        rapor = build_report(self._plan(), 10_000)
+        veri = json.loads(rapor.to_json())
+        del veri["duzenleme"]
+        assert Report.model_validate(veri).duzenleme is None
+
+
 class TestEncoderAlani:
     """v0.2: seçilen encoder + probe özeti rapora girer (geriye uyumlu alan)."""
 
@@ -409,7 +540,14 @@ class TestWrapper:
         assert isinstance(veri["cut_total"]["ms"], int)  # ms-int disiplini JSON'da da
         assert veri["saved_percent"] == 12.83
         assert veri["cut_count"] == 3
-        assert veri["tiers"] == {"kesin_filler": 1, "aday_filler": 0, "silence": 2}
+        # v1.0: `manuel` dördüncü kategori olarak eklendi (default 0) — CLI
+        # akışında hep 0'dır, yalnız web review'unda elle eklenen kesim sayar.
+        assert veri["tiers"] == {
+            "kesin_filler": 1,
+            "aday_filler": 0,
+            "silence": 2,
+            "manuel": 0,
+        }
         assert veri["cuts"][0]["reason"] == "kesin filler: 'Eee,' [padding +80/-120ms]"
 
     def test_icerik_to_json_ile_ayni_ve_str_yol_kabul(

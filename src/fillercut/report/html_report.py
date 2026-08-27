@@ -26,8 +26,9 @@ from fillercut.report.json_report import Report
 #: Timeline şeridinin yüksekliği (px).
 _BAR_YUKSEKLIK = 28
 
-#: Kesim türü → Türkçe etiket (tablo "Tür" sütunu).
-_TUR_ETIKET = {"filler": "filler", "silence": "sessizlik"}
+#: Kesim türü → Türkçe etiket (tablo "Tür" sütunu). ``manuel`` v1.0 web
+#: review'unda kullanıcının elle eklediği kesimdir.
+_TUR_ETIKET = {"filler": "filler", "silence": "sessizlik", "manuel": "elle eklenen"}
 
 #: Inline CSS — dark tema, tek dosya (harici kaynak / JS yok). Renkler
 #: WCAG kontrastı gözetilerek seçildi: koyu zeminde açık metin, kesim
@@ -67,6 +68,7 @@ th { background: #161b22; }
 td.num, th.num { text-align: right; white-space: nowrap; }
 .kind-filler { color: #ff7b72; }
 .kind-silence { color: #79c0ff; }
+.kind-manuel { color: #d2a8ff; }
 """.replace("__BAR_YUKSEKLIK__", str(_BAR_YUKSEKLIK))
 
 
@@ -127,12 +129,14 @@ def _timeline_html(report: Report) -> str:
 def _ozet_html(report: Report) -> str:
     """Özet blok: kesim sayısı, kademe dağılımı, kazanılan süre + encoder."""
     t = report.tiers
+    # `manuel` yalnız VARSA eklenir: düzenlemesiz raporun metni v0.x ile
+    # birebir aynı kalır (mevcut kilit testleri sabit dizeye bakıyor).
+    kademe = f"{t.kesin_filler} kesin · {t.aday_filler} aday · {t.silence} sessizlik"
+    if t.manuel > 0:
+        kademe += f" · {t.manuel} elle eklenen"
     kartlar = [
         ("Kesim sayısı", str(report.cut_count)),
-        (
-            "Kademe dağılımı",
-            f"{t.kesin_filler} kesin · {t.aday_filler} aday · {t.silence} sessizlik",
-        ),
+        ("Kademe dağılımı", kademe),
         (
             "Kazanılan süre",
             f"{report.cut_total.human} (%{report.saved_percent})",

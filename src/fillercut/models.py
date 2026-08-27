@@ -14,11 +14,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-#: Segment türleri — "keep" korunur, diğerleri kesilir.
-SegmentKind = Literal["filler", "silence", "keep"]
+#: Segment türleri — "keep" korunur, diğerleri kesilir. ``"manuel"`` v1.0 web
+#: review'unda kullanıcının ELLE eklediği kesimdir (otomatik kural üretmedi);
+#: türü ayrı tutmak "neden burayı kesti?" cevabını dürüst tutar — kullanıcının
+#: kararını filler/sessizlik gibi göstermek raporu yanıltırdı.
+SegmentKind = Literal["filler", "silence", "manuel", "keep"]
 
 #: Kesilen segment türleri (CutPlan.cut listesinde "keep" olamaz).
-CutKind = Literal["filler", "silence"]
+CutKind = Literal["filler", "silence", "manuel"]
 
 
 class Word(BaseModel):

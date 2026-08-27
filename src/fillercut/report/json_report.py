@@ -57,6 +57,10 @@ class TierCounts(BaseModel):
     kesin_filler: int = Field(ge=0)
     aday_filler: int = Field(ge=0)
     silence: int = Field(ge=0)
+    #: v1.0 web review'unda kullanıcının ELLE eklediği kesim sayısı — otomatik
+    #: kural üretmediği için kademe değil, ayrı kategoridir. Geriye uyumlu
+    #: default 0 (v0.x raporlarında alan yoktu).
+    manuel: int = Field(ge=0, default=0)
 
 
 class ReportCut(BaseModel):
@@ -116,6 +120,24 @@ class EncoderInfo(BaseModel):
         )
 
 
+class EditOzeti(BaseModel):
+    """v1.0 web review'unda kullanıcının yaptığı düzenlemelerin özeti.
+
+    Rapor UYGULANMIŞ plandan yazılır (rendere giden gerçek kesimler); bu alan
+    "kullanıcı neyi değiştirdi?" sorusunu ayrı tutar — sayılar olmadan, geri
+    alınan bir kesim ile hiç tespit edilmemiş bir bölge raporda ayırt edilemezdi.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    #: Kullanıcının geri aldığı (devre dışı bıraktığı) otomatik kesim sayısı.
+    devre_disi: int = Field(ge=0, default=0)
+    #: Sınırı sürüklenerek değiştirilen kesim sayısı.
+    sinir_degisen: int = Field(ge=0, default=0)
+    #: Elle eklenen (``manuel``) kesim sayısı.
+    manuel_eklenen: int = Field(ge=0, default=0)
+
+
 class Report(BaseModel):
     """rapor.json modeli — REVIEW katmanının çıktısı.
 
@@ -142,6 +164,9 @@ class Report(BaseModel):
     #: eder (şeffaflık); bu alan reddin de kayıt altında olduğunu gösterir.
     #: Geriye uyumlu default 0 (v0.1/v0.2 raporlarında alan yoktu).
     rejected: int = Field(ge=0, default=0)
+    #: v1.0 web review düzenleme özeti; CLI akışlarında ve düzenlemesiz web
+    #: koşusunda ``None`` (geriye uyumlu — alan yoksa da yüklenir).
+    duzenleme: EditOzeti | None = None
     cuts: list[ReportCut]
 
     def to_json(self) -> str:
@@ -159,27 +184,46 @@ def _human(ms: int) -> str:
     return f"{ms // 60_000:02d}:{(ms % 60_000) // 1_000:02d}"
 
 
-def _count_tiers(cuts: list[Segment]) -> TierCounts:
-    """Kademe sayımı reason zincirinden (KI-3).
+def reason_kategorileri(reason: str) -> list[str]:
+    """Bir reason zincirini kategori adlarına ayırır — KI-3 parse'ının TEK kaynağı.
 
     Zincir " + " ile birleşir ama padding eki de " + " içerir
     (`[padding +80/-120ms]`) — önce padding ekleri ayıklanır, sonra zincir
-    parçalanır. `"min_keep:"` parçaları tespit olayı değildir, sayılmaz;
+    parçalanır. `"min_keep:"` parçaları tespit olayı değildir, atlanır;
     bilinen önek taşımayan her parça sessizlik tespitidir (dışlayıcı
     sınıflandırma — sessizlik reason formatı audio/silence.py'nindir).
+
+    Dönen adlar: ``"kesin_filler"``, ``"aday_filler"``, ``"manuel"``,
+    ``"silence"``. Kademe sayımı (`_count_tiers`) ve web review'un tür rozeti
+    aynı gövdeyi kullanır — iki ayrı parse kopyası zamanla ayrışırdı.
     """
-    kesin = aday = sessizlik = 0
+    kategoriler: list[str] = []
+    for parca in _PADDING_EKI_RE.sub("", reason).split(" + "):
+        if parca.startswith("kesin filler:"):
+            kategoriler.append("kesin_filler")
+        elif parca.startswith("aday filler:"):
+            kategoriler.append("aday_filler")
+        elif parca.startswith("manuel:"):
+            kategoriler.append("manuel")
+        elif parca.startswith("min_keep:"):
+            continue
+        else:
+            kategoriler.append("silence")
+    return kategoriler
+
+
+def _count_tiers(cuts: list[Segment]) -> TierCounts:
+    """Kademe sayımı reason zincirinden (KI-3) — bkz. ``reason_kategorileri``."""
+    sayac = {"kesin_filler": 0, "aday_filler": 0, "manuel": 0, "silence": 0}
     for seg in cuts:
-        for parca in _PADDING_EKI_RE.sub("", seg.reason).split(" + "):
-            if parca.startswith("kesin filler:"):
-                kesin += 1
-            elif parca.startswith("aday filler:"):
-                aday += 1
-            elif parca.startswith("min_keep:"):
-                continue
-            else:
-                sessizlik += 1
-    return TierCounts(kesin_filler=kesin, aday_filler=aday, silence=sessizlik)
+        for kategori in reason_kategorileri(seg.reason):
+            sayac[kategori] += 1
+    return TierCounts(
+        kesin_filler=sayac["kesin_filler"],
+        aday_filler=sayac["aday_filler"],
+        silence=sayac["silence"],
+        manuel=sayac["manuel"],
+    )
 
 
 def build_report(
@@ -189,6 +233,7 @@ def build_report(
     skipped_aday_filler: int = 0,
     encoder: EncoderInfo | None = None,
     approved: list[bool] | None = None,
+    duzenleme: EditOzeti | None = None,
 ) -> Report:
     """CutPlan'den Report üretir — saf fonksiyon (yan etki yok).
 
@@ -208,6 +253,11 @@ def build_report(
             hizalı onay listesi. Verilirse her ``ReportCut.approved`` alanına
             işlenir ve ``rejected`` sayısı türetilir; verilmezse tüm kesimler
             onaylı sayılır (v0.2 davranışı, geriye uyumlu).
+        duzenleme: Web review düzenleme özeti (v1.0). Verilirse ``duzenleme``
+            alanına işlenir ve ``rejected`` bu özetin ``devre_disi`` sayısından
+            gelir — web akışında rapor UYGULANMIŞ plandan yazılır, yani geri
+            alınan kesimler ``cuts`` listesinde YOKTUR; reddin sayısı bu yolla
+            kayıtta kalır. ``approved`` ile birlikte verilmez (iki ayrı akış).
 
     Raises:
         ValueError: `total_ms` pozitif değilse, cutplan süresiyle
@@ -228,6 +278,11 @@ def build_report(
             f"approved uzunluğu ({len(approved)}) kesim sayısıyla "
             f"({len(cutplan.cut)}) uyuşmuyor"
         )
+    if approved is not None and duzenleme is not None:
+        raise ValueError(
+            "approved ve duzenleme birlikte verilemez — biri v0.3 interaktif "
+            "review'un, diğeri v1.0 web review'unun akışıdır"
+        )
     kesilen = cutplan.total_cut_ms
     cuts = [
         ReportCut(
@@ -240,7 +295,12 @@ def build_report(
         )
         for i, s in enumerate(cutplan.cut)
     ]
-    rejected = sum(1 for ok in approved if not ok) if approved is not None else 0
+    if approved is not None:
+        rejected = sum(1 for ok in approved if not ok)
+    elif duzenleme is not None:
+        rejected = duzenleme.devre_disi
+    else:
+        rejected = 0
     return Report(
         original=DurationStat(ms=total_ms, human=_human(total_ms)),
         cut_total=DurationStat(ms=kesilen, human=_human(kesilen)),
@@ -253,6 +313,7 @@ def build_report(
         tiers=_count_tiers(cutplan.cut),
         encoder=encoder,
         rejected=rejected,
+        duzenleme=duzenleme,
         cuts=cuts,
     )
 
@@ -265,6 +326,7 @@ def write_json_report(
     skipped_aday_filler: int = 0,
     encoder: EncoderInfo | None = None,
     approved: list[bool] | None = None,
+    duzenleme: EditOzeti | None = None,
 ) -> Path:
     """`build_report` + dosyaya yazım wrapper'ı (I/O yalnız burada).
 
@@ -276,6 +338,7 @@ def write_json_report(
         skipped_aday_filler=skipped_aday_filler,
         encoder=encoder,
         approved=approved,
+        duzenleme=duzenleme,
     )
     hedef = Path(path)
     hedef.write_text(report.to_json() + "\n", encoding="utf-8")
