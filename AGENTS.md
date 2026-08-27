@@ -94,7 +94,7 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
-## Mevcut Durum (2026-08-26)
+## Mevcut Durum (2026-08-27)
 
 **v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
 gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
@@ -147,6 +147,22 @@ sessizlik yoktur, çapalamanın çıpası yoktur (ölçüm tablosu KI-1'de).
 Davranış değişikliği: kesim sınırları sıkılaşır ve `<ad>_transkript.json`
 re-anchor'lı sınırları taşır. KI-5 anomali koruması kaldırılmadı, yedek
 savunmaya çekildi.
+
+**v1.0 UI Dilim 1 TAMAMLANDI** — localhost web arayüzü iskeleti + uçtan uca
+koşu (`src/fillercut/web/`, FastAPI + uvicorn — yeni runtime bağımlılığı
+YALNIZ bu ikisi; statik HTML + vanilla JS + tek CSS, şablon motoru/npm yok).
+`fillercut ui` yalnız `127.0.0.1`'e bağlanır; dosya gezgini ev dizini
+hapsindedir (`..` traversal 403, kilidi testte); job'lar in-memory kayıtta
+tek işçilik executor'da koşar (`queued → running(aşama) → done|failed`),
+ilerleme SSE + `Last-Event-ID` replay ile akar. **plan.json invariant'ı
+web'de de korunur:** rapor/plan job nesnesinde bellekte (`Job.rapor`).
+Pipeline'a tek dokunuş ince `progress_cb` kanalı + `PipelineError`
+(`typer.Exit(1)` alt sınıfı, Türkçe `mesaj` alanı) — CLI çıktısı bit-birebir
+aynı, parity kilidi `TestProgressCb`'de. Gerçek donanımda doğrulandı
+(RX 9060 XT): Test1.mp4 UI koşusunun `Test1_temiz.mp4` SHA-256'sı CLI
+koşusuyla BİREBİR AYNI; netstat'ta 0.0.0.0 bind yok; tamamen sessiz klip
+UI'da Türkçe CutPlanError yüzeyi gösterdi. Review ekranı Dilim 2'de,
+istatistik paneli + sürüm numarası Dilim 3'te.
 
 **v0.4.1 TAMAMLANDI** — AMD donanım kalibrasyonu + bir giriş noktası
 düzeltmesi: (a) `h264_amf` kalite argümanları ilk kez gerçek AMD donanımında
@@ -251,12 +267,25 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `cli.py`: `__main__` guard'ı → `main_entry` (`python -m fillercut.cli` sessiz no-op'tu) + `TestModulGirisNoktasi` subprocess kilidi (red-first) | `7c6cfc0` |
 | `CHANGELOG.md` v0.4.1 (+ v0.4.0'ın eksik link referansı) | `02845f6` |
 
-**Test sayısı:** 486 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 472'si
+**v1.0 UI Dilim 1**
+
+| Modül | Commit |
+|---|---|
+| `pipeline.py`: opsiyonel `progress_cb` kanalı (`ASAMALAR` sırasıyla, bant dışı) + `PipelineError` (`typer.Exit(1)` alt sınıfı, Türkçe `mesaj`) + CLI parity kilidi (cb'li/cb'siz stdout+stderr bayt bayt eşit) | `92a0875` |
+| `web/app.py` (FastAPI factory: statik mount, `/docs` kapalı, `on_ready` lifespan kanalı — starlette 1.x'te `add_event_handler` yok) + `cli.py` `fillercut ui` (yalnız 127.0.0.1, argv dispatch — CLI şekli korunur) + pyproject: fastapi+uvicorn, dev'e httpx (TestClient zorunluluğu) | `c86a0ce` |
+| `web/fs.py` (gezgin API: ev dizini hapsi, `resolve` + `is_relative_to`, `..` traversal 403 + içerik sızmama kilidi) | `d339fd8` |
+| `web/jobs.py` (in-memory kayıt + tek işçi executor + SSE `Last-Event-ID` replay + plan-bellekte kilidi; `PipelineError.mesaj` → UI, beklenmeyen hata → genel mesaj + ayrı detay) | `edfb43f` |
+| `web/static/` üç ekran (gezgin+mod / 6 aşamalı stepper / sonuç; vanilla JS, `textContent`-only, JS `ASAMALAR` aynası pipeline ile ad+sıra kilitli) | `a709c69` |
+| `CHANGELOG.md` [Unreleased] + README/README.tr web bölümü | `0dc589f` |
+
+**Test sayısı:** 564 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 550'si
 marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
-atlar, donanım/model yoksa ilgili testler kendi kendine skip eder.
+atlar, donanım/model yoksa ilgili testler kendi kendine skip eder. Web testleri
+(`test_web_app/fs/jobs.py`) marker'sızdır: FastAPI TestClient in-process çalışır,
+gerçek sunucu/video koşmaz.
 
 `ffmpeg` marker'lı üç probe sınıfının hangisinin KOŞTUĞU makineye bağlıdır ve
 üçü birden yeşil olan tek bir makine yoktur: `TestGercekNvencProbe` yalnız
@@ -265,8 +294,24 @@ NVIDIA'da, `TestGercekQsvProbe` yalnız Intel iGPU'da (hibrit kip açıkken),
 makinesinde (RX 9060 XT) AMF sınıfı **skip DEĞİL, koştu ve geçti** —
 NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 
-**Sıradaki:** **v1.0 UI (localhost web)** — KI-1 spike'ı tamamlandı
-(Faz 1+2 ölçüldü ve öldü; bkz. KI-1).
+**Sıradaki:** **v1.0 UI Dilim 2 (review ekranı)** — kesim listesi + timeline
+web'de, onay/ret job'ın bellekteki raporu (`Job.rapor`) üzerinden; Dilim 3:
+cilalı istatistik paneli + sürüm numarası. (KI-1 spike'ı tamamlandı; Faz 1+2
+ölçüldü ve öldü; bkz. KI-1.)
+
+**Not (web UI, Dilim 1):** UI ince kabuktur — CLI ile aynı `filler-cut.toml`
+yüklenir (`fillercut ui --config`), web koşusu `yes=True` (headless) ile
+gider; mod (aggressive) UI'dan gelir, config şeması DEĞİŞMEDİ. Bilinçli
+sınırlar: (a) FastAPI TestClient bu stack'te (starlette 1.6 + httpx 0.28)
+akış gövdesini yanıt bitene dek tamponlar — SSE'nin gerçek-zamanlı chunk
+teslimi test'te değil gerçek uvicorn+tarayıcı koşusunda doğrulandı; testler
+API sözleşmesini (koşu sırasında açık bağlantı, eksiksiz dizi, replay)
+kilitler. (b) starlette 1.6, httpx 0.x'i "deprecated; install httpx2" diye
+uyarır (pytest'te 1 warning) — TestClient çalışıyor, httpx2'ye geçiş ayrı
+karar. (c) Sunucu kapanışında KOŞAN iş yarıda kesilmez (kuyruktakiler iptal);
+süreç çıkışı aktif ffmpeg/ASR adımının bitmesini bekleyebilir. (d) `httpx`
+YALNIZ dev extra'sındadır (TestClient'ın zorunlu alt bağımlılığı) — runtime
+bağımlılıkları fastapi+uvicorn'dan ibarettir.
 
 Spike'ın bıraktığı tablo (ayrıntı ve tüm sayılar `KNOWN_ISSUES.md` KI-1'de,
 harness `experiments/filler_leak/`): varsayılan modda kesin filler yakalama
