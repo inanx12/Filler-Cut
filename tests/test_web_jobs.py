@@ -143,8 +143,12 @@ class TestJobBaslatma:
 
     def test_olmayan_job_404(self, ev: Path) -> None:
         client = _client(ev, _basarili_kosucu)
-        assert client.get("/api/jobs/yok").status_code == 404
-        assert client.get("/api/jobs/yok/events").status_code == 404
+        for yol in ("/api/jobs/yok", "/api/jobs/yok/events"):
+            cevap = client.get(yol)
+            assert cevap.status_code == 404, yol
+            # Tüm uçlar AYNI açıklayıcı metni verir: kullanıcı sunucunun
+            # yeniden başlatıldığını buradan anlar (işler bellektedir).
+            assert "sunucu yeniden başlatılmış olabilir" in cevap.json()["detail"], yol
 
 
 class TestJobAkisi:

@@ -415,6 +415,10 @@ function dalgaCiz() {
   const oran = window.devicePixelRatio || 1;
   const g = kap.clientWidth;
   const y = kap.clientHeight;
+  /* Genişlik 0 iken çizmek tuvali 1 px'e sabitler ve dalga bir daha
+     görünmez (ekran gizliyken/sekme arkadayken düzen henüz oluşmamıştır).
+     Aşağıdaki ResizeObserver genişlik gelince yeniden çağırır. */
+  if (g <= 0 || y <= 0) return;
   tuval.width = Math.max(1, Math.floor(g * oran));
   tuval.height = Math.max(1, Math.floor(y * oran));
   const ctx = tuval.getContext("2d");
@@ -754,9 +758,18 @@ document.addEventListener("keydown", (ev) => {
   }
 });
 
-window.addEventListener("resize", () => {
-  if (review.gorunum) dalgaCiz();
-});
+/* Timeline genişliği değiştikçe dalgayı yeniden çiz: pencere yeniden
+   boyutlanması, ekran görünür olduğunda oluşan ilk düzen ve arka plandaki
+   sekmenin öne gelmesi aynı yoldan geçer (window.resize üçünü de yakalamaz). */
+if (window.ResizeObserver) {
+  new ResizeObserver(() => {
+    if (review.gorunum && review.peaks) dalgaCiz();
+  }).observe(el("timeline"));
+} else {
+  window.addEventListener("resize", () => {
+    if (review.gorunum) dalgaCiz();
+  });
+}
 
 /* ── onay ─────────────────────────────────────────────────────────────── */
 

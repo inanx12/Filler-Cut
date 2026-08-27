@@ -380,10 +380,7 @@ def job_baslat(istek: JobBaslatIstek, request: Request) -> dict[str, object]:
 
 @router.get("/api/jobs/{job_id}")
 def job_durum(job_id: str, request: Request) -> dict[str, object]:
-    job = _kayit(request).al(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="İş bulunamadı.")
-    return job.snapshot()
+    return _job_al(job_id, request).snapshot()
 
 
 def _job_al(job_id: str, request: Request) -> Job:
@@ -560,9 +557,7 @@ async def _sse_akisi(job: Job, bastan: int) -> AsyncIterator[bytes]:
 @router.get("/api/jobs/{job_id}/events")
 async def job_olaylar(job_id: str, request: Request) -> StreamingResponse:
     """SSE: aşama geçişleri + tamamlanma/hata; ``Last-Event-ID`` replay'i."""
-    job = _kayit(request).al(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="İş bulunamadı.")
+    job = _job_al(job_id, request)
     bastan = 0
     ham = request.headers.get("last-event-id")
     if ham is not None:
