@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 import threading
 from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -37,7 +38,7 @@ from uuid import uuid4
 
 import typer
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
 from fillercut.config import Config
@@ -63,6 +64,7 @@ from fillercut.web.review import (
     sessizlik_kenarlari,
     uygulanmis_plan,
 )
+from fillercut.web.waveform import OLCEK as WAVEFORM_OLCEK
 
 router = APIRouter()
 
@@ -489,6 +491,38 @@ def review_onayla(job_id: str, request: Request) -> dict[str, object]:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     job.onayla(plan, ozet_cikar(baglam.plan, job.overlay))
     return job.snapshot()
+
+
+@router.get("/api/jobs/{job_id}/video")
+def job_video(job_id: str, request: Request) -> FileResponse:
+    """Orijinal videoyu servis eder — **HTTP Range** ile (oynatıcıda seek şart).
+
+    Range'i starlette'in ``FileResponse``'u kendisi karşılar (206 +
+    ``Content-Range``, geçersiz aralıkta 416); davranış testle kilitlidir —
+    sürüm yükseltmesinde sessizce kaybolursa oynatıcı seek'i bozulurdu.
+
+    Yol job başlarken doğrulanmıştı; burada ev dizini hapsi TEKRAR uygulanır
+    (derinlemesine savunma: job kaydına elle dokunulmuş olsa bile dışarı
+    dosya servis edilmez).
+    """
+    job = _job_al(job_id, request)
+    hedef = fs.guvenli_yol(job.video_yolu, fs.ev_dizini(request))
+    if hedef is None or not hedef.is_file():
+        raise HTTPException(status_code=404, detail="Video dosyası bulunamadı.")
+    tur, _ = mimetypes.guess_type(hedef.name)
+    return FileResponse(hedef, media_type=tur or "application/octet-stream")
+
+
+@router.get("/api/jobs/{job_id}/peaks")
+def job_peaks(job_id: str, request: Request) -> dict[str, object]:
+    """Waveform zarfı — analiz WAV'ından BİR KEZ hesaplanır, job'da cache'lidir.
+
+    ``peaks`` ``null`` olabilir: WAV okunamadıysa (yan görselleştirme koşuyu
+    öldürmez) ya da EXTRACT henüz bitmediyse. UI o durumda dalgasız timeline
+    çizer.
+    """
+    job = _job_al(job_id, request)
+    return {"peaks": job.peaks, "olcek": WAVEFORM_OLCEK}
 
 
 @router.post("/api/jobs/{job_id}/cancel")

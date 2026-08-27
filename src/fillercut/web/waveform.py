@@ -27,7 +27,7 @@ VARSAYILAN_BIN = 2000
 
 #: Zarf değerleri int8 aralığına ölçeklenir: canvas için fazlasıyla yeterli
 #: çözünürlük, float listesine göre çok daha küçük JSON.
-_OLCEK = 127
+OLCEK = 127
 
 
 class WaveformError(RuntimeError):
@@ -54,8 +54,8 @@ def peaks_from_samples(
     parcalar = np.array_split(ornekler.astype(np.float32), bolum_sayisi)
     zarf: list[list[int]] = []
     for parca in parcalar:
-        alt = float(parca.min()) / 32768.0 * _OLCEK
-        ust = float(parca.max()) / 32768.0 * _OLCEK
+        alt = float(parca.min()) / 32768.0 * OLCEK
+        ust = float(parca.max()) / 32768.0 * OLCEK
         zarf.append([int(round(alt)), int(round(ust))])
     return zarf
 
