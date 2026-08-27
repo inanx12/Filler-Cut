@@ -80,6 +80,22 @@ class TestVersion:
         """
         assert fillercut.__version__ == importlib.metadata.version(fillercut.DIST_NAME)
 
+    def test_kurulu_metadata_bayat_degil(self) -> None:
+        """BAYATLIK ALARMI: kurulu metadata `pyproject.toml` ile aynı olmalı.
+
+        Editable kurulumda sürüm bump'ı metadata'ya kendiliğinden YANSIMAZ;
+        `pip install -e .` çalıştırılmazsa `fillercut --version` eski sürümü
+        basar. Tarihsel kusur budur: v0.2.0 ve v0.3.0 tag'leri `0.1.0`
+        metadata'sıyla kesildi (bkz. CHANGELOG v0.3.1). Bu assert kırılırsa
+        çözüm `pip install -e ".[dev]"`.
+        """
+        pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        with pyproject.open("rb") as fh:
+            beyan_edilen = tomllib.load(fh)["project"]["version"]
+        assert importlib.metadata.version(fillercut.DIST_NAME) == beyan_edilen, (
+            "kurulu metadata bayat — 'pip install -e \".[dev]\"' ile tazeleyin"
+        )
+
     def test_version_bayragi_metadata_ile_tutarli(self) -> None:
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
