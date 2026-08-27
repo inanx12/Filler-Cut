@@ -17,6 +17,7 @@ from __future__ import annotations
 import mimetypes
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -24,10 +25,31 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from fillercut.config import Config
-from fillercut.web import fs
+from fillercut.pipeline import run as pipeline_run
+from fillercut.web import fs, jobs
+from fillercut.web.jobs import Job, JobKayit, JobOzet, Kosucu
 
 #: Paket içi statik dosya kökü (index.html + app.js + style.css).
 _STATIK = Path(__file__).parent / "static"
+
+
+def _pipeline_kosucu(cfg: Config) -> Kosucu:
+    """Gerçek pipeline'ı job olarak koşan çağrılabiliri üretir.
+
+    UI ince bir kabuktur: CLI ile aynı config kullanılır, üstüne yalnız koşu
+    parametreleri biner — mod (``aggressive``) UI'dan, ``yes=True`` sabittir
+    (Dilim 1'de review ekranı yok; onay akışı Dilim 2'de gelecek). İlerleme
+    ``progress_cb`` kanalından akar (pipeline'a invaziv değişiklik yok).
+    """
+
+    def kosucu(job: Job, ilerleme: Callable[[str], None]) -> JobOzet:
+        kosu_cfg = replace(cfg, aggressive=job.aggressive, yes=True)
+        sonuc = pipeline_run(job.video_yolu, config=kosu_cfg, progress_cb=ilerleme)
+        # plan.json invariant'ı: plan/rapor DİSKE değil job'ın içine (bellek).
+        job.rapor = sonuc.report
+        return JobOzet.from_result(sonuc)
+
+    return kosucu
 
 
 def create_app(
@@ -35,6 +57,7 @@ def create_app(
     *,
     on_ready: Callable[[], None] | None = None,
     fs_home: Path | None = None,
+    kayit: JobKayit | None = None,
 ) -> FastAPI:
     """Filler-Cut web uygulamasını kurar (sunucu başlatmadan).
 
@@ -48,19 +71,25 @@ def create_app(
             lifespan üzerinden kurulur; testler doğrudan enjekte eder.
         fs_home: Dosya gezgini hapsinin kökü (``web/fs.py``). Default
             ``Path.home()`` — üretimde HEP odur; parametre test enjeksiyonu
-            içindir (tmp_path hapsi).
+            içindir (tmp_path hapsi). Job başlatma da AYNI hapisten geçer.
+        kayit: Job kaydı; verilmezse gerçek pipeline koşucusuyla kurulur.
+            Route testleri sahte/kontrollü koşuculu kayıt enjekte eder —
+            testlerde gerçek video koşusu YOK (handoff).
 
     Returns:
         Yapılandırılmış FastAPI uygulaması; ``app.state.config`` config'i taşır.
     """
     cfg = config if config is not None else Config()
     ev = (fs_home if fs_home is not None else Path.home()).resolve()
+    job_kayit = kayit if kayit is not None else JobKayit(kosucu=_pipeline_kosucu(cfg))
 
     @asynccontextmanager
     async def _yasam(_: FastAPI) -> AsyncIterator[None]:
         if on_ready is not None:
             on_ready()
         yield
+        # Kapanış: kuyruktaki işler iptal; koşan iş yarıda kesilmez (jobs.py).
+        job_kayit.kapat()
 
     app = FastAPI(
         title="Filler-Cut UI",
@@ -71,6 +100,7 @@ def create_app(
     )
     app.state.config = cfg
     app.state.fs_home = ev
+    app.state.kayit = job_kayit
 
     # Windows'ta registry .js/.css için yanlış MIME dönebilir (text/plain) —
     # tarayıcı stylesheet'i reddeder. Tipler açıkça sabitlenir (idempotent).
@@ -78,6 +108,7 @@ def create_app(
     mimetypes.add_type("text/css", ".css")
 
     app.include_router(fs.router)
+    app.include_router(jobs.router)
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
