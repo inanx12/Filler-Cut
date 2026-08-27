@@ -29,11 +29,19 @@ sessizce CPU'ya mı düşüldü" sorusunun cevabı dosyada durur.
 
 Ara WAV `tempfile.TemporaryDirectory`'ye çıkarılır — analiz artığı kullanıcının
 video klasöründe kalmaz; iş bitince/hata olursa temizlik otomatiktir.
+
+PROGRESS KANALI (v1.0 web): ``run(progress_cb=...)`` aşama geçişlerini bant
+dışı bildirir (``ASAMALAR`` sırasıyla, aşama BAŞLARKEN). Kanal konsola hiçbir
+şey basmaz; ``None`` (default) CLI davranışını bit-birebir korur — kilit:
+``tests/test_pipeline.py::TestProgressCb``. Katman hataları ``PipelineError``
+ile fırlatılır: ``typer.Exit(1)`` alt sınıfıdır (CLI akışı değişmez), Türkçe
+mesajı ``mesaj`` alanında taşır (web job'ı UI'a bu metni düşürür).
 """
 
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
@@ -65,6 +73,25 @@ from fillercut.transcribe.reanchor import reanchor_words
 
 _out = Console()
 _err = Console(stderr=True)
+
+#: 6 katmanın sırası (DESIGN.md §2) — ``progress_cb`` bu adlarla, bu sırayla
+#: çağrılır. Web katmanı (v1.0) bu sözleşmeyi tüketir; ad/sıra değişikliği
+#: UI aşama göstergesini kırar, önce buradaki kilit testine bakılır.
+ASAMALAR: tuple[str, ...] = ("EXTRACT", "TRANSCRIBE", "DETECT", "PLAN", "REVIEW", "RENDER")
+
+
+class PipelineError(typer.Exit):
+    """Katman hatası — Türkçe mesajı ``mesaj`` alanında taşır (v1.0 web).
+
+    ``typer.Exit(code=1)`` alt sınıfıdır: CLI akışında davranış BİREBİR
+    aynıdır (click yakalar, kod 1 ile çıkılır; kırmızı konsol mesajını
+    ``_fail`` zaten basmıştır). Web job'ı ise aynı istisnayı yakalayıp
+    ``mesaj``'ı UI'a düşürür — stack trace değil, eyleme dökülebilir metin.
+    """
+
+    def __init__(self, mesaj: str) -> None:
+        super().__init__(code=1)
+        self.mesaj = mesaj
 
 
 @dataclass(frozen=True)
@@ -121,7 +148,13 @@ def _make_transcriber(asr: AsrConfig) -> Transcriber:
 def _fail(mesaj: str) -> NoReturn:
     """Kırmızı hata mesajı + temiz çıkış (kullanıcı traceback görmez)."""
     _err.print(f"[bold red]Hata:[/bold red] {mesaj}")
-    raise typer.Exit(code=1)
+    raise PipelineError(mesaj)
+
+
+def _bildir(progress_cb: Callable[[str], None] | None, asama: str) -> None:
+    """Aşama geçişini bant dışı kanala bildirir — ``None`` ise sessiz (CLI)."""
+    if progress_cb is not None:
+        progress_cb(asama)
 
 
 def _mm_ss(ms: int) -> str:
@@ -174,6 +207,7 @@ def run(
     transcriber: Transcriber | None = None,
     open_review: bool = False,
     interactive: bool = False,
+    progress_cb: Callable[[str], None] | None = None,
 ) -> PipelineResult:
     """6 katmanı sırayla çalıştırır: video → temiz MP4 + rapor.json.
 
@@ -193,6 +227,13 @@ def run(
             iken geçerlidir; konsol ``[y/N]`` akışının yerine geçer. Reddedilen
             kesimler render'dan önce plandan düşülür, raporda ``approved:false``
             olarak görünmeye devam eder.
+        progress_cb: Aşama geçişlerinde çağrılan opsiyonel bant dışı kanal
+            (``ASAMALAR`` adlarıyla, o sırayla, aşama BAŞLARKEN; REVIEW
+            ``yes=True`` iken de bildirilir — konsol akışı onu atlasa bile UI
+            göstergesi 6 aşamayı tam görür). Konsola hiçbir şey basmaz;
+            ``None`` (default) CLI davranışını bit-birebir korur (kilit:
+            ``TestProgressCb``). v1.0 web job'ları SSE ilerlemesini buradan
+            üretir.
 
     Returns:
         Üretilen video/rapor/transkript yolları ve rapor.
@@ -227,6 +268,7 @@ def run(
         wav = Path(tmp_str) / "analiz.wav"
 
         # [1] EXTRACT
+        _bildir(progress_cb, "EXTRACT")
         _out.print("[cyan][1/6] EXTRACT[/cyan] — 16 kHz mono WAV çıkarılıyor…")
         try:
             extract_audio(src, wav)
@@ -244,6 +286,7 @@ def run(
             _fail(f"DETECT (sessizlik) başarısız: {exc}")
 
         # [2] TRANSCRIBE
+        _bildir(progress_cb, "TRANSCRIBE")
         if transcriber is None:
             try:
                 transcriber = _make_transcriber(cfg.asr)
@@ -298,6 +341,7 @@ def run(
 
         # [3] DETECT — filler (re-anchor'lı transkript) + sessizlik (yukarıda
         # çıkarılan ham harita; burada yalnızca süre süzgeci uygulanır).
+        _bildir(progress_cb, "DETECT")
         _out.print("[cyan][3/6] DETECT[/cyan] — filler ve sessizlikler tespit ediliyor…")
         fillerlar = detect_fillers(words, aggressive=aggressive)
         # KesilMEYEN aday sayısı REVIEW/rapora bilgi olarak akar; aggressive'de
@@ -312,6 +356,7 @@ def run(
             _fail(f"DETECT (sessizlik) başarısız: {exc}")
 
     # [4] PLAN — merge + padding + min-keep → saf veri CutPlan
+    _bildir(progress_cb, "PLAN")
     _out.print("[cyan][4/6] PLAN[/cyan] — kesim planı kuruluyor…")
     try:
         plan: CutPlan = build_cutplan(
@@ -334,7 +379,10 @@ def run(
 
     # [5] REVIEW — v0.3: interaktif mod (--interactive) lokal HTTP sunucusu +
     # tarayıcıda tek tek onay; varsayılan konsol [y/N] + statik HTML akışı aynen
-    # korunur (regresyon kilidi). --yes (headless) ikisini de atlar.
+    # korunur (regresyon kilidi). --yes (headless) ikisini de atlar. Aşama
+    # bildirimi `yes`ten BAĞIMSIZ yapılır: kanal bant dışıdır, konsol REVIEW'u
+    # atlasa bile UI göstergesi 6 aşamanın tamamını görür.
+    _bildir(progress_cb, "REVIEW")
     review_html: Path | None = None
     approved_flags: list[bool] | None = None
     render_plan = plan
@@ -394,6 +442,7 @@ def run(
     # [6] RENDER — render_plan (interaktif modda reddedilen kesimler düşmüş
     # olabilir); rapor.json ORİJİNAL plandan yazılır ki reddedilen kesimler
     # approved:false olarak görünmeye devam etsin (şeffaflık).
+    _bildir(progress_cb, "RENDER")
     _out.print(
         f"[cyan][6/6] RENDER[/cyan] — encoder: {encoder_secimi.ffmpeg_name} "
         f"(probe: {encoder_secimi.summary})"

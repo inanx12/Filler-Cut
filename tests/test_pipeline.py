@@ -24,7 +24,13 @@ from fillercut.audio.probe import ProbeError
 from fillercut.audio.silence import SilenceDetectionError
 from fillercut.config import AsrConfig, Config, RenderConfig
 from fillercut.models import CutPlan, Segment, Word
-from fillercut.pipeline import PipelineResult, default_output_path, run
+from fillercut.pipeline import (
+    ASAMALAR,
+    PipelineError,
+    PipelineResult,
+    default_output_path,
+    run,
+)
 from fillercut.plan.cutplan import CutPlanError
 from fillercut.render.encoder import EncoderSelection, ProbeAttempt, build_encode_args
 from fillercut.render.render import RenderError
@@ -565,3 +571,104 @@ class TestHataYollari:
         with pytest.raises(typer.Exit) as exc_info:
             run(girdi, config=Config(yes=True), transcriber=_PatanTranscriber())
         assert exc_info.value.exit_code == 1
+
+
+class TestProgressCb:
+    """v1.0 web: opsiyonel bant dışı ilerleme kanalı — CLI parity kilitli.
+
+    Kanalın sözleşmesi: (a) ``None`` default'u eski davranıştır ve konsol
+    çıktısı DEĞİŞMEZ (parity), (b) callback ``ASAMALAR`` adlarını o sırayla,
+    aşama başlarken alır, (c) REVIEW ``yes=True``'da da bildirilir (konsol
+    onu atlar, UI göstergesi atlamaz), (d) hata anında kalan aşamalar
+    bildirilmez.
+    """
+
+    def test_alti_asama_sirayla_bildirilir(self, girdi: Path, katmanlar: Any) -> None:
+        gelen: list[str] = []
+        run(
+            girdi,
+            config=Config(yes=True),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+            progress_cb=gelen.append,
+        )
+        # yes=True konsolu REVIEW'u atlar ama kanal 6 aşamanın tamamını görür.
+        assert gelen == list(ASAMALAR)
+        assert gelen == ["EXTRACT", "TRANSCRIBE", "DETECT", "PLAN", "REVIEW", "RENDER"]
+
+    def test_cli_parity_cb_konsol_ciktisini_degistirmez(
+        self, girdi: Path, katmanlar: Any, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """PARITY KİLİDİ: kanal bant dışıdır — cb'li ve cb'siz koşunun stdout +
+        stderr'i BAYT BAYT aynıdır. Bu assert düşerse progress kanalı CLI
+        çıktısına sızmış demektir (handoff kuralı: default None → CLI davranışı
+        bit-birebir)."""
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        cb_siz = capsys.readouterr()
+
+        gelen: list[str] = []
+        run(
+            girdi,
+            config=Config(yes=True),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+            progress_cb=gelen.append,
+        )
+        cb_li = capsys.readouterr()
+
+        assert cb_li.out == cb_siz.out
+        assert cb_li.err == cb_siz.err
+        assert gelen == list(ASAMALAR)  # kanal yine de dolu — sessiz değil
+
+    def test_varsayilan_none_konsol_asama_satirlari_ayni(
+        self, girdi: Path, katmanlar: Any, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """cb=None koşusunun konsol aşama izi v0.4.1 ile aynı: [5/6] REVIEW
+        satırı --yes'te YOKTUR, diğer beşi numaralı sırayla vardır."""
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        cikti = capsys.readouterr().out
+        beklenen_sira = ["[1/6] EXTRACT", "[2/6] TRANSCRIBE", "[3/6] DETECT",
+                         "[4/6] PLAN", "[6/6] RENDER"]
+        indeksler = [cikti.index(satir) for satir in beklenen_sira]
+        assert indeksler == sorted(indeksler)
+        assert "[5/6] REVIEW" not in cikti  # --yes konsolda REVIEW basmaz (v0.1'den beri)
+
+    def test_hata_aninda_kalan_asamalar_bildirilmez(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        katmanlar.cutplan.side_effect = CutPlanError("plan tüm videoyu kesiyor")
+        gelen: list[str] = []
+        with pytest.raises(typer.Exit):
+            run(
+                girdi,
+                config=Config(yes=True),
+                transcriber=_SahteTranscriber(katmanlar.sira),
+                progress_cb=gelen.append,
+            )
+        assert gelen == ["EXTRACT", "TRANSCRIBE", "DETECT", "PLAN"]  # REVIEW/RENDER yok
+
+
+class TestPipelineError:
+    """_fail artık PipelineError fırlatır: typer.Exit(1) alt sınıfı + `mesaj`.
+
+    CLI sözleşmesi değişmez (yukarıdaki tüm `pytest.raises(typer.Exit)`
+    testleri bu sınıfı da yakalar); web job'ı `mesaj` alanından Türkçe,
+    eyleme dökülebilir metni okur.
+    """
+
+    def test_typer_exit_altsinifi(self) -> None:
+        # Geriye dönük yakalama sözleşmesi: except typer.Exit hâlâ çalışır.
+        assert issubclass(PipelineError, typer.Exit)
+
+    def test_mesaj_alani_turkce_metni_tasir(self, girdi: Path, katmanlar: Any) -> None:
+        katmanlar.cutplan.side_effect = CutPlanError(
+            "plan tüm videoyu kesiyor (kesim 5000ms / süre 5000ms)"
+        )
+        with pytest.raises(PipelineError) as exc_info:
+            run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        assert exc_info.value.exit_code == 1
+        assert exc_info.value.mesaj.startswith("PLAN başarısız: plan tüm videoyu kesiyor")
+        assert "Traceback" not in exc_info.value.mesaj
+
+    def test_girdi_yok_mesaji(self, tmp_path: Path) -> None:
+        with pytest.raises(PipelineError) as exc_info:
+            run(tmp_path / "yok.mp4", config=Config(yes=True), transcriber=Mock())
+        assert "girdi dosyası bulunamadı" in exc_info.value.mesaj
