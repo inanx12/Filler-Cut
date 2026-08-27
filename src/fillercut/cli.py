@@ -18,9 +18,18 @@ v0.3.3: konsol akışları ``main_entry``'de ``errors="replace"``e ayarlanır �
 düşer ve konsol süslerini (``✓``) kodlayamayıp koşuyu öldürüyordu. Bu,
 v0.3.2'nin subprocess ``errors="replace"`` temizliğinin yazma tarafındaki
 eşleniğidir: orada dışarıdan GELEN byte'lar, burada dışarıya GİDEN metin.
+
+v1.0: ``fillercut ui`` alt komutu — web arayüzünü 127.0.0.1'de başlatır.
+Mevcut arayüz tek-komutlu typer'dır (``fillercut video.mp4``); ikinci bir
+``@app.command`` eklemek typer'ı çok-komutlu kipe geçirir ve VIDEO argümanı
+``fillercut main video.mp4``'e taşınırdı (CLI şekli kırılır). Bu yüzden
+dispatch ``main_entry``'de argv üzerinden yapılır: ilk argüman tam olarak
+``ui`` ise ayrı ``ui_app`` çalışır, değilse mevcut komut aynen. ("ui" adında
+uzantısız video dosyası işlemek isteyen ``.\\ui`` yazar — kabul edilen kenar.)
 """
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
@@ -36,6 +45,11 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+#: `fillercut ui` alt komutunun ayrı typer app'i — ana app'e komut olarak
+#: EKLENMEZ (modül docstring'indeki tek-komut gerekçesi); main_entry dispatch
+#: eder. Argümansız çağrı sunucuyu default'larla başlatır (no_args_is_help YOK).
+ui_app = typer.Typer(add_completion=False)
 
 
 def _akisi_dayaniklilastir(akis: object) -> None:
@@ -73,8 +87,15 @@ def main_entry() -> None:
     Giriş noktası doğrudan `app` DEĞİL bu sarmalayıcıdır: ayar, ilk `echo`'dan
     önce çalışmak zorunda. Modül seviyesinde yapılamaz — `fillercut.cli`'yi
     import etmek (testler, araçlar) çağıranın akışlarını değiştirmemeli.
+
+    v1.0: ilk argüman tam olarak ``ui`` ise ``ui_app`` dispatch edilir (modül
+    docstring'indeki tek-komut gerekçesi); diğer her yol mevcut ``app``'e
+    DEĞİŞMEDEN gider.
     """
     _konsol_akislarini_ayarla()
+    if sys.argv[1:2] == ["ui"]:
+        ui_app(args=sys.argv[2:], prog_name="fillercut ui")
+        return
     app()
 
 
@@ -138,7 +159,10 @@ def main(
         ),
     ] = False,
 ) -> None:
-    """VIDEO'daki filler'ları ve gereksiz sessizlikleri kes; temiz MP4 + rapor üret."""
+    """VIDEO'daki filler'ları ve gereksiz sessizlikleri kes; temiz MP4 + rapor üret.
+
+    Web arayüzü için: fillercut ui
+    """
     try:
         cfg = load_config(config)
     except ConfigError as exc:
@@ -157,6 +181,75 @@ def main(
         f"rapor: {sonuc.report_path}\n"
         f"transkript: {sonuc.transcript_path}"
     )
+
+
+def _port_bos(port: int) -> bool:
+    """127.0.0.1:port bağlanabilir mi? — uvicorn'un İngilizce bind hatası
+    yerine Türkçe, eyleme dökülebilir mesaj basabilmek için ön kontrol.
+
+    Kontrol ile uvicorn'un bind'ı arasında teorik bir yarış var; tek
+    kullanıcılı localhost senaryosunda kabul edilen risk (en kötü ihtimalle
+    uvicorn'un kendi hatası görünür).
+    """
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+@ui_app.command()
+def ui(
+    port: Annotated[
+        int,
+        typer.Option("--port", help="Dinlenecek port (her zaman 127.0.0.1'e bağlanır)."),
+    ] = 8765,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="TOML config dosyası (varsayılan: filler-cut.toml)."),
+    ] = None,
+    no_browser: Annotated[
+        bool,
+        typer.Option("--no-browser", help="Tarayıcıyı otomatik açma (headless/test)."),
+    ] = False,
+) -> None:
+    """Web arayüzünü başlatır: http://127.0.0.1:PORT (yalnız localhost)."""
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        typer.echo(f"Hata: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    if not _port_bos(port):
+        typer.echo(
+            f"Hata: port {port} kullanımda — --port ile başka bir port seçin.", err=True
+        )
+        raise typer.Exit(code=1)
+
+    # Tembel importlar: fastapi/uvicorn yalnız `ui` yolunda yüklenir; düz CLI
+    # koşusu (video işleme) web yığınını hiç ödemesin.
+    import uvicorn
+
+    from fillercut.web.app import create_app
+
+    url = f"http://127.0.0.1:{port}/"
+    on_ready: Callable[[], None] | None = None
+    if not no_browser:
+        import webbrowser
+
+        # Lifespan startup'ta çağrılır — sunucu istekleri kabul etmeye hazırken
+        # açılır, "connection refused" sekmesi görülmez.
+        def _tarayici_ac() -> None:
+            webbrowser.open(url)
+
+        on_ready = _tarayici_ac
+
+    web_app = create_app(cfg, on_ready=on_ready)
+    typer.echo(f"Filler-Cut UI: {url}  (kapatmak için Ctrl+C)")
+    uvicorn.run(web_app, host="127.0.0.1", port=port, log_level="warning")
 
 
 if __name__ == "__main__":  # pragma: no cover - alt süreçte koşar

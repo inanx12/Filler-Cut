@@ -18,7 +18,7 @@ import pytest
 from typer.testing import CliRunner, Result
 
 import fillercut
-from fillercut.cli import _konsol_akislarini_ayarla, app, main_entry
+from fillercut.cli import _konsol_akislarini_ayarla, _port_bos, app, main_entry, ui_app
 from fillercut.config import Config
 from fillercut.models import CutPlan, Segment
 from fillercut.pipeline import PipelineResult
@@ -301,3 +301,141 @@ class TestKonsolAkisiDayanikliligi:
             main_entry()
         assert akis.errors == "replace"  # ayar ilk echo'dan ÖNCE
         sahte_app.assert_called_once_with()
+
+
+class TestUiKomutu:
+    """v1.0: `fillercut ui` — uvicorn 127.0.0.1'de, tarayıcı on_ready kanalıyla.
+
+    Gerçek sunucu başlatılmaz: `uvicorn.run` mock'lanır (tembel import modül
+    attribute'u üzerinden çağrıldığı için `uvicorn.run` hedefi yeterli).
+    """
+
+    def test_ui_help_opsiyonlari_listeler(self) -> None:
+        result = runner.invoke(ui_app, ["--help"])
+        assert result.exit_code == 0
+        for opsiyon in ("--port", "--config", "--no-browser"):
+            assert opsiyon in result.output
+
+    def test_ana_help_ui_alt_komutunu_anar(self) -> None:
+        result = runner.invoke(app, ["--help"])
+        # rich help metnini 80 sütunda sarar — boşluk normalize edilerek aranır.
+        assert "fillercut ui" in " ".join(result.output.split())
+
+    def test_uvicorn_yalniz_loopbackte(self) -> None:
+        with patch("uvicorn.run") as m_run:
+            result = runner.invoke(ui_app, ["--no-browser"])
+        assert result.exit_code == 0
+        kwargs = m_run.call_args.kwargs
+        assert kwargs["host"] == "127.0.0.1"  # 0.0.0.0 YOK (handoff kilidi)
+        assert kwargs["port"] == 8765
+        assert "http://127.0.0.1:8765/" in result.output
+
+    def test_port_opsiyonu_gecer(self) -> None:
+        with patch("uvicorn.run") as m_run:
+            result = runner.invoke(ui_app, ["--port", "9123", "--no-browser"])
+        assert result.exit_code == 0
+        assert m_run.call_args.kwargs["port"] == 9123
+
+    def test_fastapi_uygulamasi_gecirilir(self) -> None:
+        from fastapi import FastAPI
+
+        with patch("uvicorn.run") as m_run:
+            runner.invoke(ui_app, ["--no-browser"])
+        assert isinstance(m_run.call_args.args[0], FastAPI)
+
+    def test_tarayici_on_ready_kanaliyla_acilir(self) -> None:
+        import fillercut.web.app as web_app_mod
+
+        with (
+            patch("uvicorn.run"),
+            patch.object(web_app_mod, "create_app", wraps=web_app_mod.create_app) as m_ca,
+            patch("webbrowser.open") as m_open,
+        ):
+            result = runner.invoke(ui_app, [])
+            assert result.exit_code == 0
+            on_ready = m_ca.call_args.kwargs["on_ready"]
+            assert on_ready is not None
+            m_open.assert_not_called()  # sunucu hazır olmadan açılmaz
+            on_ready()  # lifespan startup'ın yapacağı çağrı (patch İÇİNDE)
+            m_open.assert_called_once_with("http://127.0.0.1:8765/")
+
+    def test_no_browser_on_ready_gecirmez(self) -> None:
+        import fillercut.web.app as web_app_mod
+
+        with (
+            patch("uvicorn.run"),
+            patch.object(web_app_mod, "create_app", wraps=web_app_mod.create_app) as m_ca,
+        ):
+            runner.invoke(ui_app, ["--no-browser"])
+        assert m_ca.call_args.kwargs["on_ready"] is None
+
+    def test_config_hatasi_temiz_cikis(self, tmp_path: Path) -> None:
+        result = runner.invoke(ui_app, ["--config", str(tmp_path / "yok.toml")])
+        assert result.exit_code == 1
+        assert "bulunamadı" in _birlesik_cikti(result)
+
+    def test_config_uygulamaya_akar(self, tmp_path: Path) -> None:
+        cfg_file = tmp_path / "fc.toml"
+        cfg_file.write_text("config_version = 1\naggressive = true\n", encoding="utf-8")
+        with patch("uvicorn.run") as m_run:
+            result = runner.invoke(ui_app, ["--config", str(cfg_file), "--no-browser"])
+        assert result.exit_code == 0
+        web_uygulama = m_run.call_args.args[0]
+        assert web_uygulama.state.config.aggressive is True
+
+    def test_port_doluysa_turkce_hata_uvicorn_calismaz(self) -> None:
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            s.listen(1)
+            dolu_port = s.getsockname()[1]
+            with patch("uvicorn.run") as m_run:
+                result = runner.invoke(ui_app, ["--port", str(dolu_port), "--no-browser"])
+        assert result.exit_code == 1
+        assert "kullanımda" in _birlesik_cikti(result)
+        m_run.assert_not_called()
+
+    def test_port_bos_bos_portta_true(self) -> None:
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            bos_port = s.getsockname()[1]
+        # soket kapandı — port artık boş
+        assert _port_bos(bos_port) is True
+
+
+class TestMainEntryUiDispatch:
+    """main_entry: `fillercut ui ...` ui_app'e, diğer HER yol mevcut app'e."""
+
+    def test_ui_argumani_ui_appe_gider(self) -> None:
+        with (
+            patch.object(sys, "argv", ["fillercut", "ui", "--port", "9000"]),
+            patch("fillercut.cli.ui_app") as sahte_ui,
+            patch("fillercut.cli.app") as sahte_app,
+        ):
+            main_entry()
+        sahte_ui.assert_called_once_with(args=["--port", "9000"], prog_name="fillercut ui")
+        sahte_app.assert_not_called()
+
+    def test_video_yolu_mevcut_appe_gider(self) -> None:
+        with (
+            patch.object(sys, "argv", ["fillercut", "video.mp4"]),
+            patch("fillercut.cli.ui_app") as sahte_ui,
+            patch("fillercut.cli.app") as sahte_app,
+        ):
+            main_entry()
+        sahte_app.assert_called_once_with()
+        sahte_ui.assert_not_called()
+
+    def test_ui_benzeri_ama_farkli_arguman_appe_gider(self) -> None:
+        # "ui" TAM eşleşme ister: "ui.mp4" video yoludur.
+        with (
+            patch.object(sys, "argv", ["fillercut", "ui.mp4"]),
+            patch("fillercut.cli.ui_app") as sahte_ui,
+            patch("fillercut.cli.app") as sahte_app,
+        ):
+            main_entry()
+        sahte_app.assert_called_once_with()
+        sahte_ui.assert_not_called()
