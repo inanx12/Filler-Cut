@@ -17,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fillercut.web.app import create_app
-from fillercut.web.fs import guvenli_yol
+from fillercut.web.fs import EV_ETIKETI, guvenli_yol, yol_parcalari
 
 
 @pytest.fixture()
@@ -85,6 +85,57 @@ class TestGuvenliYol:
         # dış yol büyük harfle de yazılsa reddedilir.
         assert guvenli_yol(str(ev / "KAYITLAR"), ev) is not None
         assert guvenli_yol(str(ev.parent).upper(), ev) is None
+
+
+class TestBreadcrumb:
+    """Breadcrumb hapsin GÖRÜNÜR ucudur: ev'in üstü hiç listelenmez."""
+
+    def test_kokte_tek_parca(self, ev: Path) -> None:
+        parcalar = yol_parcalari(ev.resolve(), ev)
+        assert [(p.ad, p.yol) for p in parcalar] == [(EV_ETIKETI, str(ev.resolve()))]
+
+    def test_alt_dizinde_zincir(self, ev: Path) -> None:
+        derin = ev / "kayitlar"
+        parcalar = yol_parcalari(derin.resolve(), ev)
+        assert [p.ad for p in parcalar] == [EV_ETIKETI, "kayitlar"]
+        assert parcalar[-1].yol == str(derin.resolve())
+
+    def test_ic_ice_dizinler(self, ev: Path) -> None:
+        derin = ev / "kayitlar" / "2026" / "ocak"
+        derin.mkdir(parents=True)
+        parcalar = yol_parcalari(derin.resolve(), ev)
+        assert [p.ad for p in parcalar] == [EV_ETIKETI, "kayitlar", "2026", "ocak"]
+        # her parça gerçekten AÇILABİLİR olmalı (hapis içi + var)
+        for p in parcalar:
+            assert guvenli_yol(p.yol, ev) is not None
+            assert Path(p.yol).is_dir()
+
+    def test_ev_ustundeki_bilesenler_listelenmez(self, ev: Path) -> None:
+        # KRİTİK: C:\ veya /home gibi üst bileşenler görünseydi tıklandığında
+        # 403 alınırdı — arayüz var olmayan bir yol vaat etmiş olurdu.
+        parcalar = yol_parcalari((ev / "kayitlar").resolve(), ev)
+        assert all(Path(p.yol).is_relative_to(ev.resolve()) for p in parcalar)
+        assert str(ev.parent) not in [p.yol for p in parcalar]
+
+    def test_hapis_disi_dizin_bos_liste(self, ev: Path, disari: Path) -> None:
+        assert yol_parcalari(disari.resolve(), ev) == []
+
+    def test_cevapta_parcalar_var(self, ev: Path) -> None:
+        client = TestClient(create_app(fs_home=ev))
+        veri = client.get(
+            "/api/fs/browse", params={"path": str(ev / "kayitlar")}
+        ).json()
+        assert [p["ad"] for p in veri["parcalar"]] == [EV_ETIKETI, "kayitlar"]
+
+    def test_parcalara_tiklamak_calisir(self, ev: Path) -> None:
+        # Breadcrumb'daki her yol gerçekten browse edilebilmeli.
+        client = TestClient(create_app(fs_home=ev))
+        veri = client.get(
+            "/api/fs/browse", params={"path": str(ev / "kayitlar")}
+        ).json()
+        for parca in veri["parcalar"]:
+            cevap = client.get("/api/fs/browse", params={"path": parca["yol"]})
+            assert cevap.status_code == 200, parca
 
 
 class TestBrowseRoute:

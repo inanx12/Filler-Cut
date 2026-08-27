@@ -114,16 +114,35 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   background: var(--kart-ust);
 }
 
+/* Breadcrumb: ev dizininden bulunulan klasöre kadar tıklanabilir parçalar.
+   Uzun yolda soldan taşar; kuyruk (bulunulan klasör) görünür kalır. */
 .yol {
-  color: var(--soluk);
+  display: flex;
+  align-items: center;
+  gap: 2px;
   overflow-x: auto;
   white-space: nowrap;
   scrollbar-width: thin;
-  direction: rtl; /* uzun yolda kuyruk (dosyaya yakın uç) görünür kalsın */
-  text-align: left;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  font-size: 13px;
 }
 
-.yol bdi { direction: ltr; unicode-bidi: isolate; }
+.yol-parca {
+  font: inherit;
+  background: none;
+  border: 0;
+  color: var(--soluk);
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 6px;
+}
+
+.yol-parca:hover { background: var(--kart); color: var(--metin); }
+.yol-parca:focus-visible { outline: 2px solid var(--vurgu); outline-offset: 1px; }
+.yol-parca.son { color: var(--metin); font-weight: 600; cursor: default; }
+.yol-parca.son:hover { background: none; }
+.yol-ayrac { color: var(--cizgi); flex: none; }
 
 .liste {
   list-style: none;
@@ -238,6 +257,8 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   position: relative;
 }
 
+.asamalar li > span:nth-child(2) { flex: 1; }
+
 /* düğümler arası dikey bağlantı çizgisi */
 .asamalar li + li::before {
   content: "";
@@ -289,6 +310,15 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   background: var(--yesil-koyu);
   color: #fff;
 }
+
+.asama-sure {
+  margin-left: auto;
+  color: var(--soluk);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.asama-sure.kosuyor { color: var(--vurgu); }
 
 .durum-satiri { min-height: 20px; color: var(--soluk); font-size: 13px; padding-top: 6px; }
 .durum-satiri.uyari { color: #d29922; }

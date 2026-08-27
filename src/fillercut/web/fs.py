@@ -51,17 +51,31 @@ class VideoGirdisi(BaseModel):
     boyut: int
 
 
+class YolParcasi(BaseModel):
+    """Breadcrumb'daki tek tıklanabilir yol parçası."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ad: str
+    yol: str
+
+
 class GezginCevap(BaseModel):
     """``GET /api/fs/browse`` cevabı.
 
     ``ust`` bir üst dizinin yoludur; gezgin kökünde (ev dizini) ``None`` —
     UI "yukarı" düğmesini bununla kapatır (hapsin görünür ucu).
+
+    ``parcalar`` breadcrumb'dır: **ev dizininden** bulunulan dizine kadar,
+    sırayla. Ev'in ÜSTÜ hiç görünmez — gösterilse tıklandığında 403 alırdı;
+    hapsin sınırı arayüzde de görünür olur.
     """
 
     model_config = ConfigDict(frozen=True)
 
     yol: str
     ust: str | None
+    parcalar: list[YolParcasi]
     dizinler: list[DizinGirdisi]
     videolar: list[VideoGirdisi]
 
@@ -105,6 +119,30 @@ def _gizli(p: Path) -> bool:
     return bool(attrs & stat_mod.FILE_ATTRIBUTE_HIDDEN)
 
 
+#: Breadcrumb'ın ilk parçasının etiketi — kullanıcının ev dizini.
+EV_ETIKETI = "Ev"
+
+
+def yol_parcalari(dizin: Path, ev: Path) -> list[YolParcasi]:
+    """Ev dizininden ``dizin``e kadar tıklanabilir parçalar (saf fonksiyon).
+
+    Ev'in kendisi ilk parçadır (``EV_ETIKETI``); üstündeki hiçbir bileşen
+    listelenmez — hapis dışına tıklanacak bir bağlantı üretmek kullanıcıya
+    var olmayan bir yol vaat etmek olurdu. ``dizin`` ev'in altında değilse
+    boş liste döner (çağıran zaten 403 vermiştir).
+    """
+    ev_cozulmus = ev.resolve()
+    if not dizin.is_relative_to(ev_cozulmus):
+        return []
+    parcalar = [YolParcasi(ad=EV_ETIKETI, yol=str(ev_cozulmus))]
+    goreli = dizin.relative_to(ev_cozulmus)
+    imlec = ev_cozulmus
+    for parca in goreli.parts:
+        imlec = imlec / parca
+        parcalar.append(YolParcasi(ad=parca, yol=str(imlec)))
+    return parcalar
+
+
 def dizini_listele(dizin: Path, ev: Path) -> GezginCevap:
     """Tek dizinin gezgin görünümü: alt dizinler + video dosyaları (ada sıralı).
 
@@ -130,7 +168,13 @@ def dizini_listele(dizin: Path, ev: Path) -> GezginCevap:
     videolar.sort(key=lambda g: g.ad.lower())
     ev_cozulmus = ev.resolve()
     ust = None if dizin == ev_cozulmus else str(dizin.parent)
-    return GezginCevap(yol=str(dizin), ust=ust, dizinler=dizinler, videolar=videolar)
+    return GezginCevap(
+        yol=str(dizin),
+        ust=ust,
+        parcalar=yol_parcalari(dizin, ev_cozulmus),
+        dizinler=dizinler,
+        videolar=videolar,
+    )
 
 
 def ev_dizini(request: Request) -> Path:

@@ -93,13 +93,38 @@ function videoSec(girdi, satir) {
   el("btn-baslat").disabled = false;
 }
 
-function yolYaz(yol) {
-  /* direction:rtl kaydırma hilesi bidi'yi bozmasın diye bdi içinde. */
+function yolYaz(parcalar, tamYol) {
+  /* Breadcrumb sunucudan gelir (hapsin kaynağı orası): ev dizininin ÜSTÜ
+     hiç listelenmez, yani tıklanabilir her parça gerçekten açılabilir.
+     Flex row-reverse + DOM'da ters ekleme: taşan uzun yolda kuyruk
+     (bulunulan klasör) görünür kalır. */
   const kap = el("gezgin-yol");
   kap.textContent = "";
-  const b = document.createElement("bdi");
-  b.textContent = yol;
-  kap.appendChild(b);
+  const liste = parcalar && parcalar.length ? parcalar : [{ ad: tamYol, yol: tamYol }];
+  liste
+    .map((parca, i) => {
+      const dugme = document.createElement("button");
+      dugme.className = "yol-parca" + (i === liste.length - 1 ? " son" : "");
+      dugme.textContent = parca.ad;
+      dugme.title = parca.yol;
+      if (i < liste.length - 1) {
+        dugme.addEventListener("click", () => gezginYukle(parca.yol));
+      } else {
+        dugme.disabled = true;
+      }
+      return dugme;
+    })
+    .forEach((dugme, i, hepsi) => {
+      // row-reverse: son parça önce eklenir ki sağda kalsın
+      const ters = hepsi[hepsi.length - 1 - i];
+      kap.appendChild(ters);
+      if (i < hepsi.length - 1) {
+        const ayrac = document.createElement("span");
+        ayrac.className = "yol-ayrac";
+        ayrac.textContent = "›";
+        kap.appendChild(ayrac);
+      }
+    });
 }
 
 async function gezginYukle(yol) {
@@ -123,7 +148,7 @@ async function gezginYukle(yol) {
   durum.yol = veri.yol;
   durum.ust = veri.ust;
   secimiTemizle();
-  yolYaz(veri.yol);
+  yolYaz(veri.parcalar, veri.yol);
   el("btn-ust").disabled = veri.ust === null;
 
   const liste = el("gezgin-liste");
@@ -208,11 +233,58 @@ function asamalariKur() {
     kodEl.textContent = " " + kod;
     govde.appendChild(adEl);
     govde.appendChild(kodEl);
-    li.appendChild(dugum);
-    li.appendChild(govde);
+    const sure = document.createElement("span");
+    sure.className = "asama-sure";
+    sure.dataset.kod = kod;
+    li.append(dugum, govde, sure);
     ol.appendChild(li);
   }
+  kosu.baslangiclar = {};
+  kosu.sureler = {};
+  kosu.aktifAsama = null;
 }
+
+/* ── aşama süreleri ───────────────────────────────────────────────────
+ * Süreler SUNUCU damgasından (`olay.ms`) hesaplanır: SSE kopup yeniden
+ * bağlanınca geçmiş toptan replay edilir, istemcide ölçülen süre o anda
+ * sıfırlanırdı. Koşan aşama için sunucu saati ile yerel saat arasındaki
+ * fark bir kez yakalanır ve sayaç ondan ilerler. */
+
+const kosu = { baslangiclar: {}, sureler: {}, aktifAsama: null, saatFarki: 0 };
+
+function sureMs(ms) {
+  return ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " sn";
+}
+
+function asamaSuresiYaz(kod, ms, kesin) {
+  const alan = document.querySelector('.asama-sure[data-kod="' + kod + '"]');
+  if (!alan) return;
+  alan.textContent = sureMs(ms);
+  alan.classList.toggle("kosuyor", !kesin);
+}
+
+function asamaSaatiIsle(olay) {
+  if (typeof olay.ms !== "number") return;
+  kosu.saatFarki = Date.now() - olay.ms;
+  if (kosu.aktifAsama !== null) {
+    const gecen = olay.ms - kosu.baslangiclar[kosu.aktifAsama];
+    kosu.sureler[kosu.aktifAsama] = gecen;
+    asamaSuresiYaz(kosu.aktifAsama, gecen, true); // biten aşamada KALICI
+  }
+  if (olay.tip === "asama") {
+    kosu.baslangiclar[olay.asama] = olay.ms;
+    kosu.aktifAsama = olay.asama;
+  } else {
+    kosu.aktifAsama = null; // terminal olay: koşan aşama kalmadı
+  }
+}
+
+setInterval(() => {
+  if (kosu.aktifAsama === null) return;
+  if (el("ekran-kosu").classList.contains("gizli")) return;
+  const simdi = Date.now() - kosu.saatFarki;
+  asamaSuresiYaz(kosu.aktifAsama, simdi - kosu.baslangiclar[kosu.aktifAsama], false);
+}, 250);
 
 function asamaGuncelle(aktifKod) {
   const indeks = ASAMALAR.findIndex(([kod]) => kod === aktifKod);
@@ -288,6 +360,7 @@ function sseKapat() {
 }
 
 function olayIsle(olay) {
+  asamaSaatiIsle(olay);
   if (olay.tip === "durum") {
     if (olay.durum === "queued") el("kosu-durum").textContent = "Sırada…";
     if (olay.durum === "running") el("kosu-durum").textContent = "Çalışıyor…";

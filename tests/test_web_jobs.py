@@ -259,6 +259,36 @@ class TestJobAkisi:
         assert _bitene_kadar_bekle(client, ikinci)["durum"] == "done"
 
 
+class TestAsamaSureleri:
+    """Olaylar sunucuda damgalanır — aşama süreleri replay'de sıfırlanmasın."""
+
+    def test_her_olay_ms_damgasi_tasir(self, ev: Path) -> None:
+        client = _client(ev, _basarili_kosucu)
+        job_id = _job_baslat(client, ev)
+        _bitene_kadar_bekle(client, job_id)
+        for _, olay in _sse_olaylari(client, job_id):
+            assert isinstance(olay["ms"], int), olay
+
+    def test_damgalar_azalmaz(self, ev: Path) -> None:
+        client = _client(ev, _basarili_kosucu)
+        job_id = _job_baslat(client, ev)
+        _bitene_kadar_bekle(client, job_id)
+        damgalar = [o["ms"] for _, o in _sse_olaylari(client, job_id)]
+        assert damgalar == sorted(damgalar)
+        assert damgalar[0] == 0 or damgalar[0] >= 0
+
+    def test_replayde_damgalar_degismez(self, ev: Path) -> None:
+        """Yeniden bağlanma aynı süreleri vermeli (istemcide ölçülseydi
+        replay'de hepsi 'şimdi' görünür, aşama süreleri sıfırlanırdı)."""
+        client = _client(ev, _basarili_kosucu)
+        job_id = _job_baslat(client, ev)
+        _bitene_kadar_bekle(client, job_id)
+        birinci = [o["ms"] for _, o in _sse_olaylari(client, job_id)]
+        time.sleep(0.15)
+        ikinci = [o["ms"] for _, o in _sse_olaylari(client, job_id)]
+        assert birinci == ikinci
+
+
 class TestHataYuzeyi:
     """Handoff: pipeline hataları Türkçe, düz metin, eyleme dökülebilir —
     stack trace yapıştırma yok; log detayı ayrı alan."""
@@ -279,7 +309,11 @@ class TestHataYuzeyi:
         assert veri["hata_detay"] is None  # PipelineError'da mesaj yeterli
         assert "Traceback" not in str(veri)
         son_olay = _sse_olaylari(client, job_id)[-1][1]
-        assert son_olay == {"tip": "hata", "mesaj": mesaj, "detay": None}
+        # `ms` her olayda vardır (aşama süreleri); içeriği ayrı sınıfta kilitli.
+        assert {k: v for k, v in son_olay.items() if k != "ms"} == {
+            "tip": "hata", "mesaj": mesaj, "detay": None
+        }
+        assert isinstance(son_olay["ms"], int)
 
     def test_beklenmeyen_hata_genel_mesaj_ayri_detay(self, ev: Path) -> None:
         def cokan_kosucu(job: Job, ilerleme: Callable[[str], None]) -> JobOzet:

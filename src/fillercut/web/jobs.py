@@ -30,6 +30,7 @@ import asyncio
 import json
 import mimetypes
 import threading
+import time
 from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -177,12 +178,23 @@ class Job:
         self._iptal = False
         self._onaylanan: CutPlan | None = None
         self._onaylanan_ozet: EditOzeti | None = None
+        #: Aşama sürelerinin referansı — olaylara işlenen `ms` bundan sayılır.
+        self._baslangic = time.monotonic()
         self._olaylar: list[dict[str, object]] = []
         self._olay_ekle({"tip": "durum", "durum": "queued"})
 
     # ── durum geçişleri (worker thread) ──────────────────────────────────────
 
     def _olay_ekle(self, olay: dict[str, object]) -> None:
+        """Olayı geçmişe ekler; ``ms`` (iş başından beri geçen süre) SUNUCUDA
+        damgalanır.
+
+        Süre istemcide ölçülemez: SSE yoklamalı akar, kopup yeniden bağlanınca
+        geçmiş TOPTAN replay edilir ve tüm olaylar "şimdi" gelmiş gibi görünür
+        — aşama süreleri o hâlde sıfırlanırdı. Monotonik saat kullanılır
+        (sistem saati geriye alınırsa süre negatife düşmesin).
+        """
+        olay["ms"] = int((time.monotonic() - self._baslangic) * 1000)
         self._olaylar.append(olay)
 
     def basladi(self) -> None:
