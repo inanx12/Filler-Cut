@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from fillercut.models import CutPlan, Segment
 from fillercut.pipeline import ReviewBaglam
 from fillercut.plan.cutplan import MANUEL_REASON
-from fillercut.report.json_report import build_report
+from fillercut.report.json_report import TierCounts, build_report
 from fillercut.web.app import create_app
 from fillercut.web.jobs import Job, JobKayit, JobOzet
 from fillercut.web.review import (
@@ -96,6 +96,7 @@ OZET = JobOzet(
     cut_total_ms=3_000,
     saved_percent=15.0,
     cut_count=3,
+    tiers=TierCounts(kesin_filler=1, aday_filler=1, silence=1),
 )
 
 

@@ -59,6 +59,18 @@ def _compress_repeats(s: str) -> str:
     return "".join(out)
 
 
+def goruntu_formu(text: str) -> str:
+    """GÖRÜNTÜ formu: TR-safe lower + noktalama kırpma — katlama/sıkıştırma YOK.
+
+    Karşılaştırma formundan (``normalize_word``) bilinçli olarak ayrıdır:
+    orada ``ı→i`` katlaması ve tekrar sıkıştırması eşleşme içindir ama
+    ekranda ``ııı``yı ``ii`` diye göstermek kullanıcıya yabancıdır. Bu form
+    yalnızca "hangi kelimeler kesildi" dökümünde (v1.0 istatistik paneli)
+    kullanılır: ``Eee,`` ve ``eee`` aynı kovada toplanır, ``ııı`` kendisi kalır.
+    """
+    return text.replace("İ", "i").replace("I", "ı").lower().strip(_PUNCT)
+
+
 def normalize_word(text: str) -> str:
     """Karşılaştırma formu: TR-safe lower → noktalama kırp → tekrar sıkıştır → ı→i.
 
@@ -72,7 +84,7 @@ def normalize_word(text: str) -> str:
 
 def _normalize_raw(text: str) -> str:
     """Tekrar sıkıştırma UYGULANMAMIŞ normalize form (fuzzy uzunluk kapısı için)."""
-    return text.replace("İ", "i").replace("I", "ı").lower().strip(_PUNCT).replace("ı", "i")
+    return goruntu_formu(text).replace("ı", "i")
 
 
 #: Normalleşmiş filler listeleri — karşılaştırmalar bunlarla yapılır.

@@ -478,11 +478,16 @@ body.review-modu .ust { max-width: 1100px; }
 
 .timeline-ipucu { color: var(--soluk); font-size: 12px; margin-top: 8px; }
 
-/* özet şerit */
-.ozet-serit { display: flex; gap: 28px; padding: 12px 16px; }
-.ozet-serit > div { display: flex; flex-direction: column; gap: 2px; }
-.etiket-kucuk { color: var(--soluk); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
-.ozet-serit span:last-child { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* başlıktaki canlı özet (onay öncesi kazanım önizlemesi) */
+.canli-ozet {
+  color: var(--soluk);
+  font-size: 13px;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.canli-ozet b { color: var(--metin); font-weight: 600; }
+.canli-ozet .yeni-sure { color: var(--yesil); font-weight: 600; }
 
 /* kesim listesi */
 .liste-kart { padding: 6px; }
@@ -551,6 +556,47 @@ body.review-modu .ust { max-width: 1100px; }
 
 .sonuc-alt { color: var(--soluk); margin-top: 8px; font-size: 14px; }
 
+/* istatistik paneli */
+.kirilim { list-style: none; margin: 0; padding: 0; }
+
+.kirilim li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--cizgi);
+}
+
+.kirilim li:last-child { border-bottom: 0; }
+.kirilim .ad { flex: 1; }
+.kirilim .sayi { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.kirilim .cubuk {
+  flex: 2;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--kart-ust);
+  overflow: hidden;
+  max-width: 260px;
+}
+
+.kirilim .cubuk span { display: block; height: 100%; border-radius: 3px; }
+
+.etiketler { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+
+.etiketler li {
+  background: var(--kart-ust);
+  border: 1px solid var(--cizgi);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.etiketler .kelime { font-family: ui-monospace, Consolas, monospace; }
+.etiketler .adet { color: var(--soluk); margin-left: 6px; }
+
+h2.ust-bosluk { margin-top: 20px; }
+
 .cikti-satir {
   display: flex;
   gap: 12px;
@@ -558,6 +604,8 @@ body.review-modu .ust { max-width: 1100px; }
   border-bottom: 1px solid var(--cizgi);
   align-items: baseline;
 }
+
+.cikti-satir .goster { margin-left: auto; flex: none; }
 
 .cikti-satir:last-child { border-bottom: 0; }
 

@@ -443,13 +443,34 @@ function reviewCiz() {
   const g = review.gorunum;
   reviewHata(g.hata);
   el("btn-onayla").disabled = !!g.hata;
-  el("review-kesim-sayisi").textContent = String(
-    g.kesimler.filter((k) => k.aktif).length
-  );
-  el("review-kesilen").textContent = mmss(g.kesilen_ms);
-  el("review-kalan").textContent = mmss(g.kalan_ms);
+  canliOzetCiz();
   bloklariCiz();
   listeyiCiz();
+}
+
+function canliOzetCiz() {
+  /* Onay öncesi kazanım önizlemesi: her düzenlemeden sonra sunucunun
+     döndürdüğü sayılarla yeniden yazılır (istemcide hesap yok). */
+  const g = review.gorunum;
+  const aktif = g.kesimler.filter((k) => k.aktif).length;
+  const yuzdeKazanc = g.total_ms > 0 ? (g.kesilen_ms / g.total_ms) * 100 : 0;
+  const kap = el("canli-ozet");
+  kap.textContent = "";
+  const parcalar = [
+    ["b", String(aktif) + " kesim"],
+    ["span", " · toplam "],
+    ["b", g.kesilen_ms + " ms"],
+    ["span", " kesilecek · yeni süre "],
+    ["span.yeni-sure", mmss(g.kalan_ms)],
+    ["span", " (%" + yuzdeKazanc.toFixed(1) + " kazanım)"],
+  ];
+  for (const [etiket, metin] of parcalar) {
+    const [ad, sinif] = etiket.split(".");
+    const oge = document.createElement(ad);
+    if (sinif) oge.className = sinif;
+    oge.textContent = metin;
+    kap.appendChild(oge);
+  }
 }
 
 function bloklariCiz() {
@@ -815,7 +836,112 @@ function sonucGoster(ozet) {
   el("sonuc-cikti").textContent = ozet.output_path;
   el("sonuc-rapor").textContent = ozet.report_path;
   el("sonuc-transkript").textContent = ozet.transcript_path;
+  el("goster-hata").classList.add("gizli");
+  istatistikCiz(ozet);
   ekranGoster("ekran-sonuc");
+}
+
+/* İstatistik paneli — sayıların TEK kaynağı sunucudan gelen özet (rapor.json
+   ile aynı nesne); burada hiçbir sayı yeniden hesaplanmaz. */
+
+const TUR_ETIKET = {
+  kesin_filler: ["Kesin filler", "#e5484d"],
+  aday_filler: ["Aday filler", "#d29922"],
+  silence: ["Sessizlik", "#388bfd"],
+  manuel: ["Elle eklenen", "#a371f7"],
+};
+
+const DUZENLEME_ETIKET = {
+  devre_disi: "Geri alınan kesim",
+  sinir_degisen: "Sınırı değiştirilen",
+  manuel_eklenen: "Elle eklenen",
+};
+
+function kirilimSatiri(ad, sayi, enBuyuk, renk) {
+  const li = document.createElement("li");
+  const adEl = document.createElement("span");
+  adEl.className = "ad";
+  adEl.textContent = ad;
+  const cubuk = document.createElement("span");
+  cubuk.className = "cubuk";
+  const dolgu = document.createElement("span");
+  dolgu.style.width = (enBuyuk > 0 ? (sayi / enBuyuk) * 100 : 0) + "%";
+  dolgu.style.background = renk;
+  cubuk.appendChild(dolgu);
+  const sayiEl = document.createElement("span");
+  sayiEl.className = "sayi";
+  sayiEl.textContent = String(sayi);
+  li.append(adEl, cubuk, sayiEl);
+  return li;
+}
+
+function istatistikCiz(ozet) {
+  const tiers = ozet.tiers || {};
+  const liste = el("tur-kirilim");
+  liste.textContent = "";
+  const degerler = Object.keys(TUR_ETIKET).map((k) => tiers[k] || 0);
+  const enBuyuk = Math.max(1, ...degerler);
+  for (const anahtar of Object.keys(TUR_ETIKET)) {
+    const [etiket, renk] = TUR_ETIKET[anahtar];
+    liste.appendChild(kirilimSatiri(etiket, tiers[anahtar] || 0, enBuyuk, renk));
+  }
+
+  const dagilim = ozet.filler_dagilimi || [];
+  el("filler-bolum").classList.toggle("gizli", dagilim.length === 0);
+  const etiketler = el("filler-dagilim");
+  etiketler.textContent = "";
+  for (const [kelime, adet] of dagilim) {
+    const li = document.createElement("li");
+    const k = document.createElement("span");
+    k.className = "kelime";
+    k.textContent = kelime;
+    const a = document.createElement("span");
+    a.className = "adet";
+    a.textContent = "×" + adet;
+    li.append(k, a);
+    etiketler.appendChild(li);
+  }
+
+  const duzenleme = ozet.duzenleme;
+  const varMi =
+    duzenleme &&
+    Object.values(duzenleme).some((v) => v > 0);
+  el("duzenleme-bolum").classList.toggle("gizli", !varMi);
+  const dListe = el("duzenleme-kirilim");
+  dListe.textContent = "";
+  if (varMi) {
+    const enB = Math.max(1, ...Object.values(duzenleme));
+    for (const anahtar of Object.keys(DUZENLEME_ETIKET)) {
+      dListe.appendChild(
+        kirilimSatiri(
+          DUZENLEME_ETIKET[anahtar], duzenleme[anahtar] || 0, enB, "#8b949e"
+        )
+      );
+    }
+  }
+}
+
+/* "Klasörde göster" — dosya yöneticisini sunucu açar (tarayıcı açamaz). */
+for (const dugme of document.querySelectorAll(".goster")) {
+  dugme.addEventListener("click", async () => {
+    const yol = el(dugme.dataset.hedef).textContent;
+    const kutu = el("goster-hata");
+    kutu.classList.add("gizli");
+    try {
+      const cevap = await fetch("/api/reveal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: yol }),
+      });
+      if (!cevap.ok) {
+        kutu.textContent = await apiHatasi(cevap);
+        kutu.classList.remove("gizli");
+      }
+    } catch (_) {
+      kutu.textContent = "Sunucuya ulaşılamıyor — klasör açılamadı.";
+      kutu.classList.remove("gizli");
+    }
+  });
 }
 
 function yeniIs() {

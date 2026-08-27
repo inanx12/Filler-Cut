@@ -42,7 +42,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
 from fillercut.config import Config
-from fillercut.models import CutPlan
+from fillercut.models import CutPlan, Segment
 from fillercut.pipeline import (
     PipelineError,
     PipelineResult,
@@ -50,7 +50,12 @@ from fillercut.pipeline import (
     ReviewKarari,
 )
 from fillercut.plan.cutplan import CutPlanError
-from fillercut.report.json_report import EditOzeti, Report
+from fillercut.report.json_report import (
+    EditOzeti,
+    Report,
+    TierCounts,
+    filler_dagilimi,
+)
 from fillercut.web import fs
 from fillercut.web.review import (
     EditsIstek,
@@ -76,7 +81,14 @@ _SSE_PING_SN = 15.0
 
 
 class JobOzet(BaseModel):
-    """Biten işin sonuç özeti — Sonuç ekranının veri kaynağı (ham sayılar)."""
+    """Biten işin sonuç özeti — Sonuç ekranının veri kaynağı (ham sayılar).
+
+    v1.0: istatistik paneli için tür kırılımı (``tiers``), düzenleme sayıları
+    (``duzenleme``) ve kesilen filler kelimelerinin dökümü (``filler_dagilimi``)
+    da taşınır. Üçü de YAZILAN rapordan gelir — panel hiçbir sayıyı yeniden
+    hesaplamaz, dolayısıyla ekrandaki sayı ile ``rapor.json``'daki sayı
+    ayrışamaz (kilit: ``tests/test_web_istatistik.py``).
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -88,6 +100,12 @@ class JobOzet(BaseModel):
     cut_total_ms: int
     saved_percent: float
     cut_count: int
+    #: Kademe kırılımı: kesin/aday filler, sessizlik, elle eklenen (manuel).
+    tiers: TierCounts
+    #: Web review düzenleme sayıları; CLI/düzenlemesiz koşuda ``None``.
+    duzenleme: EditOzeti | None = None
+    #: ``[["eee", 3], ["şey", 1]]`` — çoktan aza, eşitlikte alfabetik.
+    filler_dagilimi: list[tuple[str, int]] = []
 
     @classmethod
     def from_result(cls, sonuc: PipelineResult) -> JobOzet:
@@ -102,7 +120,27 @@ class JobOzet(BaseModel):
             cut_total_ms=r.cut_total.ms,
             saved_percent=r.saved_percent,
             cut_count=r.cut_count,
+            tiers=r.tiers,
+            duzenleme=r.duzenleme,
+            filler_dagilimi=filler_dagilimi_rapordan(r),
         )
+
+
+def filler_dagilimi_rapordan(rapor: Report) -> list[tuple[str, int]]:
+    """Rapordaki kesimlerden filler kelime dökümünü çıkarır (saf).
+
+    ``Report.cuts`` (``ReportCut``) ile ``Segment`` aynı reason sözleşmesini
+    taşır; sayım gövdesi ``json_report.filler_dagilimi``'dır — ikinci bir
+    parse kopyası yazılmaz.
+    """
+    return filler_dagilimi(
+        [
+            Segment(
+                start_ms=c.start_ms, end_ms=c.end_ms, kind=c.kind, reason=c.reason
+            )
+            for c in rapor.cuts
+        ]
+    )
 
 
 class Job:

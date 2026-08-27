@@ -19,6 +19,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fillercut.pipeline import ASAMALAR, PipelineError
+from fillercut.report.json_report import TierCounts
 from fillercut.web.app import create_app
 from fillercut.web.jobs import Job, JobKayit, JobOzet, Kosucu
 
@@ -31,6 +32,7 @@ OZET = JobOzet(
     cut_total_ms=2_000,
     saved_percent=20.0,
     cut_count=3,
+    tiers=TierCounts(kesin_filler=1, aday_filler=0, silence=2),
 )
 
 

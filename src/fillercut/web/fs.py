@@ -18,6 +18,8 @@ attribute) atlanır.
 from __future__ import annotations
 
 import stat as stat_mod
+import subprocess
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -134,6 +136,69 @@ def dizini_listele(dizin: Path, ev: Path) -> GezginCevap:
 def ev_dizini(request: Request) -> Path:
     """Uygulamanın hapis kökü (``create_app(fs_home=...)`` ile enjekte edilir)."""
     return cast(Path, request.app.state.fs_home)
+
+
+def reveal_komutu(hedef: Path, *, platform: str) -> list[str] | None:
+    """Dosyayı dosya yöneticisinde gösterecek komutu üretir — saf fonksiyon.
+
+    Desteklenmeyen platformda ``None`` döner (route 501'e çevirir). Komut
+    LİSTE olarak üretilir ve kabuk kullanılmaz: yol zaten ev dizini hapsinden
+    geçmiştir, ayrıca kabuk yorumlaması hiç devreye girmez.
+
+    - Windows: ``explorer /select,<yol>`` — dosyayı klasörde seçili açar.
+      (explorer başarıda bile 0 dışında kod dönebilir; çağıran kodu okumaz.)
+    - macOS: ``open -R <yol>`` (aynı davranış).
+    - Linux/diğer POSIX: ``xdg-open`` yalnız KLASÖR açar (seçme yeteneği yok),
+      bu yüzden dosyanın bulunduğu dizin verilir.
+    """
+    if platform == "win32":
+        return ["explorer", f"/select,{hedef}"]
+    if platform == "darwin":
+        return ["open", "-R", str(hedef)]
+    if platform.startswith("linux"):
+        return ["xdg-open", str(hedef if hedef.is_dir() else hedef.parent)]
+    return None
+
+
+class RevealIstek(BaseModel):
+    """``POST /api/reveal`` gövdesi — gösterilecek dosya/klasör yolu."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+
+
+@router.post("/api/reveal")
+def reveal(istek: RevealIstek, request: Request) -> dict[str, object]:
+    """Dosyayı sistemin dosya yöneticisinde gösterir (yerel, kullanıcı isteğiyle).
+
+    Tarayıcı bunu kendisi yapamaz; sunucu yapar. Yol ev dizini hapsinden
+    geçer — arayüzün gösterdiği çıktı yolları zaten oradadır.
+    """
+    ev = ev_dizini(request)
+    hedef = guvenli_yol(istek.path, ev)
+    if hedef is None:
+        raise HTTPException(
+            status_code=403, detail="Ev dizini dışındaki yol açılamaz."
+        )
+    if not hedef.exists():
+        raise HTTPException(status_code=404, detail=f"Dosya bulunamadı: {hedef}")
+    komut = reveal_komutu(hedef, platform=sys.platform)
+    if komut is None:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                f"Bu platformda ({sys.platform}) klasörde gösterme desteklenmiyor "
+                "— yolu kopyalayıp dosya yöneticinizde açın."
+            ),
+        )
+    try:
+        subprocess.Popen(komut)  # noqa: S603 - sabit komut + hapisten geçmiş yol
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Dosya yöneticisi açılamadı: {exc}"
+        ) from None
+    return {"ok": True, "yol": str(hedef)}
 
 
 @router.get("/api/fs/browse", response_model=GezginCevap)

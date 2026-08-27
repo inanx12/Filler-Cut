@@ -31,6 +31,7 @@ from typing import cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from fillercut.detect.fillers import goruntu_formu
 from fillercut.models import CutKind, CutPlan, Segment
 from fillercut.render.encoder import EncoderSelection
 
@@ -210,6 +211,39 @@ def reason_kategorileri(reason: str) -> list[str]:
         else:
             kategoriler.append("silence")
     return kategoriler
+
+
+#: Filler reason'ından kesilen kelimeyi çeker: `kesin filler: 'Eee,'`. Kelime
+#: `repr()` ile yazılır (detect/fillers.py sözleşmesi), yani tırnak tipi metne
+#: göre değişebilir; arkasından KI-5 anomali notu gelebilir — tırnak eşleşmesi
+#: bu yüzden geri referanslı ve tembeldir.
+_FILLER_KELIME_RE = re.compile(
+    r"^(?:kesin|aday) filler: (?P<tirnak>['\"])(?P<kelime>.*?)(?P=tirnak)"
+)
+
+
+def filler_dagilimi(cuts: list[Segment]) -> list[tuple[str, int]]:
+    """Kesilen filler kelimelerinin dökümü — ``[("eee", 3), ("şey", 1)]``.
+
+    Kaynak, kesimlerin reason zinciridir (KI-3 ailesi): kelime oraya
+    ``detect/fillers.py`` tarafından ``repr()`` ile yazılmıştır, ayrı bir
+    veri yolu yoktur — "neden burayı kesti?" cevabıyla "neyi kesti?" cevabı
+    aynı dosyadan çıkar. Kelimeler GÖRÜNTÜ formunda (``goruntu_formu``)
+    gruplanır: ``Eee,`` ile ``eee`` aynı kovaya düşer, ``ııı`` kendisi kalır.
+
+    Sıralama deterministiktir: önce çoktan aza, eşitlikte alfabetik.
+    Sessizlik/manuel/min_keep parçaları kelime taşımaz, atlanır.
+    """
+    sayac: dict[str, int] = {}
+    for seg in cuts:
+        for parca in _PADDING_EKI_RE.sub("", seg.reason).split(" + "):
+            eslesme = _FILLER_KELIME_RE.match(parca)
+            if eslesme is None:
+                continue
+            kelime = goruntu_formu(eslesme.group("kelime"))
+            if kelime:
+                sayac[kelime] = sayac.get(kelime, 0) + 1
+    return sorted(sayac.items(), key=lambda p: (-p[1], p[0]))
 
 
 def _count_tiers(cuts: list[Segment]) -> TierCounts:

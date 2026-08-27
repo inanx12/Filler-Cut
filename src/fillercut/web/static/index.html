@@ -76,7 +76,11 @@
   <!-- Ekran 3 — Review: oynatıcı + zaman çizelgesi + kesim listesi -->
   <section id="ekran-review" class="ekran gizli">
     <div class="review-bas">
-      <h1>Gözden geçir</h1>
+      <div>
+        <h1>Gözden geçir</h1>
+        <!-- Canlı özet: geri al/ekle/sürükle sonrası anında güncellenir -->
+        <div id="canli-ozet" class="canli-ozet" aria-live="polite"></div>
+      </div>
       <div class="review-eylem">
         <label class="anahtar" title="Kesilecek bölgeleri oynatmadan atla">
           <input type="checkbox" id="atlamali" checked>
@@ -118,12 +122,6 @@
       </div>
     </div>
 
-    <div class="kart ozet-serit">
-      <div><span class="etiket-kucuk">Kesim</span><span id="review-kesim-sayisi"></span></div>
-      <div><span class="etiket-kucuk">Kesilen</span><span id="review-kesilen"></span></div>
-      <div><span class="etiket-kucuk">Kalan</span><span id="review-kalan" class="yesil"></span></div>
-    </div>
-
     <div class="kart liste-kart">
       <ul id="kesim-listesi" class="kesim-listesi" aria-label="Kesim listesi"></ul>
     </div>
@@ -151,9 +149,35 @@
       <div id="sonuc-kesim" class="sonuc-alt"></div>
     </div>
     <div class="kart">
-      <div class="cikti-satir"><span class="etiket">Çıktı</span><span id="sonuc-cikti" class="mono"></span></div>
-      <div class="cikti-satir"><span class="etiket">Rapor</span><span id="sonuc-rapor" class="mono"></span></div>
-      <div class="cikti-satir"><span class="etiket">Transkript</span><span id="sonuc-transkript" class="mono"></span></div>
+      <h2>Kesim dağılımı</h2>
+      <ul id="tur-kirilim" class="kirilim"></ul>
+      <div id="filler-bolum" class="gizli">
+        <h2 class="ust-bosluk">Kesilen filler sözcükleri</h2>
+        <ul id="filler-dagilim" class="etiketler"></ul>
+      </div>
+      <div id="duzenleme-bolum" class="gizli">
+        <h2 class="ust-bosluk">Senin düzenlemelerin</h2>
+        <ul id="duzenleme-kirilim" class="kirilim"></ul>
+      </div>
+    </div>
+
+    <div class="kart">
+      <div class="cikti-satir">
+        <span class="etiket">Çıktı</span>
+        <span id="sonuc-cikti" class="mono"></span>
+        <button class="dugme ikincil dar goster" data-hedef="sonuc-cikti">Klasörde göster</button>
+      </div>
+      <div class="cikti-satir">
+        <span class="etiket">Rapor</span>
+        <span id="sonuc-rapor" class="mono"></span>
+        <button class="dugme ikincil dar goster" data-hedef="sonuc-rapor">Klasörde göster</button>
+      </div>
+      <div class="cikti-satir">
+        <span class="etiket">Transkript</span>
+        <span id="sonuc-transkript" class="mono"></span>
+        <button class="dugme ikincil dar goster" data-hedef="sonuc-transkript">Klasörde göster</button>
+      </div>
+      <div id="goster-hata" class="hata-kutu gizli" role="alert"></div>
     </div>
     <div class="alt-cubuk tek">
       <button id="btn-yeni" class="dugme birincil">Yeni iş</button>
