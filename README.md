@@ -172,11 +172,22 @@ timeline, every cut drawn on it, and a cut list. There you can
 - **drag a cut boundary**; it snaps to the nearest silence edge,
 - **drag on empty timeline** to add a cut of your own.
 
-Approving renders; the result screen shows the output path and time saved.
-Your edits are recorded in the report (`tiers.manuel`, `duzenleme`).
+The header keeps a live line — how many cuts, how much will be removed, what
+the new duration will be — so you see the gain before you commit to it.
+
+Approving renders. The result screen shows the output path, the time saved, a
+breakdown by cut type (definite/candidate filler, silence, your own cuts), and
+which filler words were cut (`eee ×3`, `ııı ×1`…) — plus a "show in folder"
+button for each output. Your edits are recorded in the report too
+(`tiers.manuel`, `duzenleme`).
 
 Options: `--port` (default 8765), `--config PATH` (the same
 `filler-cut.toml` the CLI uses), `--no-browser`.
+
+Approving without any edits produces **byte-for-byte the same file** as the
+CLI run — the review screen adds control, not a different renderer.
+
+<!-- TODO(İnan): docs/images/ — başlangıç, review ve sonuç ekranı görselleri -->
 
 > Jobs live in memory only — restarting the server drops them (the tool tells
 > you so instead of hanging). Rendered files stay on disk.

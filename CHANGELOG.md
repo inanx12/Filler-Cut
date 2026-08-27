@@ -7,7 +7,73 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
-## [Unreleased]
+## [1.0.0] — 2026-08-28
+
+**Filler-Cut'ın web arayüzü geldi.** `fillercut ui` yazın; tarayıcıda videonuzu
+seçin, aracın bulduğu kesimleri **kesmeden önce** görün, dinleyin, düzeltin ve
+onaylayın.
+
+Bir koşu şöyle geçiyor: dosyayı sunucu taraflı gezginden seçiyorsunuz (GB'lık
+video tarayıcıya yüklenmiyor, araç diskten okuyor), 6 aşamalı işleme canlı
+akıyor, sonra **gözden geçirme ekranında** duruyor. Orada her kesim dalga
+formunun üzerinde işaretli: atlamalı oynatmayla kesilmiş hâlini dinliyor,
+beğenmediğiniz kesimi tek tıkla geri alıyor, sınırını sürükleyerek
+düzeltiyorsunuz (tutamaç en yakın sessizliğe yapışıyor) ve aracın kaçırdığı
+bir yeri kendiniz kesim olarak ekleyebiliyorsunuz. Başlıktaki satır siz
+düzenledikçe "ne kadar kısalacak"ı anlık gösteriyor. Onaylayınca render
+başlıyor; sonuç ekranı kazanımı, tür kırılımını (kesin/aday filler, sessizlik,
+elle eklenen), kesilen filler sözcüklerinin dökümünü ve çıktı yollarını
+veriyor — "Klasörde göster" ile dosyaya gidiyorsunuz.
+
+CLI hiç değişmedi: `fillercut video.mp4` akışı, çıktıları ve `rapor.json`
+biçimi aynı. Düzenleme yapmadan onaylanan bir web koşusu, CLI'nin ürettiği
+dosyanın **byte-byte aynısını** üretiyor (hash'le doğrulandı). Yeni runtime
+bağımlılıkları yalnız `fastapi` + `uvicorn` (`numpy` zaten dolaylı geliyordu,
+doğrudana terfi etti); npm/build adımı yok.
+
+Bilinen sınır: işler yalnızca bellekte yaşar — sunucu yeniden başlatılırsa
+kaybolurlar (arayüz bunu söyler). Üretilmiş dosyalar diskte kalır.
+
+### v1.0 UI Dilim 3 — istatistik paneli + cila
+
+#### Eklendi
+
+- **Sonuç ekranında istatistik paneli** — tür kırılımı (kesin/aday filler,
+  sessizlik, elle eklenen) mini çubuklarla, **kesilen filler sözcüklerinin
+  dökümü** (`eee ×3`, `ııı ×1`…) ve kullanıcının kendi düzenlemelerinin
+  sayıları. Panelin tek veri kaynağı yazılan rapordur; hiçbir sayı yeniden
+  hesaplanmaz — ekrandaki sayı ile `rapor.json`'daki sayı ayrışamaz (kilit
+  testte). Kelimeler reason zincirinden çıkarılır (KI-3 ailesi) ve **görüntü
+  formunda** gruplanır: `Eee,` ile `eee` aynı kovaya düşer, `ııı` ekranda
+  `ii` olmaz.
+- **Review başlığında canlı özet** — "N kesim · toplam X ms kesilecek · yeni
+  süre Y (%kazanım)"; geri alma/ekleme/sürükleme sonrası anında güncellenir
+  (onay öncesi kazanım önizlemesi).
+- **Gezgin breadcrumb'ı** — ev dizininden bulunulan klasöre kadar tıklanabilir
+  parçalar. Ev'in **üstü hiç listelenmez**: gösterilse tıklandığında 403
+  alınırdı; hapsin sınırı arayüzde de görünür (güvenlik testi her parçanın
+  gerçekten açılabildiğini doğrular).
+- **Koşu ekranında aşama süreleri** — biten aşamada kalıcı, koşan aşamada
+  canlı sayan süre. Damga sunucudadır: SSE kopup yeniden bağlanınca geçmiş
+  toptan replay edilir, istemcide ölçülen süre o anda sıfırlanırdı.
+- **"Klasörde göster"** (çıktı/rapor/transkript) — `POST /api/reveal`;
+  Windows'ta `explorer /select,`, macOS'ta `open -R`, Linux'ta `xdg-open`.
+  Komut üretimi saf ve platform başına testli; kabuk kullanılmaz, yol ev
+  dizini hapsinden geçer, desteklenmeyen platformda Türkçe 501.
+- **Boş durum yüzeyleri** — ana ekranda karşılama, video içermeyen klasörde
+  ne yapılacağını söyleyen mesaj (önceki hâli yalnızca klasör de yokken
+  görünüyordu; asıl sık durum "alt klasör var, video yok"tu).
+
+#### Değişti
+
+- **Pipeline hata mesajları eyleme dökülebilir hâle geldi.** Her katman hatası
+  artık "ne oldu" kadar "ne yapmalı"yı da söylüyor: ffmpeg PATH ipucu,
+  disk/izin ipucu, encoder tercih sırası, `silence_min_ms`, girdi yolu.
+  TRANSCRIBE ipucusu **seçili backend'e göre** değişir (faster-whisper'da
+  model indirme/CUDA, whispercpp'de binary ve model yolu) — kullanıcı yanlış
+  yere bakmasın. İstisna sınıf adı korunur (CUDA/DLL hatalarında ayırt
+  edici); stack trace hiçbir yolda kullanıcıya gösterilmez. Envanter tablo
+  hâlinde testlidir.
 
 ### v1.0 UI Dilim 2 — review ekranı
 
@@ -150,7 +216,7 @@ TestClient'ın zorunlu alt bağımlılığıdır, runtime'a girmez.
   kesim planı tüm videoyu kapsıyor — boş video üretilmez; eşikleri gözden
   geçir"; gösterge PLAN'da durdu, stack trace görünmedi.
 
-[Unreleased]: https://github.com/inanx12/Filler-Cut/compare/v0.4.1...HEAD
+[1.0.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.0.0
 
 ## [0.4.1] — 2026-08-26
 

@@ -170,11 +170,22 @@ PLAN'dan sonra koşu **gözden geçirme için durur**: video, dalga formlu zaman
 - **kesim sınırını sürüklersiniz**; tutamaç en yakın sessizlik kenarına yapışır,
 - **boş alanda sürükleyerek kendi kesiminizi eklersiniz.**
 
-Onaylayınca render başlar; sonuç ekranı çıktı yolunu ve kazanılan süreyi
-gösterir. Düzenlemeleriniz rapora da işlenir (`tiers.manuel`, `duzenleme`).
+Başlıktaki satır siz düzenledikçe canlı güncellenir — kaç kesim, ne kadar
+kısalacak, yeni süre ne olacak — yani kazanımı onaylamadan önce görürsünüz.
+
+Onaylayınca render başlar. Sonuç ekranı çıktı yolunu, kazanılan süreyi, tür
+kırılımını (kesin/aday filler, sessizlik, elle eklediğiniz) ve kesilen filler
+sözcüklerinin dökümünü (`eee ×3`, `ııı ×1`…) gösterir; her çıktının yanındaki
+"Klasörde göster" düğmesi dosyayı dosya yöneticisinde açar. Düzenlemeleriniz
+rapora da işlenir (`tiers.manuel`, `duzenleme`).
 
 Opsiyonlar: `--port` (varsayılan 8765), `--config YOL` (CLI ile aynı
 `filler-cut.toml`), `--no-browser`.
+
+Hiç düzenleme yapmadan onayladığınızda çıkan dosya, CLI koşusunun ürettiğinin
+**byte-byte aynısıdır** — review ekranı denetim ekler, farklı bir render değil.
+
+<!-- TODO(İnan): docs/images/ — başlangıç, review ve sonuç ekranı görselleri -->
 
 > İşler yalnızca bellekte yaşar — sunucuyu yeniden başlatınca kaybolurlar
 > (arayüz asılı kalmak yerine bunu söyler). Üretilmiş dosyalar diskte kalır.
