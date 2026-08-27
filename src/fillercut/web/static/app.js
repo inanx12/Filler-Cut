@@ -280,9 +280,16 @@ function asamaSuresiYaz(kod, ms, kesin) {
   alan.classList.toggle("kosuyor", !kesin);
 }
 
+/* Aşamayı BİTİREN olaylar: bir sonraki aşama ya da işin sonu. Ara durum
+   geçişleri (review/rendering) aşamayı bitirmez — REVIEW aşaması kullanıcı
+   onaylayana kadar SÜRER ve süresi kullanıcının düşünme süresini içerir. */
+const TERMINAL_OLAYLAR = new Set(["bitti", "hata", "iptal"]);
+
 function asamaSaatiIsle(olay) {
   if (typeof olay.ms !== "number") return;
   kosu.saatFarki = Date.now() - olay.ms;
+  const asamayiBitirir = olay.tip === "asama" || TERMINAL_OLAYLAR.has(olay.tip);
+  if (!asamayiBitirir) return;
   if (kosu.aktifAsama !== null) {
     const gecen = olay.ms - kosu.baslangiclar[kosu.aktifAsama];
     kosu.sureler[kosu.aktifAsama] = gecen;
