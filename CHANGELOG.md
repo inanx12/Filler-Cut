@@ -7,6 +7,71 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [Unreleased]
+
+v1.0 UI Dilim 1 — localhost web arayüzü iskeleti + uçtan uca koşu (review
+ekranı Dilim 2'de, sürüm numarası Dilim 3 sonunda). Yeni runtime
+bağımlılıkları **yalnız `fastapi` + `uvicorn`** (v0.3 review server'ının
+stdlib `http.server`'dan evrimi; şablon motoru / htmx / npm YOK — statik
+HTML + vanilla JS + tek CSS). `httpx` yalnız `dev` extra'sına girdi: FastAPI
+TestClient'ın zorunlu alt bağımlılığıdır, runtime'a girmez.
+
+### Eklendi
+
+- **`fillercut ui` alt komutu** — web arayüzünü YALNIZ `127.0.0.1`'de
+  başlatır (0.0.0.0 yok), portu basar, tarayıcıyı sunucu istekleri kabul
+  etmeye hazır olunca açar (`--port`, `--config`, `--no-browser`; port
+  doluysa Türkçe ön-hata). Mevcut tek-komut CLI şekli KORUNUR: dispatch
+  `main_entry`'de argv üzerinden — ikinci bir typer komutu eklenmedi, `VIDEO`
+  argümanı yerinden oynamadı ("ui" adında uzantısız video işlemek isteyen
+  `./ui` yazar).
+- **`src/fillercut/web/`** — FastAPI app factory + üç ekran (tek sayfa,
+  karanlık tema, sistem font stack, Türkçe): Başlangıç (sunucu taraflı dosya
+  gezgini + Normal/Agresif mod — video tarayıcıya YÜKLENMEZ, sunucuya yalnız
+  yol gider), Koşu (6 aşamalı gösterge: geçenler tikli, aktif vurgulu; SSE
+  canlı ilerleme, kopuşta EventSource otomatik yeniden bağlanır), Sonuç
+  (kazanım yüzdesi, orijinal → yeni süre, kesim sayısı, çıktı/rapor/
+  transkript yolları, Yeni iş). `/docs`, `/redoc`, `/openapi.json` kapalı.
+- **Dosya gezgini API'si** (`GET /api/fs/browse`) — yalnız klasörler + video
+  uzantılı dosyalar (gizli girdiler atlanır). Güvenlik: yol canonicalize
+  edilir (`resolve` — `..` ve symlink/junction çözülür), **ev dizini dışına
+  her çıkış 403** ve cevapta içerik sızmaz; `..` traversal kilidi
+  `tests/test_web_fs.py`'de.
+- **Job modeli + SSE** — in-memory kayıt (UUID, kalıcılık yok), tek işçilik
+  thread executor, durum makinesi `queued → running(aşama) → done | failed`;
+  `GET /api/jobs/{id}/events` olay geçmişi + `Last-Event-ID` replay'i taşır
+  (kopuşta olay kaybolmaz), uzun aşamalarda keepalive ping. **plan.json
+  invariant'ı korunur:** plan/rapor job nesnesinin İÇİNDE bellekte yaşar
+  (`Job.rapor`), diske plan.json yazılmaz — kilidi testte. Job başlatma
+  (`POST /api/jobs`) gezginle AYNI ev hapsinden geçer; doğrulama hataları
+  temiz 4xx/JSON (Türkçe `detail`).
+- **`pipeline.run(progress_cb=...)`** — aşama geçişlerinin bant dışı,
+  opsiyonel kanalı (`ASAMALAR` adlarıyla, o sırayla; REVIEW `--yes`'te de
+  bildirilir). Default `None` CLI davranışını bit-birebir korur — parity
+  kilidi cb'li/cb'siz koşunun stdout+stderr eşitliğini bayt bayt doğrular
+  (`TestProgressCb`).
+- **`PipelineError`** — `pipeline._fail` artık `typer.Exit(1)`'in bu alt
+  sınıfını fırlatır: Türkçe/eyleme dökülebilir mesaj `mesaj` alanında
+  taşınır ve web job'ına stack trace'siz düşer; beklenmeyen istisnalar UI'da
+  genel Türkçe mesaj + ayrı log-detay alanı olur. CLI akışı değişmedi
+  (click aynı şekilde yakalar, kod 1).
+
+### Doğrulandı (gerçek donanım — RX 9060 XT, whispercpp/Vulkan + h264_amf)
+
+- `fillercut ui` → netstat'ta yalnız `127.0.0.1:PORT LISTENING`
+  (0.0.0.0 bind yok).
+- Test1.mp4 UI'dan uçtan uca: aşamalar tarayıcıda CANLI aktı (EXTRACT tikli
+  / TRANSCRIBE aktif ~1.5 sn'de gözlendi), çıktı üretildi;
+  **`Test1_temiz.mp4` SHA-256'sı CLI koşusuyla BİREBİR AYNI**
+  (`F5185E7E…9004`), transkript de aynı. rapor.json'daki tek fark ffmpeg
+  nvenc probe hata satırındaki süreç bellek adresi — iki CLI koşusu
+  arasında da değişir, UI'a özgü değil.
+- Tamamen sessiz klip → UI'da Türkçe CutPlanError yüzeyi: "PLAN başarısız:
+  kesim planı tüm videoyu kapsıyor — boş video üretilmez; eşikleri gözden
+  geçir"; gösterge PLAN'da durdu, stack trace görünmedi.
+
+[Unreleased]: https://github.com/inanx12/Filler-Cut/compare/v0.4.1...HEAD
+
 ## [0.4.1] — 2026-08-26
 
 AMD donanım kalibrasyonu + bir giriş noktası düzeltmesi. `h264_amf` kalite

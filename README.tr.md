@@ -148,6 +148,25 @@ transkript: konusma_transkript.json
 }
 ```
 
+## Web Arayüzü
+
+```bash
+fillercut ui
+```
+
+`http://127.0.0.1:8765` adresinde lokal bir web arayüzü başlatır (yalnız
+loopback — localhost dışına asla bağlanmaz) ve tarayıcınızı açar. Videoyu
+sunucu taraflı dosya gezginiyle seçersiniz (dosya tarayıcıya **yüklenmez**;
+araç diskten okur, gezgin ev dizininizle sınırlıdır), Normal/Agresif modu
+seçer ve 6 aşamalı pipeline'ın ilerlemesini canlı izlersiniz. Sonuç ekranı
+çıktı yolunu ve kazanılan süreyi gösterir.
+
+Opsiyonlar: `--port` (varsayılan 8765), `--config YOL` (CLI ile aynı
+`filler-cut.toml`), `--no-browser`.
+
+> Mevcut dilim: web koşusu review/onay adımı olmadan render eder (`--yes`
+> davranışı); interaktif review ekranı bir sonraki dilimde gelecek.
+
 ## Lisans
 
 MIT — bkz. [LICENSE](LICENSE).

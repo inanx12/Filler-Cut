@@ -151,6 +151,25 @@ Example `video_temiz.json` (truncated):
 }
 ```
 
+## Web UI
+
+```bash
+fillercut ui
+```
+
+Starts a local web interface at `http://127.0.0.1:8765` (loopback only —
+never binds beyond localhost) and opens your browser. Pick a video with the
+server-side file browser (files are **not** uploaded; the tool reads them
+from disk, and browsing is confined to your home directory), choose
+Normal/Aggressive mode, and watch the 6-stage pipeline progress live. The
+result screen shows the output path and the time saved.
+
+Options: `--port` (default 8765), `--config PATH` (the same
+`filler-cut.toml` the CLI uses), `--no-browser`.
+
+> Current slice: the web run renders without the review/approval step
+> (`--yes` behavior); the interactive review screen comes in the next slice.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
