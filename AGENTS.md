@@ -148,6 +148,33 @@ Davranış değişikliği: kesim sınırları sıkılaşır ve `<ad>_transkript.
 re-anchor'lı sınırları taşır. KI-5 anomali koruması kaldırılmadı, yedek
 savunmaya çekildi.
 
+**v1.0.0 HAZIR (tag YOK — onay bekliyor).** Üç dilimin toplamı: `fillercut ui`
+ile localhost web arayüzü — dosya seçimi (sunucu taraflı gezgin, ev dizini
+hapsi), 6 aşamalı canlı ilerleme, **PLAN'dan sonra duran gözden geçirme
+ekranı** (dalga formu + kesim işaretleri, atlamalı oynatma, tek tık geri
+alma, sürüklenebilir sınırlar + snap-to-silence, elle kesim ekleme) ve
+istatistikli sonuç ekranı. **CLI hiç değişmedi**; düzenlemesiz web koşusu
+CLI'nin ürettiği dosyanın byte-byte aynısını üretir (hash'le doğrulandı).
+Sürüm `pyproject.toml` 1.0.0; iki giriş noktası da (`fillercut --version`,
+`python -m fillercut.cli --version`) 1.0.0 basıyor. **Release adımları
+(tag/push/GitHub Release) YAPILMADI** — onay ana sohbetten gelecek.
+
+**v1.0 UI Dilim 3 TAMAMLANDI** — istatistik + cila: sonuç ekranında tür
+kırılımı + **kesilen filler sözcüklerinin dökümü** (`filler_dagilimi`, reason
+zincirinden; görüntü formunda gruplanır — `ııı` ekranda `ii` olmaz) +
+kullanıcının düzenleme sayıları; panelin tek kaynağı yazılan rapordur, ekran
+ile `rapor.json` ayrışamaz (kilit testte). Review başlığında **canlı özet**
+(her düzenlemede kazanım önizlemesi), gezginde **breadcrumb** (ev'in üstü
+listelenmez — hapis arayüzde de görünür), koşu ekranında **aşama süreleri**
+(damga SUNUCUDA: SSE replay'inde istemci ölçümü sıfırlanırdı), **"Klasörde
+göster"** (`POST /api/reveal`, kabuk yok, hapisten geçer, platform başına
+testli), boş-durum ve karşılama yüzeyleri. **Pipeline hata envanteri** eyleme
+dökülebilir hâle getirildi: her katman hatası ne yapılacağını da söyler,
+TRANSCRIBE ipucusu seçili backend'e göre değişir, stack trace hiçbirinde yok
+(tablo testli). E2E'de iki kusur yakalanıp kapatıldı: dalga formu sıfır
+genişlikte kayboluyordu (Dilim 2 sonu) ve REVIEW aşama süresi ara durum
+olaylarında donuyordu.
+
 **v1.0 UI Dilim 2 TAMAMLANDI** — review ekranı: pipeline PLAN'dan sonra
 **durur** (`pipeline.run(review_cb=...)`), kullanıcı kesimleri tarayıcıda
 gözden geçirip düzenler, onaylayınca RENDER koşar. **Yeni bağımlılık YOK**
@@ -323,8 +350,19 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `web/static/`: review ekranı (oynatıcı + timeline + kesim listesi), atlamalı oynatma, sürükleme + snap + elle kesim, "iş bulunamadı" yüzeyi | `76ff169` |
 | Dalga formu sıfır genişlik düzeltmesi (`ResizeObserver`) + tek tip "iş bulunamadı" mesajı | `5333d0f` |
 
-**Test sayısı:** 713 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 699'u
+**v1.0 UI Dilim 3 + v1.0.0**
+
+| Modül | Commit |
+|---|---|
+| `json_report.filler_dagilimi` + `detect/fillers.goruntu_formu` + `JobOzet` (tiers/duzenleme/dağılım) + sonuç ekranı istatistik paneli + review canlı özeti + `POST /api/reveal` | `eb2e604` |
+| `web/fs.yol_parcalari` (breadcrumb, ev üstü listelenmez) + olaylara sunucu `ms` damgası + koşu ekranında aşama süreleri | `a5e166f` |
+| `pipeline.py` hata envanteri (ipucu sabitleri + backend'e göre TRANSCRIBE ipucusu) + boş-durum/karşılama yüzeyleri | `d15df54` |
+| `CHANGELOG.md` `[1.0.0]` + link ref'leri + README/README.tr tazeleme (`docs/images/` placeholder) | `ea48a01` |
+| `pyproject.toml` 1.0.0 + kurulu metadata bayatlık alarmı (red-first doğrulandı) | `424fc2e` |
+| `app.js`: REVIEW aşaması ara durum olaylarında donuyordu (E2E bulgusu) | `70ef7a4` |
+
+**Test sayısı:** 765 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 751'i
 marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
@@ -339,9 +377,24 @@ NVIDIA'da, `TestGercekQsvProbe` yalnız Intel iGPU'da (hibrit kip açıkken),
 makinesinde (RX 9060 XT) AMF sınıfı **skip DEĞİL, koştu ve geçti** —
 NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 
-**Sıradaki:** **v1.0 UI Dilim 3** — cilalı istatistik paneli + sürüm numarası
-(CHANGELOG `[Unreleased]` o dilimin sonunda sürüme bağlanır). (KI-1 spike'ı
-tamamlandı; Faz 1+2 ölçüldü ve öldü; bkz. KI-1.)
+**Sıradaki:** **v1.x geri bildirim + dağıtım epic'i** (pywebview / PyInstaller
+/ Inno). Web katmanı bu taşınabilirlik kısıtıyla yazıldı: tek port, tek
+pencere varsayımı; tarayıcıya özgü API'lere bel bağlanmadı. (KI-1 spike'ı
+tamamlandı; Faz 1+2 ölçüldü ve öldü; bkz. KI-1 — filler kaçağı v1.0'da da
+AÇIK bir sınırdır: varsayılan modda kesin filler yakalama 1/8 ölçüldü.)
+
+**v1.0.0 release kuyruğu (yapılmadı, onay bekliyor):** `git push`, `v1.0.0`
+annotated tag + push, GitHub Release (Vulkan binary workflow'u `v*` tag'inde
+tetiklenir — `.github/workflows/vulkan-build.yml`), README ekran görüntüleri
+(`docs/images/`, placeholder yorumları yerinde).
+
+**Not (web UI, Dilim 3):** İstatistik panelinin sayıları RAPORDAN gelir —
+`JobOzet` `tiers`/`duzenleme`/`filler_dagilimi` alanlarını yazılan raporun
+kendisinden taşır, ekranda yeniden hesap yoktur. Kademe sayımı **tespit
+OLAYI** sayar (KI-3), kesim sayısı değil: birleşmiş bir kesim birden çok olay
+taşıyabilir (gerçek koşuda ölçüldü — `sessizlik 1524ms + sessizlik 595ms` tek
+kesimde iki olay). Panelde tür toplamının kesim sayısına eşit ÇIKMAMASI bu
+yüzden kusur değildir.
 
 **Not (web UI, Dilim 2):** JS test altyapısı KURULMADI (bilinçli tercih,
 handoff kararı): ağır mantık — doğrulama, union, clamp, snap hedefi — sunucuda
