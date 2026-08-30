@@ -430,8 +430,14 @@ kaçak çözülmedi, ölçülü hâliyle belgelendi.
 
 **Backlog (kapsam dışı, sırası gelmedi):** (1) **zincir kayması** — v0.4.0
 re-anchor'ının kapsamı DIŞINDA kalan sınıf (konuşmadan konuşmaya kayan
-sınırlar; sessizlik çıpası yok, ölçüm KI-1'de). Sessizlik dışı bir hizalama
-sinyali (DTW veya forced alignment) gerekir. (2) Spike'ın ölçümde görüp
+sınırlar; sessizlik çıpası yok, ölçüm KI-1'de). **Sessizlik tabanlı çözüm
+yolu ÖLDÜ — sayısallaştırıldı, KI-8:** expand-to-silence (Kol A) ve sabit
+±150 ms (Kol B) kill criteria'dan geçemedi, üretim koduna dokunulmadı;
+re-anchor yalnızca DARALTIR (ölçüldü: genişleyen 0/271) ve eksik kapsama
+PLAN'ın sınır politikasından değil ASR kelime sınırının kendisinden gelir.
+Sınıf AÇIK kalır; geriye sessizlik dışı bir hizalama sinyali (DTW veya
+forced alignment) kalır — rafta, kullanıcı geri bildirimi olmadan
+açılmayacak. (2) Spike'ın ölçümde görüp
 uygulamadığı adaylar: `ııı` → `şey` yazım kalıbının aday kademesiyle
 etkileşimi, `metinde_yok` sınıfı (VAD/segment sınırı).
 

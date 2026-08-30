@@ -1005,3 +1005,135 @@ tekrarlanmalı:
 `build-cpu` **saklı**.
 Yeniden ölçüm sıfırdan kurulum istemez; `PATH`'e `D:\opt\rocm\bin` eklenip
 ninja ile artımlı build + bu bölümdeki 5 girdilik koşu **~15 dakikadır**.
+
+## KI-8 — expand-to-silence spike'ı (2026-08-30): filler kesimi akustik gövdeyi eksik kapsıyor — **ÖLDÜ**
+
+- **Belirti:** Review ekranında filler kesimi kelimenin akustik gövdesini
+  eksik kapsıyor: kesim ya kelimenin ÖNCESİNDEKİ duraklamayı alıp ilk hecede
+  bitiyor, ya da kelimenin başını alıp son heceyi dışarıda bırakıyor.
+- **Soru:** *Kesim sınırlarını silencedetect sessizlik kenarlarına genişletmek
+  bunu düzeltir mi?*
+- **Karar: HAYIR — iki aday kol da kill criteria'dan geçemedi, uygulama YOK.**
+  Üretim koduna hiç dokunulmadı.
+
+**Ölçüm kurulumu.** Harness `experiments/expand_silence/` (test süiti DIŞI,
+README'li, tekrar koşulabilir); KI-1 spike'ının `korpus.py`/`asr_runner.py`'si
+ve `_cache`'i paylaşıldı — ASR yeniden koşmadı, **yeni FFmpeg geçişi
+eklenmedi**, `plan.json` diske yazılmadı (plan her yerde nesne). Aynı korpus
+ve ground-truth: `Test1-4.mp4` + `tests/data/korpus_gt.json` (8 damga).
+Ölçüm modu **aggressive** — bilinçli: 8 damganın 4'ü `aday` tier'dır ve
+invariant 3 gereği yalnız aggressive'de kesilir; default modda ölçüm 16
+koşuda 1 eşleşmeye düşerdi (KI-1 baseline'ı). 16 aggressive vakanın 5'i
+tespit kaçağı (KI-1, kapsam dışı), 1'i komşu damga eşleşmesi → **10 gerçek
+vaka**. **Tek kayıt — genelleme yok.**
+
+**Mevcut çapalama envanteri (v0.4.0 re-anchor).** Mekanizma bu problemi
+çözemez, çünkü **yalnızca DARALTIR**: dört kuralı da (`end` → sessizlik.start,
+`start` → sessizlik.end, boydan geçmede uzun parça, ghost'a dokunma) sınırı
+içeri çeker.
+
+| klip | backend | kelime | çapalanan | daralan | **genişleyen** |
+|---|---|---|---|---|---|
+| Test1 | fw / wcpp | 20 / 21 | 2 / 7 | 2 / 7 | **0 / 0** |
+| Test2 | fw / wcpp | 25 / 28 | 5 / 12 | 5 / 12 | **0 / 0** |
+| Test3 | fw / wcpp | 52 / 52 | 9 / 17 | 9 / 17 | **0 / 0** |
+| Test4 | fw / wcpp | 35 / 38 | 0 / 0 | 0 / 0 | 0 / 0 |
+
+271 kelimenin 52'si çapalandı, **52'si de daraldı; genişleyen 0**. Mekanizma
+filler kelimelerine de uygulanır (DETECT'ten önce, tüm kelimelere) — yani
+eksik kapsama mekanizmaya *rağmen* değil, mekanizmanın **yönü dışında** oluşur.
+
+**Kök neden: eksik kapsama PLAN'ın sınır politikasından değil, ASR kelime
+sınırının kendisinden geliyor.** Ayrıştırma (10 gerçek vaka, medyan): kelime
+kapsama **%78**, kesim kapsama **%81** → padding'in medyan bedeli **7 puan**.
+Kesim daha kapsayıcı çıkıyor çünkü komşu sessizliklerle birleşiyor. Kelime
+kapsama minimumu %14 — kayıp TRANSCRIBE'da.
+
+| metrik | n | min | medyan | maks | negatif | pozitif |
+|---|---|---|---|---|---|---|
+| kesim baş hatası (ms) | 10 | −1826 | **−428** | +850 | 8 | 2 |
+| kesim bit hatası (ms) | 10 | −980 | **+110** | +2232 | 4 | 6 |
+| kelime kapsama (puan) | 10 | 14 | 78 | 100 | — | — |
+| kesim kapsama (puan) | 10 | 0 | 81 | 100 | — | — |
+| padding kaybı (puan) | 10 | −56 | +7 | +30 | 3 | 6 |
+| konuşmaya taşma (ms) | 10 | 160 | 412 | 1280 | — | — |
+| konuşma koşusu (ms) | 10 | 1730 | 5428 | 10803 | — | — |
+
+- **Bit tarafı saf NOISE:** medyan +110 ms, 4 negatif / 6 pozitif, aralık
+  −980…+2232. "Kesim erken bitiyor" hipotezi 10 vakanın yalnız 4'ünde doğru.
+- **Baş tarafı zayıf bias ama TERS yönde:** medyan −428 ms, 8/10 negatif —
+  kesim damgadan zaten ÖNCE başlıyor. Belirtinin 1. biçimi (`önceki
+  duraklamayı alıyor`) tam olarak budur ve **genişletmeyle düzelmez,
+  genişletme onu büyütür.**
+- Sınıf olarak bu KI-1'in **zincir kayması** kolu: o bölgede sessizlik yoktur,
+  çapalamanın çıpası yoktur.
+
+**Backend'e göre işaret farkı (gözlem, n=4 vs n=6 — bulgu değil).** Büyüklük
+farkı iki uçta da temiz, işaret farkı yalnız BİT ucunda ayrışıyor:
+
+| | fw (n=4) | wcpp (n=6) |
+|---|---|---|
+| kesim bit hatası medyanı | **−140** (erken biter) | **+761** (geç biter) |
+| \|bit hatası\| medyanı | 200 | 1106 |
+| \|baş hatası\| medyanı | 477 | 758 |
+| kesim kapsama medyanı | 81 | 62 |
+
+Baş ucunda ayrışma YOK: iki backend de negatife eğilimli (fw 4/4, wcpp 4/6),
+wcpp yalnızca daha gürültülü. **Tek global düzeltme iki backend'i aynı anda
+düzeltemez** — bit ucunda fw'yi uzatan düzeltme wcpp'yi daha da taşırır.
+
+**Kol A — expand-to-silence: ÖLDÜ.** Filler segmentinin sınırları, segmenti
+saran sessizlik kenarlarına (konuşma koşusuna) genişletilir; anchor olmayan
+uçta genişletme yok. Aşama sırası **genişlet → daralt** (`build_cutplan`
+padding'i genişletilmiş aralığa uygular; genişleme padding'i ezmez).
+
+- Medyan kapsama kazancı **+0 puan** (kill: < 20) · ortalama konuşmaya taşma
+  **1084 ms** (kill: > 100; baseline 431) → **iki kriterden de öldü**.
+- Anchor kriteri **tek geçen kriter**: 8 filler segmentinin **0'ında** çıpa
+  eksik (kill: 3+).
+- **Ölçülen sebep:** damgayı saran konuşma koşusu medyanı **5428 ms**
+  (min 1730, maks 10803) — düzeltilecek hata 80–920 ms ölçeğindeyken çıpa bir
+  büyüklük mertebesi uzakta.
+
+**Kol B — sabit ±150 ms kontrol: ÖLDÜ.** Yer değiştirme yok, davranış
+öngörülebilir, eksik kapsanan vakalarda gerçekten iyileştiriyor (50→88, 0→32,
+93→100, 69→90). Ama medyan kazanç **+0 puan** (baseline < %100 vakalarda +4)
+ve ortalama taşma 557 ms — baseline'a göre **+126 ms artış** (kill: > 100).
+Kazancı ölçüm eşiğinin altında, bedeli eşiğin üstünde.
+
+**Ayrı not — KI-5 tuzağı (bugün zararsız, gelecek için kilit).** Genişleyen
+kesim koşunun ucuna **değer**; KI-5'in "değme çakışma kanıt sayılmaz" kuralı
+gereği sessizlikle çakışmıyor sayılır ve 3000 ms'i aşınca `start + 3000`'e
+indirgenir. İndirgeme **START'ı sabit tuttuğu için** kesim filler'ın olduğu
+yerden başka bir yere taşınabilir — ölçülen: **8 segmentin 4'ü**.
+
+| klip | backend | filler segment | A genişletilmiş | KI-5 sonrası | taşındı mı |
+|---|---|---|---|---|---|
+| Test1 | fw | 9640-11040 | 695-11498 | **695-3695** | EVET |
+| Test1 | fw | 20380-21900 | 17364-22792 | **17364-20364** | EVET |
+| Test1 | wcpp | 10670-11498 | 695-11498 | **695-3695** | EVET |
+| Test1 | wcpp | 21080-22140 | 17364-22792 | **17364-20364** | EVET |
+
+Kol A'daki %93 → %0 ve %100 → %0 düşüşlerinin sebebi budur: kesim yanlış yeri
+kesiyor. Bugün üretimde zararsızdır (3000 ms'i aşan tek-kelime filler nadir),
+ama **kesimi büyüten her gelecek mekanizma için tuzaktır**. `start + 3000`
+yerine merkezden kırpma daha güvenli olurdu — **uygulanmadı**, karar açık.
+
+**Ayrı not — baseline taşması.** Genişletme olmadan da kesimler damga dışına
+taşıyor: medyan **412 ms**, maks 1280 ms. Sebep: kesimler `min_keep` zinciriyle
+komşu sessizliklere birleşirken araya sıkışan konuşmayı da alıyor. Ayrı
+inceleme konusudur; bu spike'ta ölçüldü, **dokunulmadı**.
+
+**Kriter yazım dersi.** Mutlak taşma eşiği (`ort. taşma > 100 ms`) bu problemde
+**ölçülemez bir kriterdir**: baseline'ın kendisi 431 ms taşıyor, yani
+genişletme yapmayan kol bile eşiği geçemez. Kill criteria gelecek spike'larda
+**delta bazlı** yazılacak (baseline'a göre artış).
+
+**Gerçek çözüm yönü (rafta, kullanıcı geri bildirimi olmadan açılmayacak):**
+sessizlik dışı bir hizalama sinyali — **DTW veya forced alignment**. Turbo
+modeller DTW token-hizasını desteklemiyor (`t_dtw` her token'da `-1`, KI-1'de
+ölçülü) → non-turbo `large-v3` ya da ayrı bir hizalayıcı gerekir.
+
+**Referans:** `experiments/expand_silence/README.md` + `sonuclar/faz0.md`,
+`sonuclar/faz1.md` (ham JSON'lar yanlarında); ground-truth
+`tests/data/korpus_gt.json` (şema kilidi `tests/test_korpus_gt.py`).
