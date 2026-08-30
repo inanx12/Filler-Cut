@@ -382,6 +382,10 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 pencere varsayımı; tarayıcıya özgü API'lere bel bağlanmadı. (KI-1 spike'ı
 tamamlandı; Faz 1+2 ölçüldü ve öldü; bkz. KI-1 — filler kaçağı v1.0'da da
 AÇIK bir sınırdır: varsayılan modda kesin filler yakalama 1/8 ölçüldü.)
+(expand-to-silence spike'ı tamamlandı; Kol A + Kol B ölçüldü ve öldü;
+bkz. KI-8 — kesim sınırı eksik kapsaması v1.0'da da AÇIK bir sınırdır:
+kaynak PLAN'ın padding'i değil ASR kelime sınırıdır, kelime kapsama
+medyanı %78 ölçüldü. Üretim koduna dokunulmadı.)
 
 **v1.0.0 release kuyruğu (yapılmadı, onay bekliyor):** `git push`, `v1.0.0`
 annotated tag + push, GitHub Release (Vulkan binary workflow'u `v*` tag'inde
