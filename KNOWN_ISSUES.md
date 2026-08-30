@@ -1134,6 +1134,15 @@ sessizlik dışı bir hizalama sinyali — **DTW veya forced alignment**. Turbo
 modeller DTW token-hizasını desteklemiyor (`t_dtw` her token'da `-1`, KI-1'de
 ölçülü) → non-turbo `large-v3` ya da ayrı bir hizalayıcı gerekir.
 
+**Hazır hizalayıcı envanteri (2026-08 itibarıyla).**
+**Qwen3-ForcedAligner-0.6B** mevcut: 11 dil, tek geçişte ≤5 dk ses.
+**Türkçe DESTEKLENEN diller arasında YOK** — bu hâliyle bu proje için
+kullanılamaz. **Raf tetikleyicisi (ikisinden biri):** (a) modele Türkçe
+desteğinin gelmesi, (b) gerçek kullanıcı şikayeti. İkisi de olmadan bu
+madde açılmaz — spike'ın ölçtüğü hata bugün ürünü bloke etmiyor.
+**Alternatif yol: WhisperX** (wav2vec2 tabanlı hizalama) — dil kapsamı ve
+maliyeti ayrıca ölçülmeli, bu kayıtta ölçülmedi.
+
 **Referans:** `experiments/expand_silence/README.md` + `sonuclar/faz0.md`,
 `sonuclar/faz1.md` (ham JSON'lar yanlarında); ground-truth
 `tests/data/korpus_gt.json` (şema kilidi `tests/test_korpus_gt.py`).
