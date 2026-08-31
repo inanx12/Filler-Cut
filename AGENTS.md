@@ -443,7 +443,14 @@ Sınıf AÇIK kalır; geriye sessizlik dışı bir hizalama sinyali (DTW veya
 forced alignment) kalır — rafta, kullanıcı geri bildirimi olmadan
 açılmayacak. (2) Spike'ın ölçümde görüp
 uygulamadığı adaylar: `ııı` → `şey` yazım kalıbının aday kademesiyle
-etkileşimi, `metinde_yok` sınıfı (VAD/segment sınırı).
+etkileşimi, `metinde_yok` sınıfı (VAD/segment sınırı). (3) **wcpp `-t` (thread)
+politikası — TAMAMLANDI (2026-08-31):** CPU'da medyan **×1.41** (mantıksal
+çekirdek; fiziksel ×1.28), GPU'da nötr (medyan ×1.00), transkript
+`(metin, start_ms, end_ms)` imzası 72 koşuda birebir aynı; kilitler yeşil
+(6 politika testi + KI-1 uyum kilidi 3/3). Üretim diffi tek dosya:
+`transcribe/wcpp_backend.py` — bayrak sona eklenir, `os.cpu_count()` `None`
+dönerse HİÇ geçilmez. Kalan sınır **KI-9**: üst sınır ölçülmedi (64+ mantıksal
+çekirdek), tavan bilinçli konulmadı; ölçüm harness'i `experiments/wcpp_threads/`.
 
 Devam eden küçük iş (v0.3 kuyruğu): interaktif review'un `wcpp_backend` ile
 uçtan uca doğrulanması — `@pytest.mark.wcpp` referansı
