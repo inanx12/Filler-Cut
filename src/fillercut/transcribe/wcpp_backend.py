@@ -29,6 +29,7 @@ Saf/yan-etki ayrımı (extractor/probe deseni): ``build_command`` ve
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -48,6 +49,35 @@ _STDERR_TAIL = 400
 _OUT_PREFIX = "transkript"
 
 
+def varsayilan_threads() -> int | None:
+    """``-t`` politikası: makinenin MANTIKSAL çekirdek sayısı (ölçümle seçildi).
+
+    whisper-cli'nin kendi varsayılanı makineden bağımsız **4**'tür — kurulu
+    binary'nin ``--help`` çıktısından doğrulandı::
+
+        -t N,  --threads N   [4  ] number of threads to use during computation
+
+    Ryzen 5 7500F'te (6 fiziksel / 12 mantıksal) ölçüldü: mantıksal
+    çekirdek sayısı CPU koşusunu **medyan 1.41×** hızlandırır (fiziksel 1.28×),
+    GPU (Vulkan) koşusunu etkilemez (medyan 1.00×) ve transkript
+    ``(metin, start_ms, end_ms)`` düzeyinde **birebir aynı** kalır.
+
+    ``None`` dönerse çağıran ``-t``'yi HİÇ geçirmez ve binary kendi
+    varsayılanında kalır — bilinmeyen bir makinede uydurma değer geçmektense
+    binary'nin kararına bırakmak doğrudur.
+
+    **Ölçülmemiş sınır:** üst sınır KONULMADI. Ölçüm tek
+    makinededir; çok çekirdekli sunucularda (örn. 64+ mantıksal) whisper.cpp'nin
+    ölçeklenmesi ölçülmemiştir. Tavan değeri uydurmak yerine kayıtta bırakıldı.
+
+    Ölçüm harness'i ve tablolar: ``experiments/wcpp_threads/``.
+    """
+    n = os.cpu_count()
+    if n is None or n <= 0:
+        return None
+    return n
+
+
 class WhisperCppError(RuntimeError):
     """whisper-cli çalıştırılamadığında/başarısız olduğunda fırlatılır."""
 
@@ -59,6 +89,7 @@ def build_command(
     out_prefix: str | Path,
     *,
     language: str = LANGUAGE,
+    threads: int | None = None,
 ) -> list[str]:
     """whisper-cli komut satırı — saf fonksiyon (extractor/probe deseni).
 
@@ -67,9 +98,20 @@ def build_command(
     ``<out_prefix>.json``'a yazar. Konuşma metni stdout'a da basılır ama
     okunmaz — gerçek veri JSON dosyasındadır.
 
+    ``-t`` (thread sayısı) politika ile eklenir: ``threads`` verilmezse
+    ``varsayilan_threads()`` (mantıksal çekirdek sayısı) kullanılır; o da
+    ``None`` dönerse bayrak HİÇ geçilmez ve binary kendi varsayılanında (4)
+    kalır. Bayrak sona eklenir — mevcut bayrakların sırası değişmez.
+
+    **Bu bayrak GPU koşusuna da gider.** Üretimde ayrı bir "CPU fallback"
+    çağrı yolu yoktur: cihaz kararını binary verir (Vulkan derlemesi + sürücü),
+    Filler-Cut tek komut satırı üretir. Ölçüldü: ``-t`` GPU koşusunu
+    etkilemiyor (medyan 1.00×), CPU koşusunu 1.41× hızlandırıyor.
+
     ``shell=True`` YOKTUR; çağrı arg listesidir (``transcribe`` wrapper'ında).
     """
-    return [
+    t = threads if threads is not None else varsayilan_threads()
+    cmd = [
         binary,
         "-m",
         str(model_path),
@@ -84,6 +126,9 @@ def build_command(
         "-of",
         str(out_prefix),  # çıktı dosyası: <out_prefix>.json
     ]
+    if t is not None and t > 0:
+        cmd += ["-t", str(t)]
+    return cmd
 
 
 def _to_ms(deger: Any) -> int:

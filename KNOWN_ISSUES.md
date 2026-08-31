@@ -1146,3 +1146,36 @@ maliyeti ayrıca ölçülmeli, bu kayıtta ölçülmedi.
 **Referans:** `experiments/expand_silence/README.md` + `sonuclar/faz0.md`,
 `sonuclar/faz1.md` (ham JSON'lar yanlarında); ground-truth
 `tests/data/korpus_gt.json` (şema kilidi `tests/test_korpus_gt.py`).
+
+## KI-9 — whisper-cli `-t` üst sınırı ölçülmedi (64+ mantıksal çekirdek) — AÇIK
+
+- **Belirti:** `wcpp_backend.varsayilan_threads()` `-t`'yi makinenin **mantıksal
+  çekirdek sayısına** eşitler ve **üst sınır KOYMAZ**. 64+ mantıksal çekirdekli
+  bir makinede whisper.cpp'nin bu değerle nasıl ölçeklendiği **bilinmiyor**.
+- **Neden:** Ölçüm **tek makinede** yapıldı: Ryzen 5 7500F, 6 fiziksel / 12
+  mantıksal. Ölçülen aralık yalnızca `-t` 4 (binary varsayılanı) → 6 → 12'dir;
+  12'nin ötesi hiç koşulmadı. Ölçülen eğilim zaten **doyum yönünde**: 6→12
+  geçişinde kazanç kliplere göre 1.28×→1.54×, 1.12×→**1.15×**, 1.31×→1.41×,
+  1.27×→1.41× — yani ikinci yarı ilk yarı kadar getirmiyor. Yüksek çekirdek
+  sayısında düzleşme (hatta thread aşırı-abonelik / NUMA nedeniyle gerileme)
+  makul bir beklentidir; **ölçülmedi, iddia edilmiyor.**
+- **Etki:** **Yalnızca hız.** Doğruluk riski yok: ölçümde transkript
+  `(metin, start_ms, end_ms)` düzeyinde `-t` kollarında birebir aynı çıktı ve
+  KI-1 uyum kilidi (`wcpp_reference_tr.json`) değişiklik öncesi/sonrası aynen
+  geçti. En kötü hâlde çok çekirdekli bir makinede TRANSCRIBE binary'nin
+  varsayılanına göre beklenenden yavaş koşar; plan, kesim ve rapor etkilenmez.
+- **Bilinçli alınmayan önlem:** `min(cpu_count(), N)` biçiminde bir tavan
+  **KONULMADI**. Tavan sayısı ölçülmeden seçilirse uydurma olur; hiçbir
+  makinede doğrulanmamış bir sınır, doğrulanmış bir politikadan kötüdür.
+  Politika ölçülen makinede doğrudur ve ölçülmemiş bölge kayıtta durur.
+- **Not (GPU):** `-t` GPU koşusuna da gider (ayrı CPU fallback yolu yoktur —
+  bkz. `experiments/wcpp_threads/README.md`). 12 thread'te GPU medyanı 1.00×,
+  yani zarar ölçülmedi; **64+ thread'te GPU koşusuna etkisi de ölçülmemiştir.**
+- **Ölçüm tetikleyicisi:** Yeterli donanıma erişim (32/64+ mantıksal çekirdekli
+  bir makine). Harness hazır ve tekrar koşulabilir:
+  `python experiments/wcpp_threads/olcum.py --fiziksel <F> --mantiksal <M> --tekrar 3`.
+  Kullanıcı şikayeti beklenmez; bu madde donanım gelince açılır.
+- **Referans:** `src/fillercut/transcribe/wcpp_backend.py::varsayilan_threads`
+  docstring'i ("Ölçülmemiş sınır" paragrafı) + `experiments/wcpp_threads/`
+  (README, `olcum.py`, `sonuclar/ham_log.txt`, `sonuclar/kosular.json`).
+  Politika kilitleri: `tests/test_wcpp.py`.

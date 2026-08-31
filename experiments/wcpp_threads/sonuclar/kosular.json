@@ -1,0 +1,4815 @@
+{
+  "kosular": [
+    {
+      "klip": "Test1",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 1,
+      "sure_ms": 17099,
+      "kelime_sayisi": 19
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 2,
+      "sure_ms": 16820,
+      "kelime_sayisi": 19
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 3,
+      "sure_ms": 17252,
+      "kelime_sayisi": 19
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 1,
+      "sure_ms": 13495,
+      "kelime_sayisi": 19
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 2,
+      "sure_ms": 13376,
+      "kelime_sayisi": 19
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 3,
+      "sure_ms": 13363,
+      "kelime_sayisi": 19
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 1,
+      "sure_ms": 11224,
+      "kelime_sayisi": 19
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 2,
+      "sure_ms": 11078,
+      "kelime_sayisi": 19
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 3,
+      "sure_ms": 10993,
+      "kelime_sayisi": 19
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 1,
+      "sure_ms": 17438,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 2,
+      "sure_ms": 17386,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 3,
+      "sure_ms": 17798,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 1,
+      "sure_ms": 15543,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 2,
+      "sure_ms": 15184,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 3,
+      "sure_ms": 15841,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 1,
+      "sure_ms": 15147,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 2,
+      "sure_ms": 15192,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 3,
+      "sure_ms": 16510,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 1,
+      "sure_ms": 38830,
+      "kelime_sayisi": 50
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 2,
+      "sure_ms": 38668,
+      "kelime_sayisi": 50
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 3,
+      "sure_ms": 38709,
+      "kelime_sayisi": 50
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 1,
+      "sure_ms": 28022,
+      "kelime_sayisi": 50
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 2,
+      "sure_ms": 29965,
+      "kelime_sayisi": 50
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 3,
+      "sure_ms": 29455,
+      "kelime_sayisi": 50
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 1,
+      "sure_ms": 28030,
+      "kelime_sayisi": 50
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 2,
+      "sure_ms": 23286,
+      "kelime_sayisi": 50
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 3,
+      "sure_ms": 27419,
+      "kelime_sayisi": 50
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 1,
+      "sure_ms": 36935,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 2,
+      "sure_ms": 36445,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "cpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 3,
+      "sure_ms": 37062,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 1,
+      "sure_ms": 29057,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 2,
+      "sure_ms": 28468,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "cpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 3,
+      "sure_ms": 29659,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 1,
+      "sure_ms": 26650,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 2,
+      "sure_ms": 25379,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "cpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 3,
+      "sure_ms": 26161,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 1,
+      "sure_ms": 1297,
+      "kelime_sayisi": 21
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 2,
+      "sure_ms": 1214,
+      "kelime_sayisi": 21
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 3,
+      "sure_ms": 1222,
+      "kelime_sayisi": 21
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 1,
+      "sure_ms": 1207,
+      "kelime_sayisi": 21
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 2,
+      "sure_ms": 1205,
+      "kelime_sayisi": 21
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 3,
+      "sure_ms": 1211,
+      "kelime_sayisi": 21
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 1,
+      "sure_ms": 1192,
+      "kelime_sayisi": 21
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 2,
+      "sure_ms": 1217,
+      "kelime_sayisi": 21
+    },
+    {
+      "klip": "Test1",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 3,
+      "sure_ms": 1286,
+      "kelime_sayisi": 21
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 1,
+      "sure_ms": 1293,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 2,
+      "sure_ms": 1278,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 3,
+      "sure_ms": 1404,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 1,
+      "sure_ms": 1425,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 2,
+      "sure_ms": 1386,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 3,
+      "sure_ms": 1278,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 1,
+      "sure_ms": 1289,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 2,
+      "sure_ms": 1369,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test2",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 3,
+      "sure_ms": 1387,
+      "kelime_sayisi": 28
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 1,
+      "sure_ms": 1849,
+      "kelime_sayisi": 52
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 2,
+      "sure_ms": 1764,
+      "kelime_sayisi": 52
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 3,
+      "sure_ms": 1787,
+      "kelime_sayisi": 52
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 1,
+      "sure_ms": 1790,
+      "kelime_sayisi": 52
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 2,
+      "sure_ms": 1761,
+      "kelime_sayisi": 52
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 3,
+      "sure_ms": 1871,
+      "kelime_sayisi": 52
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 1,
+      "sure_ms": 1783,
+      "kelime_sayisi": 52
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 2,
+      "sure_ms": 1784,
+      "kelime_sayisi": 52
+    },
+    {
+      "klip": "Test3",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 3,
+      "sure_ms": 1772,
+      "kelime_sayisi": 52
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 1,
+      "sure_ms": 1669,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 2,
+      "sure_ms": 1668,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "gpu",
+      "ayar": "varsayilan",
+      "threads": null,
+      "tekrar": 3,
+      "sure_ms": 1669,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 1,
+      "sure_ms": 1668,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 2,
+      "sure_ms": 1674,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "gpu",
+      "ayar": "fiziksel (6)",
+      "threads": 6,
+      "tekrar": 3,
+      "sure_ms": 1657,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 1,
+      "sure_ms": 1683,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 2,
+      "sure_ms": 1663,
+      "kelime_sayisi": 38
+    },
+    {
+      "klip": "Test4",
+      "cihaz": "gpu",
+      "ayar": "mantiksal (12)",
+      "threads": 12,
+      "tekrar": 3,
+      "sure_ms": 1652,
+      "kelime_sayisi": 38
+    }
+  ],
+  "imzalar": {
+    "cpu|Test1|varsayilan": [
+      [
+        "abone",
+        30,
+        1420
+      ],
+      [
+        "ol",
+        1420,
+        2000
+      ],
+      [
+        "ve",
+        2000,
+        3000
+      ],
+      [
+        "selam",
+        3000,
+        6450
+      ],
+      [
+        "arkadaşlar",
+        6450,
+        8660
+      ],
+      [
+        "bu",
+        8660,
+        10670
+      ],
+      [
+        "şey",
+        10670,
+        11610
+      ],
+      [
+        "bugün",
+        11610,
+        12620
+      ],
+      [
+        "sizlerle",
+        12620,
+        13840
+      ],
+      [
+        "birlikte",
+        13840,
+        14240
+      ],
+      [
+        "bilgisayarımıza",
+        14240,
+        15090
+      ],
+      [
+        "bakıyoruz",
+        15090,
+        15600
+      ],
+      [
+        "bu",
+        15600,
+        16120
+      ],
+      [
+        "test",
+        16120,
+        17160
+      ],
+      [
+        "deneme",
+        17160,
+        18720
+      ],
+      [
+        "123",
+        18720,
+        21060
+      ],
+      [
+        "şey",
+        21060,
+        22110
+      ],
+      [
+        "abone",
+        22110,
+        24640
+      ],
+      [
+        "ol",
+        24640,
+        25660
+      ]
+    ],
+    "cpu|Test1|fiziksel (6)": [
+      [
+        "abone",
+        30,
+        1420
+      ],
+      [
+        "ol",
+        1420,
+        2000
+      ],
+      [
+        "ve",
+        2000,
+        3000
+      ],
+      [
+        "selam",
+        3000,
+        6450
+      ],
+      [
+        "arkadaşlar",
+        6450,
+        8660
+      ],
+      [
+        "bu",
+        8660,
+        10670
+      ],
+      [
+        "şey",
+        10670,
+        11610
+      ],
+      [
+        "bugün",
+        11610,
+        12620
+      ],
+      [
+        "sizlerle",
+        12620,
+        13840
+      ],
+      [
+        "birlikte",
+        13840,
+        14240
+      ],
+      [
+        "bilgisayarımıza",
+        14240,
+        15090
+      ],
+      [
+        "bakıyoruz",
+        15090,
+        15600
+      ],
+      [
+        "bu",
+        15600,
+        16120
+      ],
+      [
+        "test",
+        16120,
+        17160
+      ],
+      [
+        "deneme",
+        17160,
+        18720
+      ],
+      [
+        "123",
+        18720,
+        21060
+      ],
+      [
+        "şey",
+        21060,
+        22110
+      ],
+      [
+        "abone",
+        22110,
+        24640
+      ],
+      [
+        "ol",
+        24640,
+        25660
+      ]
+    ],
+    "cpu|Test1|mantiksal (12)": [
+      [
+        "abone",
+        30,
+        1420
+      ],
+      [
+        "ol",
+        1420,
+        2000
+      ],
+      [
+        "ve",
+        2000,
+        3000
+      ],
+      [
+        "selam",
+        3000,
+        6450
+      ],
+      [
+        "arkadaşlar",
+        6450,
+        8660
+      ],
+      [
+        "bu",
+        8660,
+        10670
+      ],
+      [
+        "şey",
+        10670,
+        11610
+      ],
+      [
+        "bugün",
+        11610,
+        12620
+      ],
+      [
+        "sizlerle",
+        12620,
+        13840
+      ],
+      [
+        "birlikte",
+        13840,
+        14240
+      ],
+      [
+        "bilgisayarımıza",
+        14240,
+        15090
+      ],
+      [
+        "bakıyoruz",
+        15090,
+        15600
+      ],
+      [
+        "bu",
+        15600,
+        16120
+      ],
+      [
+        "test",
+        16120,
+        17160
+      ],
+      [
+        "deneme",
+        17160,
+        18720
+      ],
+      [
+        "123",
+        18720,
+        21060
+      ],
+      [
+        "şey",
+        21060,
+        22110
+      ],
+      [
+        "abone",
+        22110,
+        24640
+      ],
+      [
+        "ol",
+        24640,
+        25660
+      ]
+    ],
+    "cpu|Test2|varsayilan": [
+      [
+        "selam",
+        330,
+        2000
+      ],
+      [
+        "Selam",
+        2000,
+        2820
+      ],
+      [
+        "arkadaşlar",
+        2820,
+        3400
+      ],
+      [
+        "bu",
+        3400,
+        3570
+      ],
+      [
+        "bir",
+        3570,
+        3830
+      ],
+      [
+        "test",
+        3830,
+        4200
+      ],
+      [
+        "videosudur",
+        4200,
+        5100
+      ],
+      [
+        "boşluk",
+        5100,
+        6480
+      ],
+      [
+        "kesmeyi",
+        6480,
+        7960
+      ],
+      [
+        "test",
+        7960,
+        8780
+      ],
+      [
+        "ediyoruz",
+        8780,
+        10380
+      ],
+      [
+        "ııı",
+        10380,
+        11440
+      ],
+      [
+        "şey",
+        11440,
+        13300
+      ],
+      [
+        "mesela",
+        13300,
+        13870
+      ],
+      [
+        "gibi",
+        13870,
+        14760
+      ],
+      [
+        "kelimeleri",
+        14760,
+        15380
+      ],
+      [
+        "test",
+        15380,
+        15670
+      ],
+      [
+        "ediyoruz",
+        15670,
+        16100
+      ],
+      [
+        "aynı",
+        16100,
+        16530
+      ],
+      [
+        "zamanda",
+        16530,
+        17130
+      ],
+      [
+        "video",
+        17130,
+        17480
+      ],
+      [
+        "çekiyoruz",
+        17480,
+        18430
+      ],
+      [
+        "ki",
+        18430,
+        18600
+      ],
+      [
+        "uygulamamız",
+        18600,
+        19620
+      ],
+      [
+        "düzgün",
+        19620,
+        20300
+      ],
+      [
+        "çalışıyor",
+        20300,
+        21420
+      ],
+      [
+        "mu",
+        21420,
+        21590
+      ],
+      [
+        "bakalım",
+        21590,
+        22400
+      ]
+    ],
+    "cpu|Test2|fiziksel (6)": [
+      [
+        "selam",
+        330,
+        2000
+      ],
+      [
+        "Selam",
+        2000,
+        2820
+      ],
+      [
+        "arkadaşlar",
+        2820,
+        3400
+      ],
+      [
+        "bu",
+        3400,
+        3570
+      ],
+      [
+        "bir",
+        3570,
+        3830
+      ],
+      [
+        "test",
+        3830,
+        4200
+      ],
+      [
+        "videosudur",
+        4200,
+        5100
+      ],
+      [
+        "boşluk",
+        5100,
+        6480
+      ],
+      [
+        "kesmeyi",
+        6480,
+        7960
+      ],
+      [
+        "test",
+        7960,
+        8780
+      ],
+      [
+        "ediyoruz",
+        8780,
+        10380
+      ],
+      [
+        "ııı",
+        10380,
+        11440
+      ],
+      [
+        "şey",
+        11440,
+        13300
+      ],
+      [
+        "mesela",
+        13300,
+        13870
+      ],
+      [
+        "gibi",
+        13870,
+        14760
+      ],
+      [
+        "kelimeleri",
+        14760,
+        15380
+      ],
+      [
+        "test",
+        15380,
+        15670
+      ],
+      [
+        "ediyoruz",
+        15670,
+        16100
+      ],
+      [
+        "aynı",
+        16100,
+        16530
+      ],
+      [
+        "zamanda",
+        16530,
+        17130
+      ],
+      [
+        "video",
+        17130,
+        17480
+      ],
+      [
+        "çekiyoruz",
+        17480,
+        18430
+      ],
+      [
+        "ki",
+        18430,
+        18600
+      ],
+      [
+        "uygulamamız",
+        18600,
+        19620
+      ],
+      [
+        "düzgün",
+        19620,
+        20300
+      ],
+      [
+        "çalışıyor",
+        20300,
+        21420
+      ],
+      [
+        "mu",
+        21420,
+        21590
+      ],
+      [
+        "bakalım",
+        21590,
+        22400
+      ]
+    ],
+    "cpu|Test2|mantiksal (12)": [
+      [
+        "selam",
+        330,
+        2000
+      ],
+      [
+        "Selam",
+        2000,
+        2820
+      ],
+      [
+        "arkadaşlar",
+        2820,
+        3400
+      ],
+      [
+        "bu",
+        3400,
+        3570
+      ],
+      [
+        "bir",
+        3570,
+        3830
+      ],
+      [
+        "test",
+        3830,
+        4200
+      ],
+      [
+        "videosudur",
+        4200,
+        5100
+      ],
+      [
+        "boşluk",
+        5100,
+        6480
+      ],
+      [
+        "kesmeyi",
+        6480,
+        7960
+      ],
+      [
+        "test",
+        7960,
+        8780
+      ],
+      [
+        "ediyoruz",
+        8780,
+        10380
+      ],
+      [
+        "ııı",
+        10380,
+        11440
+      ],
+      [
+        "şey",
+        11440,
+        13300
+      ],
+      [
+        "mesela",
+        13300,
+        13870
+      ],
+      [
+        "gibi",
+        13870,
+        14760
+      ],
+      [
+        "kelimeleri",
+        14760,
+        15380
+      ],
+      [
+        "test",
+        15380,
+        15670
+      ],
+      [
+        "ediyoruz",
+        15670,
+        16100
+      ],
+      [
+        "aynı",
+        16100,
+        16530
+      ],
+      [
+        "zamanda",
+        16530,
+        17130
+      ],
+      [
+        "video",
+        17130,
+        17480
+      ],
+      [
+        "çekiyoruz",
+        17480,
+        18430
+      ],
+      [
+        "ki",
+        18430,
+        18600
+      ],
+      [
+        "uygulamamız",
+        18600,
+        19620
+      ],
+      [
+        "düzgün",
+        19620,
+        20300
+      ],
+      [
+        "çalışıyor",
+        20300,
+        21420
+      ],
+      [
+        "mu",
+        21420,
+        21590
+      ],
+      [
+        "bakalım",
+        21590,
+        22400
+      ]
+    ],
+    "cpu|Test3|varsayilan": [
+      [
+        "Evet",
+        40,
+        520
+      ],
+      [
+        "bu",
+        520,
+        800
+      ],
+      [
+        "da",
+        800,
+        1030
+      ],
+      [
+        "bir",
+        1030,
+        1490
+      ],
+      [
+        "deneme",
+        1490,
+        2210
+      ],
+      [
+        "videosudur",
+        2210,
+        3560
+      ],
+      [
+        "şu",
+        3560,
+        4270
+      ],
+      [
+        "anda",
+        4270,
+        5220
+      ],
+      [
+        "uygulamanın",
+        5220,
+        7960
+      ],
+      [
+        "sesi",
+        7960,
+        9080
+      ],
+      [
+        "kesip",
+        9080,
+        10000
+      ],
+      [
+        "kesmediğini",
+        10000,
+        10600
+      ],
+      [
+        "test",
+        10600,
+        10960
+      ],
+      [
+        "etmek",
+        10960,
+        11240
+      ],
+      [
+        "için",
+        11240,
+        11680
+      ],
+      [
+        "bir",
+        11680,
+        12040
+      ],
+      [
+        "kayıt",
+        12040,
+        12720
+      ],
+      [
+        "yapıyoruz",
+        12720,
+        13330
+      ],
+      [
+        "bu",
+        13330,
+        13500
+      ],
+      [
+        "kaydın",
+        13500,
+        14200
+      ],
+      [
+        "süresi",
+        14200,
+        14700
+      ],
+      [
+        "yaklaşık",
+        14700,
+        15570
+      ],
+      [
+        "30",
+        15570,
+        16100
+      ],
+      [
+        "saniye",
+        16100,
+        16610
+      ],
+      [
+        "olacak",
+        16610,
+        17410
+      ],
+      [
+        "şey",
+        17410,
+        17490
+      ],
+      [
+        "gibi",
+        17490,
+        17840
+      ],
+      [
+        "ara",
+        17840,
+        18240
+      ],
+      [
+        "sözcükleri",
+        18240,
+        18960
+      ],
+      [
+        "kesmesini",
+        18960,
+        19810
+      ],
+      [
+        "sağlayacağız",
+        19810,
+        21240
+      ],
+      [
+        "aynı",
+        21240,
+        21720
+      ],
+      [
+        "zamanda",
+        21720,
+        22340
+      ],
+      [
+        "boşlukları",
+        22340,
+        23530
+      ],
+      [
+        "kesmesini",
+        23530,
+        24380
+      ],
+      [
+        "sağlayacağız",
+        24380,
+        25810
+      ],
+      [
+        "ve",
+        25810,
+        26100
+      ],
+      [
+        "bunu",
+        26100,
+        26340
+      ],
+      [
+        "video",
+        26340,
+        26750
+      ],
+      [
+        "halindeyken",
+        26750,
+        27360
+      ],
+      [
+        "yapacağız",
+        27390,
+        28850
+      ],
+      [
+        "sadece",
+        28850,
+        28940
+      ],
+      [
+        "ses",
+        28940,
+        29240
+      ],
+      [
+        "kaydı",
+        29240,
+        29780
+      ],
+      [
+        "halindeyken",
+        29780,
+        30740
+      ],
+      [
+        "değil",
+        30740,
+        31360
+      ],
+      [
+        "Evet",
+        31360,
+        31730
+      ],
+      [
+        "test",
+        31730,
+        32100
+      ],
+      [
+        "kaydımız",
+        32100,
+        33030
+      ],
+      [
+        "bitti",
+        33030,
+        33540
+      ]
+    ],
+    "cpu|Test3|fiziksel (6)": [
+      [
+        "Evet",
+        40,
+        520
+      ],
+      [
+        "bu",
+        520,
+        800
+      ],
+      [
+        "da",
+        800,
+        1030
+      ],
+      [
+        "bir",
+        1030,
+        1490
+      ],
+      [
+        "deneme",
+        1490,
+        2210
+      ],
+      [
+        "videosudur",
+        2210,
+        3560
+      ],
+      [
+        "şu",
+        3560,
+        4270
+      ],
+      [
+        "anda",
+        4270,
+        5220
+      ],
+      [
+        "uygulamanın",
+        5220,
+        7960
+      ],
+      [
+        "sesi",
+        7960,
+        9080
+      ],
+      [
+        "kesip",
+        9080,
+        10000
+      ],
+      [
+        "kesmediğini",
+        10000,
+        10600
+      ],
+      [
+        "test",
+        10600,
+        10960
+      ],
+      [
+        "etmek",
+        10960,
+        11240
+      ],
+      [
+        "için",
+        11240,
+        11680
+      ],
+      [
+        "bir",
+        11680,
+        12040
+      ],
+      [
+        "kayıt",
+        12040,
+        12720
+      ],
+      [
+        "yapıyoruz",
+        12720,
+        13330
+      ],
+      [
+        "bu",
+        13330,
+        13500
+      ],
+      [
+        "kaydın",
+        13500,
+        14200
+      ],
+      [
+        "süresi",
+        14200,
+        14700
+      ],
+      [
+        "yaklaşık",
+        14700,
+        15570
+      ],
+      [
+        "30",
+        15570,
+        16100
+      ],
+      [
+        "saniye",
+        16100,
+        16610
+      ],
+      [
+        "olacak",
+        16610,
+        17410
+      ],
+      [
+        "şey",
+        17410,
+        17490
+      ],
+      [
+        "gibi",
+        17490,
+        17840
+      ],
+      [
+        "ara",
+        17840,
+        18240
+      ],
+      [
+        "sözcükleri",
+        18240,
+        18960
+      ],
+      [
+        "kesmesini",
+        18960,
+        19810
+      ],
+      [
+        "sağlayacağız",
+        19810,
+        21240
+      ],
+      [
+        "aynı",
+        21240,
+        21720
+      ],
+      [
+        "zamanda",
+        21720,
+        22340
+      ],
+      [
+        "boşlukları",
+        22340,
+        23530
+      ],
+      [
+        "kesmesini",
+        23530,
+        24380
+      ],
+      [
+        "sağlayacağız",
+        24380,
+        25810
+      ],
+      [
+        "ve",
+        25810,
+        26100
+      ],
+      [
+        "bunu",
+        26100,
+        26340
+      ],
+      [
+        "video",
+        26340,
+        26750
+      ],
+      [
+        "halindeyken",
+        26750,
+        27360
+      ],
+      [
+        "yapacağız",
+        27390,
+        28850
+      ],
+      [
+        "sadece",
+        28850,
+        28940
+      ],
+      [
+        "ses",
+        28940,
+        29240
+      ],
+      [
+        "kaydı",
+        29240,
+        29780
+      ],
+      [
+        "halindeyken",
+        29780,
+        30740
+      ],
+      [
+        "değil",
+        30740,
+        31360
+      ],
+      [
+        "Evet",
+        31360,
+        31730
+      ],
+      [
+        "test",
+        31730,
+        32100
+      ],
+      [
+        "kaydımız",
+        32100,
+        33030
+      ],
+      [
+        "bitti",
+        33030,
+        33540
+      ]
+    ],
+    "cpu|Test3|mantiksal (12)": [
+      [
+        "Evet",
+        40,
+        520
+      ],
+      [
+        "bu",
+        520,
+        800
+      ],
+      [
+        "da",
+        800,
+        1030
+      ],
+      [
+        "bir",
+        1030,
+        1490
+      ],
+      [
+        "deneme",
+        1490,
+        2210
+      ],
+      [
+        "videosudur",
+        2210,
+        3560
+      ],
+      [
+        "şu",
+        3560,
+        4270
+      ],
+      [
+        "anda",
+        4270,
+        5220
+      ],
+      [
+        "uygulamanın",
+        5220,
+        7960
+      ],
+      [
+        "sesi",
+        7960,
+        9080
+      ],
+      [
+        "kesip",
+        9080,
+        10000
+      ],
+      [
+        "kesmediğini",
+        10000,
+        10600
+      ],
+      [
+        "test",
+        10600,
+        10960
+      ],
+      [
+        "etmek",
+        10960,
+        11240
+      ],
+      [
+        "için",
+        11240,
+        11680
+      ],
+      [
+        "bir",
+        11680,
+        12040
+      ],
+      [
+        "kayıt",
+        12040,
+        12720
+      ],
+      [
+        "yapıyoruz",
+        12720,
+        13330
+      ],
+      [
+        "bu",
+        13330,
+        13500
+      ],
+      [
+        "kaydın",
+        13500,
+        14200
+      ],
+      [
+        "süresi",
+        14200,
+        14700
+      ],
+      [
+        "yaklaşık",
+        14700,
+        15570
+      ],
+      [
+        "30",
+        15570,
+        16100
+      ],
+      [
+        "saniye",
+        16100,
+        16610
+      ],
+      [
+        "olacak",
+        16610,
+        17410
+      ],
+      [
+        "şey",
+        17410,
+        17490
+      ],
+      [
+        "gibi",
+        17490,
+        17840
+      ],
+      [
+        "ara",
+        17840,
+        18240
+      ],
+      [
+        "sözcükleri",
+        18240,
+        18960
+      ],
+      [
+        "kesmesini",
+        18960,
+        19810
+      ],
+      [
+        "sağlayacağız",
+        19810,
+        21240
+      ],
+      [
+        "aynı",
+        21240,
+        21720
+      ],
+      [
+        "zamanda",
+        21720,
+        22340
+      ],
+      [
+        "boşlukları",
+        22340,
+        23530
+      ],
+      [
+        "kesmesini",
+        23530,
+        24380
+      ],
+      [
+        "sağlayacağız",
+        24380,
+        25810
+      ],
+      [
+        "ve",
+        25810,
+        26100
+      ],
+      [
+        "bunu",
+        26100,
+        26340
+      ],
+      [
+        "video",
+        26340,
+        26750
+      ],
+      [
+        "halindeyken",
+        26750,
+        27360
+      ],
+      [
+        "yapacağız",
+        27390,
+        28850
+      ],
+      [
+        "sadece",
+        28850,
+        28940
+      ],
+      [
+        "ses",
+        28940,
+        29240
+      ],
+      [
+        "kaydı",
+        29240,
+        29780
+      ],
+      [
+        "halindeyken",
+        29780,
+        30740
+      ],
+      [
+        "değil",
+        30740,
+        31360
+      ],
+      [
+        "Evet",
+        31360,
+        31730
+      ],
+      [
+        "test",
+        31730,
+        32100
+      ],
+      [
+        "kaydımız",
+        32100,
+        33030
+      ],
+      [
+        "bitti",
+        33030,
+        33540
+      ]
+    ],
+    "cpu|Test4|varsayilan": [
+      [
+        "Bu",
+        30,
+        170
+      ],
+      [
+        "da",
+        170,
+        340
+      ],
+      [
+        "dördüncü",
+        340,
+        1280
+      ],
+      [
+        "ses",
+        1280,
+        1530
+      ],
+      [
+        "kayıt",
+        1530,
+        2060
+      ],
+      [
+        "testimiz,",
+        2060,
+        3220
+      ],
+      [
+        "son",
+        3220,
+        3850
+      ],
+      [
+        "dördüncü",
+        3850,
+        6160
+      ],
+      [
+        "ses",
+        6160,
+        6790
+      ],
+      [
+        "kayıt",
+        6790,
+        8050
+      ],
+      [
+        "testimiz,",
+        8050,
+        10200
+      ],
+      [
+        "video",
+        10200,
+        10600
+      ],
+      [
+        "testimiz,",
+        10600,
+        11480
+      ],
+      [
+        "videolar",
+        11480,
+        12320
+      ],
+      [
+        "MP4",
+        12320,
+        13210
+      ],
+      [
+        "formatında",
+        13210,
+        13820
+      ],
+      [
+        "çekiliyor,",
+        13820,
+        14610
+      ],
+      [
+        "herhangi",
+        14610,
+        15370
+      ],
+      [
+        "bir",
+        15370,
+        15700
+      ],
+      [
+        "Vav",
+        15700,
+        15940
+      ],
+      [
+        "veya",
+        15940,
+        16330
+      ],
+      [
+        "MP3",
+        16330,
+        16810
+      ],
+      [
+        "formatına",
+        16810,
+        17760
+      ],
+      [
+        "çevrilmeden",
+        17760,
+        19000
+      ],
+      [
+        "direkt",
+        19000,
+        19650
+      ],
+      [
+        "MP3",
+        19650,
+        20180
+      ],
+      [
+        "üstünden",
+        20180,
+        21250
+      ],
+      [
+        "işleniyor",
+        21250,
+        22360
+      ],
+      [
+        "ve",
+        22360,
+        22590
+      ],
+      [
+        "kelimeleri",
+        22590,
+        23730
+      ],
+      [
+        "ve",
+        23730,
+        23960
+      ],
+      [
+        "boşlukları",
+        23960,
+        25330
+      ],
+      [
+        "kesip",
+        25330,
+        25900
+      ],
+      [
+        "kesmediğini",
+        25900,
+        27260
+      ],
+      [
+        "test",
+        27260,
+        27750
+      ],
+      [
+        "ediyoruz.",
+        27750,
+        29060
+      ],
+      [
+        "Altyazı",
+        30030,
+        30320
+      ],
+      [
+        "M.K.",
+        30320,
+        30700
+      ]
+    ],
+    "cpu|Test4|fiziksel (6)": [
+      [
+        "Bu",
+        30,
+        170
+      ],
+      [
+        "da",
+        170,
+        340
+      ],
+      [
+        "dördüncü",
+        340,
+        1280
+      ],
+      [
+        "ses",
+        1280,
+        1530
+      ],
+      [
+        "kayıt",
+        1530,
+        2060
+      ],
+      [
+        "testimiz,",
+        2060,
+        3220
+      ],
+      [
+        "son",
+        3220,
+        3850
+      ],
+      [
+        "dördüncü",
+        3850,
+        6160
+      ],
+      [
+        "ses",
+        6160,
+        6790
+      ],
+      [
+        "kayıt",
+        6790,
+        8050
+      ],
+      [
+        "testimiz,",
+        8050,
+        10200
+      ],
+      [
+        "video",
+        10200,
+        10600
+      ],
+      [
+        "testimiz,",
+        10600,
+        11480
+      ],
+      [
+        "videolar",
+        11480,
+        12320
+      ],
+      [
+        "MP4",
+        12320,
+        13210
+      ],
+      [
+        "formatında",
+        13210,
+        13820
+      ],
+      [
+        "çekiliyor,",
+        13820,
+        14610
+      ],
+      [
+        "herhangi",
+        14610,
+        15370
+      ],
+      [
+        "bir",
+        15370,
+        15700
+      ],
+      [
+        "Vav",
+        15700,
+        15940
+      ],
+      [
+        "veya",
+        15940,
+        16330
+      ],
+      [
+        "MP3",
+        16330,
+        16810
+      ],
+      [
+        "formatına",
+        16810,
+        17760
+      ],
+      [
+        "çevrilmeden",
+        17760,
+        19000
+      ],
+      [
+        "direkt",
+        19000,
+        19650
+      ],
+      [
+        "MP3",
+        19650,
+        20180
+      ],
+      [
+        "üstünden",
+        20180,
+        21250
+      ],
+      [
+        "işleniyor",
+        21250,
+        22360
+      ],
+      [
+        "ve",
+        22360,
+        22590
+      ],
+      [
+        "kelimeleri",
+        22590,
+        23730
+      ],
+      [
+        "ve",
+        23730,
+        23960
+      ],
+      [
+        "boşlukları",
+        23960,
+        25330
+      ],
+      [
+        "kesip",
+        25330,
+        25900
+      ],
+      [
+        "kesmediğini",
+        25900,
+        27260
+      ],
+      [
+        "test",
+        27260,
+        27750
+      ],
+      [
+        "ediyoruz.",
+        27750,
+        29060
+      ],
+      [
+        "Altyazı",
+        30030,
+        30320
+      ],
+      [
+        "M.K.",
+        30320,
+        30700
+      ]
+    ],
+    "cpu|Test4|mantiksal (12)": [
+      [
+        "Bu",
+        30,
+        170
+      ],
+      [
+        "da",
+        170,
+        340
+      ],
+      [
+        "dördüncü",
+        340,
+        1280
+      ],
+      [
+        "ses",
+        1280,
+        1530
+      ],
+      [
+        "kayıt",
+        1530,
+        2060
+      ],
+      [
+        "testimiz,",
+        2060,
+        3220
+      ],
+      [
+        "son",
+        3220,
+        3850
+      ],
+      [
+        "dördüncü",
+        3850,
+        6160
+      ],
+      [
+        "ses",
+        6160,
+        6790
+      ],
+      [
+        "kayıt",
+        6790,
+        8050
+      ],
+      [
+        "testimiz,",
+        8050,
+        10200
+      ],
+      [
+        "video",
+        10200,
+        10600
+      ],
+      [
+        "testimiz,",
+        10600,
+        11480
+      ],
+      [
+        "videolar",
+        11480,
+        12320
+      ],
+      [
+        "MP4",
+        12320,
+        13210
+      ],
+      [
+        "formatında",
+        13210,
+        13820
+      ],
+      [
+        "çekiliyor,",
+        13820,
+        14610
+      ],
+      [
+        "herhangi",
+        14610,
+        15370
+      ],
+      [
+        "bir",
+        15370,
+        15700
+      ],
+      [
+        "Vav",
+        15700,
+        15940
+      ],
+      [
+        "veya",
+        15940,
+        16330
+      ],
+      [
+        "MP3",
+        16330,
+        16810
+      ],
+      [
+        "formatına",
+        16810,
+        17760
+      ],
+      [
+        "çevrilmeden",
+        17760,
+        19000
+      ],
+      [
+        "direkt",
+        19000,
+        19650
+      ],
+      [
+        "MP3",
+        19650,
+        20180
+      ],
+      [
+        "üstünden",
+        20180,
+        21250
+      ],
+      [
+        "işleniyor",
+        21250,
+        22360
+      ],
+      [
+        "ve",
+        22360,
+        22590
+      ],
+      [
+        "kelimeleri",
+        22590,
+        23730
+      ],
+      [
+        "ve",
+        23730,
+        23960
+      ],
+      [
+        "boşlukları",
+        23960,
+        25330
+      ],
+      [
+        "kesip",
+        25330,
+        25900
+      ],
+      [
+        "kesmediğini",
+        25900,
+        27260
+      ],
+      [
+        "test",
+        27260,
+        27750
+      ],
+      [
+        "ediyoruz.",
+        27750,
+        29060
+      ],
+      [
+        "Altyazı",
+        30030,
+        30320
+      ],
+      [
+        "M.K.",
+        30320,
+        30700
+      ]
+    ],
+    "gpu|Test1|varsayilan": [
+      [
+        "abone",
+        30,
+        1420
+      ],
+      [
+        "ol",
+        1420,
+        2060
+      ],
+      [
+        "bu",
+        2060,
+        5000
+      ],
+      [
+        "selam",
+        5000,
+        6600
+      ],
+      [
+        "arkadaşlar",
+        6600,
+        8660
+      ],
+      [
+        "bu",
+        8660,
+        10670
+      ],
+      [
+        "şey",
+        10670,
+        12610
+      ],
+      [
+        "bugün",
+        12610,
+        13200
+      ],
+      [
+        "sizlerle",
+        13200,
+        13840
+      ],
+      [
+        "birlikte",
+        13840,
+        14280
+      ],
+      [
+        "bilgisayarımıza",
+        14280,
+        15060
+      ],
+      [
+        "bakıyoruz",
+        15060,
+        15620
+      ],
+      [
+        "bu",
+        15620,
+        16140
+      ],
+      [
+        "test",
+        16140,
+        17180
+      ],
+      [
+        "deneme",
+        17180,
+        18740
+      ],
+      [
+        "1",
+        18740,
+        19520
+      ],
+      [
+        "2",
+        19520,
+        20300
+      ],
+      [
+        "3",
+        20300,
+        21080
+      ],
+      [
+        "şey",
+        21080,
+        22140
+      ],
+      [
+        "abone",
+        22140,
+        24650
+      ],
+      [
+        "ol",
+        24650,
+        25660
+      ]
+    ],
+    "gpu|Test1|fiziksel (6)": [
+      [
+        "abone",
+        30,
+        1420
+      ],
+      [
+        "ol",
+        1420,
+        2060
+      ],
+      [
+        "bu",
+        2060,
+        5000
+      ],
+      [
+        "selam",
+        5000,
+        6600
+      ],
+      [
+        "arkadaşlar",
+        6600,
+        8660
+      ],
+      [
+        "bu",
+        8660,
+        10670
+      ],
+      [
+        "şey",
+        10670,
+        12610
+      ],
+      [
+        "bugün",
+        12610,
+        13200
+      ],
+      [
+        "sizlerle",
+        13200,
+        13840
+      ],
+      [
+        "birlikte",
+        13840,
+        14280
+      ],
+      [
+        "bilgisayarımıza",
+        14280,
+        15060
+      ],
+      [
+        "bakıyoruz",
+        15060,
+        15620
+      ],
+      [
+        "bu",
+        15620,
+        16140
+      ],
+      [
+        "test",
+        16140,
+        17180
+      ],
+      [
+        "deneme",
+        17180,
+        18740
+      ],
+      [
+        "1",
+        18740,
+        19520
+      ],
+      [
+        "2",
+        19520,
+        20300
+      ],
+      [
+        "3",
+        20300,
+        21080
+      ],
+      [
+        "şey",
+        21080,
+        22140
+      ],
+      [
+        "abone",
+        22140,
+        24650
+      ],
+      [
+        "ol",
+        24650,
+        25660
+      ]
+    ],
+    "gpu|Test1|mantiksal (12)": [
+      [
+        "abone",
+        30,
+        1420
+      ],
+      [
+        "ol",
+        1420,
+        2060
+      ],
+      [
+        "bu",
+        2060,
+        5000
+      ],
+      [
+        "selam",
+        5000,
+        6600
+      ],
+      [
+        "arkadaşlar",
+        6600,
+        8660
+      ],
+      [
+        "bu",
+        8660,
+        10670
+      ],
+      [
+        "şey",
+        10670,
+        12610
+      ],
+      [
+        "bugün",
+        12610,
+        13200
+      ],
+      [
+        "sizlerle",
+        13200,
+        13840
+      ],
+      [
+        "birlikte",
+        13840,
+        14280
+      ],
+      [
+        "bilgisayarımıza",
+        14280,
+        15060
+      ],
+      [
+        "bakıyoruz",
+        15060,
+        15620
+      ],
+      [
+        "bu",
+        15620,
+        16140
+      ],
+      [
+        "test",
+        16140,
+        17180
+      ],
+      [
+        "deneme",
+        17180,
+        18740
+      ],
+      [
+        "1",
+        18740,
+        19520
+      ],
+      [
+        "2",
+        19520,
+        20300
+      ],
+      [
+        "3",
+        20300,
+        21080
+      ],
+      [
+        "şey",
+        21080,
+        22140
+      ],
+      [
+        "abone",
+        22140,
+        24650
+      ],
+      [
+        "ol",
+        24650,
+        25660
+      ]
+    ],
+    "gpu|Test2|varsayilan": [
+      [
+        "selam",
+        330,
+        2000
+      ],
+      [
+        "Selam",
+        2000,
+        2820
+      ],
+      [
+        "arkadaşlar",
+        2820,
+        3390
+      ],
+      [
+        "bu",
+        3390,
+        3560
+      ],
+      [
+        "bir",
+        3560,
+        3810
+      ],
+      [
+        "test",
+        3810,
+        4200
+      ],
+      [
+        "videosudur",
+        4200,
+        5080
+      ],
+      [
+        "boşluk",
+        5080,
+        6460
+      ],
+      [
+        "kesmeyi",
+        6460,
+        7940
+      ],
+      [
+        "test",
+        7940,
+        8760
+      ],
+      [
+        "ediyoruz",
+        8760,
+        10420
+      ],
+      [
+        "ııı",
+        10420,
+        11440
+      ],
+      [
+        "şey",
+        11440,
+        13280
+      ],
+      [
+        "mesela",
+        13280,
+        13840
+      ],
+      [
+        "gibi",
+        13840,
+        14720
+      ],
+      [
+        "kelimeleri",
+        14720,
+        15600
+      ],
+      [
+        "test",
+        15600,
+        15650
+      ],
+      [
+        "ediyoruz",
+        15650,
+        16120
+      ],
+      [
+        "aynı",
+        16120,
+        16550
+      ],
+      [
+        "zamanda",
+        16550,
+        17150
+      ],
+      [
+        "video",
+        17150,
+        17500
+      ],
+      [
+        "çekiyoruz",
+        17500,
+        18440
+      ],
+      [
+        "ki",
+        18440,
+        18610
+      ],
+      [
+        "uygulamamız",
+        18610,
+        19630
+      ],
+      [
+        "düzgün",
+        19630,
+        20310
+      ],
+      [
+        "çalışıyor",
+        20310,
+        21430
+      ],
+      [
+        "mu",
+        21430,
+        21600
+      ],
+      [
+        "bakalım",
+        21600,
+        22400
+      ]
+    ],
+    "gpu|Test2|fiziksel (6)": [
+      [
+        "selam",
+        330,
+        2000
+      ],
+      [
+        "Selam",
+        2000,
+        2820
+      ],
+      [
+        "arkadaşlar",
+        2820,
+        3390
+      ],
+      [
+        "bu",
+        3390,
+        3560
+      ],
+      [
+        "bir",
+        3560,
+        3810
+      ],
+      [
+        "test",
+        3810,
+        4200
+      ],
+      [
+        "videosudur",
+        4200,
+        5080
+      ],
+      [
+        "boşluk",
+        5080,
+        6460
+      ],
+      [
+        "kesmeyi",
+        6460,
+        7940
+      ],
+      [
+        "test",
+        7940,
+        8760
+      ],
+      [
+        "ediyoruz",
+        8760,
+        10420
+      ],
+      [
+        "ııı",
+        10420,
+        11440
+      ],
+      [
+        "şey",
+        11440,
+        13280
+      ],
+      [
+        "mesela",
+        13280,
+        13840
+      ],
+      [
+        "gibi",
+        13840,
+        14720
+      ],
+      [
+        "kelimeleri",
+        14720,
+        15600
+      ],
+      [
+        "test",
+        15600,
+        15650
+      ],
+      [
+        "ediyoruz",
+        15650,
+        16120
+      ],
+      [
+        "aynı",
+        16120,
+        16550
+      ],
+      [
+        "zamanda",
+        16550,
+        17150
+      ],
+      [
+        "video",
+        17150,
+        17500
+      ],
+      [
+        "çekiyoruz",
+        17500,
+        18440
+      ],
+      [
+        "ki",
+        18440,
+        18610
+      ],
+      [
+        "uygulamamız",
+        18610,
+        19630
+      ],
+      [
+        "düzgün",
+        19630,
+        20310
+      ],
+      [
+        "çalışıyor",
+        20310,
+        21430
+      ],
+      [
+        "mu",
+        21430,
+        21600
+      ],
+      [
+        "bakalım",
+        21600,
+        22400
+      ]
+    ],
+    "gpu|Test2|mantiksal (12)": [
+      [
+        "selam",
+        330,
+        2000
+      ],
+      [
+        "Selam",
+        2000,
+        2820
+      ],
+      [
+        "arkadaşlar",
+        2820,
+        3390
+      ],
+      [
+        "bu",
+        3390,
+        3560
+      ],
+      [
+        "bir",
+        3560,
+        3810
+      ],
+      [
+        "test",
+        3810,
+        4200
+      ],
+      [
+        "videosudur",
+        4200,
+        5080
+      ],
+      [
+        "boşluk",
+        5080,
+        6460
+      ],
+      [
+        "kesmeyi",
+        6460,
+        7940
+      ],
+      [
+        "test",
+        7940,
+        8760
+      ],
+      [
+        "ediyoruz",
+        8760,
+        10420
+      ],
+      [
+        "ııı",
+        10420,
+        11440
+      ],
+      [
+        "şey",
+        11440,
+        13280
+      ],
+      [
+        "mesela",
+        13280,
+        13840
+      ],
+      [
+        "gibi",
+        13840,
+        14720
+      ],
+      [
+        "kelimeleri",
+        14720,
+        15600
+      ],
+      [
+        "test",
+        15600,
+        15650
+      ],
+      [
+        "ediyoruz",
+        15650,
+        16120
+      ],
+      [
+        "aynı",
+        16120,
+        16550
+      ],
+      [
+        "zamanda",
+        16550,
+        17150
+      ],
+      [
+        "video",
+        17150,
+        17500
+      ],
+      [
+        "çekiyoruz",
+        17500,
+        18440
+      ],
+      [
+        "ki",
+        18440,
+        18610
+      ],
+      [
+        "uygulamamız",
+        18610,
+        19630
+      ],
+      [
+        "düzgün",
+        19630,
+        20310
+      ],
+      [
+        "çalışıyor",
+        20310,
+        21430
+      ],
+      [
+        "mu",
+        21430,
+        21600
+      ],
+      [
+        "bakalım",
+        21600,
+        22400
+      ]
+    ],
+    "gpu|Test3|varsayilan": [
+      [
+        "mi",
+        30,
+        250
+      ],
+      [
+        "Evet",
+        250,
+        800
+      ],
+      [
+        "bu",
+        800,
+        980
+      ],
+      [
+        "da",
+        980,
+        1490
+      ],
+      [
+        "bir",
+        1490,
+        1640
+      ],
+      [
+        "deneme",
+        1640,
+        2400
+      ],
+      [
+        "videosu",
+        2400,
+        3300
+      ],
+      [
+        "dur",
+        3300,
+        3560
+      ],
+      [
+        "şu",
+        3560,
+        4270
+      ],
+      [
+        "anda",
+        4270,
+        5220
+      ],
+      [
+        "uygulamanın",
+        5220,
+        7960
+      ],
+      [
+        "sesi",
+        7960,
+        9080
+      ],
+      [
+        "kesip",
+        9080,
+        10000
+      ],
+      [
+        "kesmediğini",
+        10000,
+        10600
+      ],
+      [
+        "test",
+        10600,
+        10960
+      ],
+      [
+        "etmek",
+        10960,
+        11250
+      ],
+      [
+        "için",
+        11250,
+        11440
+      ],
+      [
+        "bir",
+        11440,
+        11730
+      ],
+      [
+        "kayıt",
+        11730,
+        12230
+      ],
+      [
+        "yapıyoruz",
+        12230,
+        13160
+      ],
+      [
+        "bu",
+        13160,
+        13340
+      ],
+      [
+        "kaydın",
+        13340,
+        13970
+      ],
+      [
+        "süresi",
+        13970,
+        14590
+      ],
+      [
+        "yaklaşık",
+        14590,
+        15500
+      ],
+      [
+        "30",
+        15500,
+        16050
+      ],
+      [
+        "saniye",
+        16050,
+        16590
+      ],
+      [
+        "olacak",
+        16590,
+        17140
+      ],
+      [
+        "şey",
+        17140,
+        17610
+      ],
+      [
+        "gibi",
+        17610,
+        17860
+      ],
+      [
+        "ara",
+        17860,
+        18240
+      ],
+      [
+        "sözcükleri",
+        18240,
+        18950
+      ],
+      [
+        "kesmesini",
+        18950,
+        19640
+      ],
+      [
+        "sağlayacağız",
+        19640,
+        21130
+      ],
+      [
+        "aynı",
+        21130,
+        21540
+      ],
+      [
+        "zamanda",
+        21540,
+        22200
+      ],
+      [
+        "boşlukları",
+        22200,
+        23340
+      ],
+      [
+        "kesmesini",
+        23340,
+        24180
+      ],
+      [
+        "sağlayacağız",
+        24180,
+        25790
+      ],
+      [
+        "ve",
+        25790,
+        25810
+      ],
+      [
+        "bunu",
+        25810,
+        26170
+      ],
+      [
+        "video",
+        26170,
+        26760
+      ],
+      [
+        "halindeyken",
+        26760,
+        27490
+      ],
+      [
+        "yapacağız",
+        27490,
+        27840
+      ],
+      [
+        "bir",
+        27870,
+        28040
+      ],
+      [
+        "ses",
+        28040,
+        28240
+      ],
+      [
+        "kaydı",
+        28240,
+        28630
+      ],
+      [
+        "halindeyken",
+        28630,
+        29370
+      ],
+      [
+        "değil",
+        29370,
+        29840
+      ],
+      [
+        "ve",
+        29840,
+        30120
+      ],
+      [
+        "test",
+        30120,
+        30800
+      ],
+      [
+        "kaydımız",
+        30800,
+        32100
+      ],
+      [
+        "bitti",
+        32100,
+        32840
+      ]
+    ],
+    "gpu|Test3|fiziksel (6)": [
+      [
+        "mi",
+        30,
+        250
+      ],
+      [
+        "Evet",
+        250,
+        800
+      ],
+      [
+        "bu",
+        800,
+        980
+      ],
+      [
+        "da",
+        980,
+        1490
+      ],
+      [
+        "bir",
+        1490,
+        1640
+      ],
+      [
+        "deneme",
+        1640,
+        2400
+      ],
+      [
+        "videosu",
+        2400,
+        3300
+      ],
+      [
+        "dur",
+        3300,
+        3560
+      ],
+      [
+        "şu",
+        3560,
+        4270
+      ],
+      [
+        "anda",
+        4270,
+        5220
+      ],
+      [
+        "uygulamanın",
+        5220,
+        7960
+      ],
+      [
+        "sesi",
+        7960,
+        9080
+      ],
+      [
+        "kesip",
+        9080,
+        10000
+      ],
+      [
+        "kesmediğini",
+        10000,
+        10600
+      ],
+      [
+        "test",
+        10600,
+        10960
+      ],
+      [
+        "etmek",
+        10960,
+        11250
+      ],
+      [
+        "için",
+        11250,
+        11440
+      ],
+      [
+        "bir",
+        11440,
+        11730
+      ],
+      [
+        "kayıt",
+        11730,
+        12230
+      ],
+      [
+        "yapıyoruz",
+        12230,
+        13160
+      ],
+      [
+        "bu",
+        13160,
+        13340
+      ],
+      [
+        "kaydın",
+        13340,
+        13970
+      ],
+      [
+        "süresi",
+        13970,
+        14590
+      ],
+      [
+        "yaklaşık",
+        14590,
+        15500
+      ],
+      [
+        "30",
+        15500,
+        16050
+      ],
+      [
+        "saniye",
+        16050,
+        16590
+      ],
+      [
+        "olacak",
+        16590,
+        17140
+      ],
+      [
+        "şey",
+        17140,
+        17610
+      ],
+      [
+        "gibi",
+        17610,
+        17860
+      ],
+      [
+        "ara",
+        17860,
+        18240
+      ],
+      [
+        "sözcükleri",
+        18240,
+        18950
+      ],
+      [
+        "kesmesini",
+        18950,
+        19640
+      ],
+      [
+        "sağlayacağız",
+        19640,
+        21130
+      ],
+      [
+        "aynı",
+        21130,
+        21540
+      ],
+      [
+        "zamanda",
+        21540,
+        22200
+      ],
+      [
+        "boşlukları",
+        22200,
+        23340
+      ],
+      [
+        "kesmesini",
+        23340,
+        24180
+      ],
+      [
+        "sağlayacağız",
+        24180,
+        25790
+      ],
+      [
+        "ve",
+        25790,
+        25810
+      ],
+      [
+        "bunu",
+        25810,
+        26170
+      ],
+      [
+        "video",
+        26170,
+        26760
+      ],
+      [
+        "halindeyken",
+        26760,
+        27490
+      ],
+      [
+        "yapacağız",
+        27490,
+        27840
+      ],
+      [
+        "bir",
+        27870,
+        28040
+      ],
+      [
+        "ses",
+        28040,
+        28240
+      ],
+      [
+        "kaydı",
+        28240,
+        28630
+      ],
+      [
+        "halindeyken",
+        28630,
+        29370
+      ],
+      [
+        "değil",
+        29370,
+        29840
+      ],
+      [
+        "ve",
+        29840,
+        30120
+      ],
+      [
+        "test",
+        30120,
+        30800
+      ],
+      [
+        "kaydımız",
+        30800,
+        32100
+      ],
+      [
+        "bitti",
+        32100,
+        32840
+      ]
+    ],
+    "gpu|Test3|mantiksal (12)": [
+      [
+        "mi",
+        30,
+        250
+      ],
+      [
+        "Evet",
+        250,
+        800
+      ],
+      [
+        "bu",
+        800,
+        980
+      ],
+      [
+        "da",
+        980,
+        1490
+      ],
+      [
+        "bir",
+        1490,
+        1640
+      ],
+      [
+        "deneme",
+        1640,
+        2400
+      ],
+      [
+        "videosu",
+        2400,
+        3300
+      ],
+      [
+        "dur",
+        3300,
+        3560
+      ],
+      [
+        "şu",
+        3560,
+        4270
+      ],
+      [
+        "anda",
+        4270,
+        5220
+      ],
+      [
+        "uygulamanın",
+        5220,
+        7960
+      ],
+      [
+        "sesi",
+        7960,
+        9080
+      ],
+      [
+        "kesip",
+        9080,
+        10000
+      ],
+      [
+        "kesmediğini",
+        10000,
+        10600
+      ],
+      [
+        "test",
+        10600,
+        10960
+      ],
+      [
+        "etmek",
+        10960,
+        11250
+      ],
+      [
+        "için",
+        11250,
+        11440
+      ],
+      [
+        "bir",
+        11440,
+        11730
+      ],
+      [
+        "kayıt",
+        11730,
+        12230
+      ],
+      [
+        "yapıyoruz",
+        12230,
+        13160
+      ],
+      [
+        "bu",
+        13160,
+        13340
+      ],
+      [
+        "kaydın",
+        13340,
+        13970
+      ],
+      [
+        "süresi",
+        13970,
+        14590
+      ],
+      [
+        "yaklaşık",
+        14590,
+        15500
+      ],
+      [
+        "30",
+        15500,
+        16050
+      ],
+      [
+        "saniye",
+        16050,
+        16590
+      ],
+      [
+        "olacak",
+        16590,
+        17140
+      ],
+      [
+        "şey",
+        17140,
+        17610
+      ],
+      [
+        "gibi",
+        17610,
+        17860
+      ],
+      [
+        "ara",
+        17860,
+        18240
+      ],
+      [
+        "sözcükleri",
+        18240,
+        18950
+      ],
+      [
+        "kesmesini",
+        18950,
+        19640
+      ],
+      [
+        "sağlayacağız",
+        19640,
+        21130
+      ],
+      [
+        "aynı",
+        21130,
+        21540
+      ],
+      [
+        "zamanda",
+        21540,
+        22200
+      ],
+      [
+        "boşlukları",
+        22200,
+        23340
+      ],
+      [
+        "kesmesini",
+        23340,
+        24180
+      ],
+      [
+        "sağlayacağız",
+        24180,
+        25790
+      ],
+      [
+        "ve",
+        25790,
+        25810
+      ],
+      [
+        "bunu",
+        25810,
+        26170
+      ],
+      [
+        "video",
+        26170,
+        26760
+      ],
+      [
+        "halindeyken",
+        26760,
+        27490
+      ],
+      [
+        "yapacağız",
+        27490,
+        27840
+      ],
+      [
+        "bir",
+        27870,
+        28040
+      ],
+      [
+        "ses",
+        28040,
+        28240
+      ],
+      [
+        "kaydı",
+        28240,
+        28630
+      ],
+      [
+        "halindeyken",
+        28630,
+        29370
+      ],
+      [
+        "değil",
+        29370,
+        29840
+      ],
+      [
+        "ve",
+        29840,
+        30120
+      ],
+      [
+        "test",
+        30120,
+        30800
+      ],
+      [
+        "kaydımız",
+        30800,
+        32100
+      ],
+      [
+        "bitti",
+        32100,
+        32840
+      ]
+    ],
+    "gpu|Test4|varsayilan": [
+      [
+        "Bu",
+        30,
+        170
+      ],
+      [
+        "da",
+        170,
+        340
+      ],
+      [
+        "dördüncü",
+        340,
+        1280
+      ],
+      [
+        "ses",
+        1280,
+        1530
+      ],
+      [
+        "kayıt",
+        1530,
+        2060
+      ],
+      [
+        "testimiz,",
+        2060,
+        3220
+      ],
+      [
+        "son",
+        3220,
+        3850
+      ],
+      [
+        "dördüncü",
+        3850,
+        6160
+      ],
+      [
+        "ses",
+        6160,
+        6790
+      ],
+      [
+        "kayıt",
+        6790,
+        8050
+      ],
+      [
+        "testimiz,",
+        8050,
+        10200
+      ],
+      [
+        "video",
+        10200,
+        11000
+      ],
+      [
+        "testimiz,",
+        11000,
+        11480
+      ],
+      [
+        "videolar",
+        11480,
+        12320
+      ],
+      [
+        "mp4",
+        12320,
+        13210
+      ],
+      [
+        "formatında",
+        13210,
+        13820
+      ],
+      [
+        "çekiliyor,",
+        13820,
+        14610
+      ],
+      [
+        "herhangi",
+        14610,
+        15370
+      ],
+      [
+        "bir",
+        15370,
+        15700
+      ],
+      [
+        "wav",
+        15700,
+        15940
+      ],
+      [
+        "veya",
+        15940,
+        16330
+      ],
+      [
+        "mp3",
+        16330,
+        16810
+      ],
+      [
+        "formatına",
+        16810,
+        17750
+      ],
+      [
+        "çevrilmeden",
+        17750,
+        19000
+      ],
+      [
+        "direkt",
+        19000,
+        19650
+      ],
+      [
+        "mp3",
+        19650,
+        20170
+      ],
+      [
+        "üstünden",
+        20170,
+        21240
+      ],
+      [
+        "işleniyor",
+        21240,
+        22360
+      ],
+      [
+        "ve",
+        22360,
+        22590
+      ],
+      [
+        "kelimeleri",
+        22590,
+        23730
+      ],
+      [
+        "ve",
+        23730,
+        23960
+      ],
+      [
+        "boşlukları",
+        23960,
+        25330
+      ],
+      [
+        "kesip",
+        25330,
+        25900
+      ],
+      [
+        "kesmediğini",
+        25900,
+        27260
+      ],
+      [
+        "test",
+        27260,
+        27750
+      ],
+      [
+        "ediyoruz.",
+        27750,
+        29060
+      ],
+      [
+        "Altyazı",
+        30030,
+        30320
+      ],
+      [
+        "M.K.",
+        30320,
+        30700
+      ]
+    ],
+    "gpu|Test4|fiziksel (6)": [
+      [
+        "Bu",
+        30,
+        170
+      ],
+      [
+        "da",
+        170,
+        340
+      ],
+      [
+        "dördüncü",
+        340,
+        1280
+      ],
+      [
+        "ses",
+        1280,
+        1530
+      ],
+      [
+        "kayıt",
+        1530,
+        2060
+      ],
+      [
+        "testimiz,",
+        2060,
+        3220
+      ],
+      [
+        "son",
+        3220,
+        3850
+      ],
+      [
+        "dördüncü",
+        3850,
+        6160
+      ],
+      [
+        "ses",
+        6160,
+        6790
+      ],
+      [
+        "kayıt",
+        6790,
+        8050
+      ],
+      [
+        "testimiz,",
+        8050,
+        10200
+      ],
+      [
+        "video",
+        10200,
+        11000
+      ],
+      [
+        "testimiz,",
+        11000,
+        11480
+      ],
+      [
+        "videolar",
+        11480,
+        12320
+      ],
+      [
+        "mp4",
+        12320,
+        13210
+      ],
+      [
+        "formatında",
+        13210,
+        13820
+      ],
+      [
+        "çekiliyor,",
+        13820,
+        14610
+      ],
+      [
+        "herhangi",
+        14610,
+        15370
+      ],
+      [
+        "bir",
+        15370,
+        15700
+      ],
+      [
+        "wav",
+        15700,
+        15940
+      ],
+      [
+        "veya",
+        15940,
+        16330
+      ],
+      [
+        "mp3",
+        16330,
+        16810
+      ],
+      [
+        "formatına",
+        16810,
+        17750
+      ],
+      [
+        "çevrilmeden",
+        17750,
+        19000
+      ],
+      [
+        "direkt",
+        19000,
+        19650
+      ],
+      [
+        "mp3",
+        19650,
+        20170
+      ],
+      [
+        "üstünden",
+        20170,
+        21240
+      ],
+      [
+        "işleniyor",
+        21240,
+        22360
+      ],
+      [
+        "ve",
+        22360,
+        22590
+      ],
+      [
+        "kelimeleri",
+        22590,
+        23730
+      ],
+      [
+        "ve",
+        23730,
+        23960
+      ],
+      [
+        "boşlukları",
+        23960,
+        25330
+      ],
+      [
+        "kesip",
+        25330,
+        25900
+      ],
+      [
+        "kesmediğini",
+        25900,
+        27260
+      ],
+      [
+        "test",
+        27260,
+        27750
+      ],
+      [
+        "ediyoruz.",
+        27750,
+        29060
+      ],
+      [
+        "Altyazı",
+        30030,
+        30320
+      ],
+      [
+        "M.K.",
+        30320,
+        30700
+      ]
+    ],
+    "gpu|Test4|mantiksal (12)": [
+      [
+        "Bu",
+        30,
+        170
+      ],
+      [
+        "da",
+        170,
+        340
+      ],
+      [
+        "dördüncü",
+        340,
+        1280
+      ],
+      [
+        "ses",
+        1280,
+        1530
+      ],
+      [
+        "kayıt",
+        1530,
+        2060
+      ],
+      [
+        "testimiz,",
+        2060,
+        3220
+      ],
+      [
+        "son",
+        3220,
+        3850
+      ],
+      [
+        "dördüncü",
+        3850,
+        6160
+      ],
+      [
+        "ses",
+        6160,
+        6790
+      ],
+      [
+        "kayıt",
+        6790,
+        8050
+      ],
+      [
+        "testimiz,",
+        8050,
+        10200
+      ],
+      [
+        "video",
+        10200,
+        11000
+      ],
+      [
+        "testimiz,",
+        11000,
+        11480
+      ],
+      [
+        "videolar",
+        11480,
+        12320
+      ],
+      [
+        "mp4",
+        12320,
+        13210
+      ],
+      [
+        "formatında",
+        13210,
+        13820
+      ],
+      [
+        "çekiliyor,",
+        13820,
+        14610
+      ],
+      [
+        "herhangi",
+        14610,
+        15370
+      ],
+      [
+        "bir",
+        15370,
+        15700
+      ],
+      [
+        "wav",
+        15700,
+        15940
+      ],
+      [
+        "veya",
+        15940,
+        16330
+      ],
+      [
+        "mp3",
+        16330,
+        16810
+      ],
+      [
+        "formatına",
+        16810,
+        17750
+      ],
+      [
+        "çevrilmeden",
+        17750,
+        19000
+      ],
+      [
+        "direkt",
+        19000,
+        19650
+      ],
+      [
+        "mp3",
+        19650,
+        20170
+      ],
+      [
+        "üstünden",
+        20170,
+        21240
+      ],
+      [
+        "işleniyor",
+        21240,
+        22360
+      ],
+      [
+        "ve",
+        22360,
+        22590
+      ],
+      [
+        "kelimeleri",
+        22590,
+        23730
+      ],
+      [
+        "ve",
+        23730,
+        23960
+      ],
+      [
+        "boşlukları",
+        23960,
+        25330
+      ],
+      [
+        "kesip",
+        25330,
+        25900
+      ],
+      [
+        "kesmediğini",
+        25900,
+        27260
+      ],
+      [
+        "test",
+        27260,
+        27750
+      ],
+      [
+        "ediyoruz.",
+        27750,
+        29060
+      ],
+      [
+        "Altyazı",
+        30030,
+        30320
+      ],
+      [
+        "M.K.",
+        30320,
+        30700
+      ]
+    ]
+  },
+  "fiziksel": 6,
+  "mantiksal": 12,
+  "tekrar": 3
+}

@@ -94,6 +94,51 @@ class TestBuildCommand:
         assert cmd[0] == "/opt/wcpp/whisper-cli"
 
 
+class TestThreadBayragi:
+    """``-t`` politikası: mantıksal çekirdek sayısı geçilir.
+
+    Kurulu binary'nin kendi varsayılanı ``-t 4``'tür (``--help`` çıktısı) ve
+    makinenin çekirdek sayısını DİKKATE ALMAZ. Ölçüm: mantıksal çekirdek
+    sayısı CPU koşusunu medyan **1.41×** hızlandırır, GPU koşusunu etkilemez,
+    transkript birebir aynı kalır.
+    """
+
+    def test_mantiksal_cekirdek_sayisi_gecilir(self) -> None:
+        with patch("os.cpu_count", return_value=12):
+            cmd = build_command("whisper-cli", "m.bin", "a.wav", "out")
+        assert cmd[cmd.index("-t") + 1] == "12"
+
+    def test_makineye_gore_degisir_ezberden_sabit_degil(self) -> None:
+        with patch("os.cpu_count", return_value=4):
+            cmd = build_command("whisper-cli", "m.bin", "a.wav", "out")
+        assert cmd[cmd.index("-t") + 1] == "4"
+
+    def test_acik_deger_politikayi_ezer(self) -> None:
+        with patch("os.cpu_count", return_value=12):
+            cmd = build_command("whisper-cli", "m.bin", "a.wav", "out", threads=6)
+        assert cmd[cmd.index("-t") + 1] == "6"
+
+    def test_cekirdek_sayisi_bilinmiyorsa_bayrak_hic_gecilmez(self) -> None:
+        """``os.cpu_count()`` None dönerse binary'nin kendi varsayılanı korunur."""
+        with patch("os.cpu_count", return_value=None):
+            cmd = build_command("whisper-cli", "m.bin", "a.wav", "out")
+        assert "-t" not in cmd
+
+    def test_gecersiz_cekirdek_sayisi_bayragi_dusurur(self) -> None:
+        """Sıfır/negatif çekirdek sayısı whisper-cli'ye GEÇİRİLMEZ (savunma)."""
+        with patch("os.cpu_count", return_value=0):
+            cmd = build_command("whisper-cli", "m.bin", "a.wav", "out")
+        assert "-t" not in cmd
+
+    def test_diger_bayraklar_bozulmaz(self) -> None:
+        """``-t`` eklenmesi kelime-timestamp bayraklarını kaydırmaz."""
+        with patch("os.cpu_count", return_value=12):
+            cmd = build_command("whisper-cli", "m.bin", "a.wav", "out")
+        assert cmd[cmd.index("-ml") + 1] == "1"
+        assert "-sow" in cmd and "-ojf" in cmd
+        assert cmd[cmd.index("-of") + 1] == "out"
+
+
 class TestToMs:
     def test_tam_sayi_ms_aynen(self) -> None:
         assert _to_ms(3320) == 3320
