@@ -4,6 +4,8 @@ A hardware-agnostic (AMD / Intel / NVIDIA) CLI tool that detects and cuts filler
 words ("um", "uh" — Turkish: "ııı", "şey", "yani") and unnecessary silences from
 video files using speech analysis.
 
+![Filler-Cut review screen: the video player, the waveform timeline with every cut drawn on it, and the cut list](docs/images/ui-review.png)
+
 > v0.1 — see [DESIGN.md](DESIGN.md) for the architecture.
 > Türkçe: [README.tr.md](README.tr.md)
 
@@ -163,6 +165,10 @@ server-side file browser (files are **not** uploaded; the tool reads them
 from disk, and browsing is confined to your home directory), choose
 Normal/Aggressive mode, and watch the 6-stage pipeline progress live.
 
+![Video selection screen: the server-side file browser and the Normal/Aggressive cut mode picker](docs/images/ui-video-sec.png)
+
+![Processing screen: the 6-stage pipeline with the duration of each stage](docs/images/ui-isleniyor.png)
+
 After PLAN the run **pauses for review**: you get the video with a waveform
 timeline, every cut drawn on it, and a cut list. There you can
 
@@ -181,13 +187,13 @@ which filler words were cut (`eee ×3`, `ııı ×1`…) — plus a "show in fol
 button for each output. Your edits are recorded in the report too
 (`tiers.manuel`, `duzenleme`).
 
+![Result screen: the time saved, the breakdown by cut type and the output paths](docs/images/ui-tamamlandi.png)
+
 Options: `--port` (default 8765), `--config PATH` (the same
 `filler-cut.toml` the CLI uses), `--no-browser`.
 
 Approving without any edits produces **byte-for-byte the same file** as the
 CLI run — the review screen adds control, not a different renderer.
-
-<!-- TODO(İnan): docs/images/ — başlangıç, review ve sonuç ekranı görselleri -->
 
 > Jobs live in memory only — restarting the server drops them (the tool tells
 > you so instead of hanging). Rendered files stay on disk.

@@ -389,8 +389,9 @@ medyanı %78 ölçüldü. Üretim koduna dokunulmadı.)
 
 **v1.0.0 release kuyruğu (yapılmadı, onay bekliyor):** `git push`, `v1.0.0`
 annotated tag + push, GitHub Release (Vulkan binary workflow'u `v*` tag'inde
-tetiklenir — `.github/workflows/vulkan-build.yml`), README ekran görüntüleri
-(`docs/images/`, placeholder yorumları yerinde).
+tetiklenir — `.github/workflows/vulkan-build.yml`). README ekran görüntüleri
+bu kuyruktan ÇIKTI — `docs/images/` dolu, placeholder yorumları kalktı
+(bkz. Backlog (4)).
 
 **Not (web UI, Dilim 3):** İstatistik panelinin sayıları RAPORDAN gelir —
 `JobOzet` `tiers`/`duzenleme`/`filler_dagilimi` alanlarını yazılan raporun
@@ -451,6 +452,15 @@ politikası — TAMAMLANDI (2026-08-31):** CPU'da medyan **×1.41** (mantıksal
 `transcribe/wcpp_backend.py` — bayrak sona eklenir, `os.cpu_count()` `None`
 dönerse HİÇ geçilmez. Kalan sınır **KI-9**: üst sınır ölçülmedi (64+ mantıksal
 çekirdek), tavan bilinçli konulmadı; ölçüm harness'i `experiments/wcpp_threads/`.
+(4) **README ekran görüntüleri — TAMAMLANDI (2026-09-01):** `docs/images/`
+altındaki dört görsel (`ui-review`, `ui-video-sec`, `ui-isleniyor`,
+`ui-tamamlandi`) README.md ve README.tr.md'ye simetrik yerleşti — `ui-review`
+tanıtım paragrafının altında kahraman görsel, diğer üçü web arayüzü bölümünde
+akış sırasıyla (seçim → işleniyor → sonuç); TODO placeholder yorumları
+kalktı, dört yol da diskteki dosya adıyla birebir doğrulandı. Kullanıcının
+dış backlog listesinde bu **madde 2**'dir; buradaki (2) numarası ondan farklı
+ve hâlâ AÇIK bir kayıttır (spike adayları), o yüzden madde (4) olarak
+yazıldı — madde (3) ile aynı desen: kayıt silinmez, durumu işaretlenir.
 
 Devam eden küçük iş (v0.3 kuyruğu): interaktif review'un `wcpp_backend` ile
 uçtan uca doğrulanması — `@pytest.mark.wcpp` referansı

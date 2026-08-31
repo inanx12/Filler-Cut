@@ -4,6 +4,8 @@ Video dosyasından konuşma analiziyle tamamlayıcı sözcükleri ("ııı", "ş
 "yani"...) ve gereksiz sessizlikleri tespit edip kesen, donanımdan bağımsız
 (AMD / Intel / NVIDIA) bir CLI aracı.
 
+![Filler-Cut gözden geçirme ekranı: oynatıcı, kesimlerin çizildiği dalga formlu zaman çizelgesi ve kesim listesi](docs/images/ui-review.png)
+
 > v0.1 — mimari için [DESIGN.md](DESIGN.md).
 
 ## Gereksinimler
@@ -160,6 +162,10 @@ sunucu taraflı dosya gezginiyle seçersiniz (dosya tarayıcıya **yüklenmez**;
 araç diskten okur, gezgin ev dizininizle sınırlıdır), Normal/Agresif modu
 seçer ve 6 aşamalı pipeline'ın ilerlemesini canlı izlersiniz.
 
+![Video seçme ekranı: sunucu taraflı dosya gezgini ve Normal/Agresif kesim modu seçimi](docs/images/ui-video-sec.png)
+
+![İşleniyor ekranı: 6 aşamalı pipeline ve her aşamanın süresi](docs/images/ui-isleniyor.png)
+
 PLAN'dan sonra koşu **gözden geçirme için durur**: video, dalga formlu zaman
 çizelgesi, üzerine çizilmiş kesimler ve kesim listesi karşınıza gelir. Orada
 
@@ -179,13 +185,13 @@ sözcüklerinin dökümünü (`eee ×3`, `ııı ×1`…) gösterir; her çıkt�
 "Klasörde göster" düğmesi dosyayı dosya yöneticisinde açar. Düzenlemeleriniz
 rapora da işlenir (`tiers.manuel`, `duzenleme`).
 
+![Tamamlandı ekranı: kazanılan süre, tür kırılımı ve çıktı yolları](docs/images/ui-tamamlandi.png)
+
 Opsiyonlar: `--port` (varsayılan 8765), `--config YOL` (CLI ile aynı
 `filler-cut.toml`), `--no-browser`.
 
 Hiç düzenleme yapmadan onayladığınızda çıkan dosya, CLI koşusunun ürettiğinin
 **byte-byte aynısıdır** — review ekranı denetim ekler, farklı bir render değil.
-
-<!-- TODO(İnan): docs/images/ — başlangıç, review ve sonuç ekranı görselleri -->
 
 > İşler yalnızca bellekte yaşar — sunucuyu yeniden başlatınca kaybolurlar
 > (arayüz asılı kalmak yerine bunu söyler). Üretilmiş dosyalar diskte kalır.
