@@ -32,6 +32,7 @@ from fillercut.web.app import create_app
 from fillercut.web.jobs import Job, JobKayit, JobOzet
 from fillercut.web.review import (
     SNAP_ESIK_MS,
+    YASLA_TAVAN_MS,
     EditsIstek,
     EklemeIstek,
     Overlay,
@@ -43,6 +44,7 @@ from fillercut.web.review import (
     sessizlik_kenarlari,
     snap,
     uygulanmis_plan,
+    yasla_sinirlari,
 )
 
 TOPLAM = 20_000
@@ -129,6 +131,67 @@ class TestSnap:
 
     def test_kenarlar_ham_haritadan_gelir(self) -> None:
         assert sessizlik_kenarlari(HAM_SESSIZLIKLER) == (1_900, 3_100, 6_800, 8_200)
+
+
+class TestYaslaSinirlari:
+    """Saf yasla hesabi — sessizlik kenarina genisletme, tavan, komsu duvari."""
+
+    KENARLAR = (1_900, 3_100, 6_800, 8_200)
+
+    def test_iki_yon_de_kenara_genisler(self) -> None:
+        # k1 [7000, 8000): solda 6800, sagda 8200 — ikisi de tavan (500) icinde.
+        assert yasla_sinirlari(
+            7_000, 8_000, kenarlar=self.KENARLAR, sol_limit=0, sag_limit=TOPLAM
+        ) == (6_800, 8_200)
+
+    def test_kenar_tavan_disindaysa_tavanda_durur(self) -> None:
+        # k2 [15000, 16000): yakinda kenar yok → her yon tavanda durur.
+        assert yasla_sinirlari(
+            15_000, 16_000, kenarlar=self.KENARLAR, sol_limit=0, sag_limit=TOPLAM
+        ) == (15_000 - YASLA_TAVAN_MS, 16_000 + YASLA_TAVAN_MS)
+
+    def test_tavanin_hemen_disindaki_kenar_cekmez(self) -> None:
+        # Kenar tavandan 1 ms uzakta: tavan kazanir (kenar ICERI cekemez).
+        sonuc = yasla_sinirlari(
+            5_000,
+            6_000,
+            kenarlar=(5_000 - YASLA_TAVAN_MS - 1,),
+            sol_limit=0,
+            sag_limit=TOPLAM,
+        )
+        assert sonuc[0] == 5_000 - YASLA_TAVAN_MS
+
+    def test_ilk_kenara_kadar_en_uzaga_degil(self) -> None:
+        # Tavan icinde iki kenar varsa DISA dogru ILK olan secilir.
+        sonuc = yasla_sinirlari(
+            5_000, 6_000, kenarlar=(4_900, 4_600), sol_limit=0, sag_limit=TOPLAM
+        )
+        assert sonuc[0] == 4_900
+
+    def test_komsu_duvarinda_durur_birlesme_yok(self) -> None:
+        # Sol komsu 6600'de bitiyor, min_keep 300 → duvar 6900; kenar 6800 olsa
+        # bile oraya inilmez, kesimler DEGMEZ.
+        bas, _ = yasla_sinirlari(
+            7_000, 8_000, kenarlar=self.KENARLAR, sol_limit=6_900, sag_limit=TOPLAM
+        )
+        assert bas == 6_900
+
+    def test_daraltmaz(self) -> None:
+        # Duvar kesimin ICINDE kalsa bile sinir geri cekilmez (yasla genisletir).
+        assert yasla_sinirlari(
+            7_000, 8_000, kenarlar=self.KENARLAR, sol_limit=7_500, sag_limit=7_600
+        ) == (7_000, 8_000)
+
+    def test_kenar_ustundeki_sinir_disari_cikar(self) -> None:
+        # Sinir zaten bir kenarin uzerindeyse o kenar "genisleme" saymaz.
+        assert yasla_sinirlari(
+            6_800, 8_200, kenarlar=self.KENARLAR, sol_limit=0, sag_limit=TOPLAM
+        ) == (6_800 - YASLA_TAVAN_MS, 8_200 + YASLA_TAVAN_MS)
+
+    def test_video_ucunda_tasmaz(self) -> None:
+        assert yasla_sinirlari(
+            100, TOPLAM - 100, kenarlar=(), sol_limit=0, sag_limit=TOPLAM
+        ) == (0, TOPLAM)
 
 
 class TestDogrula:
@@ -596,6 +659,90 @@ class TestEditsApi:
         ).json()
         assert veri["hata"] is not None
         assert "tüm videoyu kapsıyor" in veri["hata"]
+
+
+class TestYaslaApi:
+    """`POST /review/yasla` — tek tik aksiyon, standart kullanici editi."""
+
+    def test_kenarlara_genisler_ve_saklanir(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        veri = client.post(f"/api/jobs/{job_id}/review/yasla", json={"id": "k1"}).json()
+        k1 = next(k for k in veri["kesimler"] if k["id"] == "k1")
+        assert (k1["bas_ms"], k1["bit_ms"]) == (6_800, 8_200)
+        assert k1["duzenlendi"] is True
+        veri2 = client.get(f"/api/jobs/{job_id}/review").json()
+        k1b = next(k for k in veri2["kesimler"] if k["id"] == "k1")
+        assert (k1b["bas_ms"], k1b["bit_ms"]) == (6_800, 8_200)
+
+    def test_tavan_disinda_tavanda_durur(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        veri = client.post(f"/api/jobs/{job_id}/review/yasla", json={"id": "k2"}).json()
+        k2 = next(k for k in veri["kesimler"] if k["id"] == "k2")
+        assert (k2["bas_ms"], k2["bit_ms"]) == (14_500, 16_500)
+
+    def test_komsuda_durur_birlesme_yok(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        # k1'in soluna elle kesim: [6000, 6600) → duvar 6600 + min_keep(300)
+        client.post(
+            f"/api/jobs/{job_id}/review/edits",
+            json={"eklemeler": [{"bas_ms": 6_000, "bit_ms": 6_600}]},
+        )
+        veri = client.post(f"/api/jobs/{job_id}/review/yasla", json={"id": "k1"}).json()
+        k1 = next(k for k in veri["kesimler"] if k["id"] == "k1")
+        m0 = next(k for k in veri["kesimler"] if k["id"] == "m0")
+        assert k1["bas_ms"] == 6_900  # kenar 6800 olsa da duvarda durdu
+        assert k1["bas_ms"] > m0["bit_ms"]  # DEGMEDI → birlesme yok
+
+    def test_reason_zinciri_ve_tur_degismez(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        once = client.get(f"/api/jobs/{job_id}/review").json()
+        k1_once = next(k for k in once["kesimler"] if k["id"] == "k1")
+        veri = client.post(f"/api/jobs/{job_id}/review/yasla", json={"id": "k1"}).json()
+        k1 = next(k for k in veri["kesimler"] if k["id"] == "k1")
+        assert k1["reason"] == k1_once["reason"]  # KI-3 parse'i etkilenmez
+        assert k1["tur"] == k1_once["tur"]
+
+    def test_orijinal_plan_mutasyona_ugramaz(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        client.post(f"/api/jobs/{job_id}/review/yasla", json={"id": "k1"})
+        assert (PLAN.cut[1].start_ms, PLAN.cut[1].end_ms) == (7_000, 8_000)
+
+    def test_geri_al_bu_aksiyonu_da_kapsar(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        client.post(f"/api/jobs/{job_id}/review/yasla", json={"id": "k1"})
+        veri = client.post(
+            f"/api/jobs/{job_id}/review/edits",
+            json={
+                "devre_disi": ["k1"],
+                "sinirlar": [{"id": "k1", "bas_ms": 6_800, "bit_ms": 8_200}],
+            },
+        ).json()
+        k1 = next(k for k in veri["kesimler"] if k["id"] == "k1")
+        assert k1["aktif"] is False
+        assert (k1["bas_ms"], k1["bit_ms"]) == (6_800, 8_200)  # listede duruyor
+
+    def test_manuel_kesimde_de_calisir(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        client.post(
+            f"/api/jobs/{job_id}/review/edits",
+            json={"eklemeler": [{"bas_ms": 11_000, "bit_ms": 12_000}]},
+        )
+        veri = client.post(f"/api/jobs/{job_id}/review/yasla", json={"id": "m0"}).json()
+        m0 = next(k for k in veri["kesimler"] if k["id"] == "m0")
+        assert (m0["bas_ms"], m0["bit_ms"]) == (10_500, 12_500)  # tavanda
+
+    def test_bilinmeyen_id_400(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        cevap = client.post(f"/api/jobs/{job_id}/review/yasla", json={"id": "k9"})
+        assert cevap.status_code == 400
+        assert "k9" in cevap.json()["detail"]
+
+    def test_yaslamadan_plan_cli_ile_ayni(self, client: TestClient, ev: Path) -> None:
+        """CLI parity: aksiyon cagrilmazsa uygulanan plan orijinalin AYNISI."""
+        job_id = _review_jobu(client, ev)
+        veri = client.get(f"/api/jobs/{job_id}/review").json()
+        assert veri["aktif_araliklar"] == [[s.start_ms, s.end_ms] for s in PLAN.cut]
+        assert veri["kesilen_ms"] == PLAN.total_cut_ms
 
 
 class TestOnay:
