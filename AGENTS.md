@@ -387,11 +387,14 @@ bkz. KI-8 — kesim sınırı eksik kapsaması v1.0'da da AÇIK bir sınırdır:
 kaynak PLAN'ın padding'i değil ASR kelime sınırıdır, kelime kapsama
 medyanı %78 ölçüldü. Üretim koduna dokunulmadı.)
 
-**v1.0.0 release kuyruğu (yapılmadı, onay bekliyor):** `git push`, `v1.0.0`
-annotated tag + push, GitHub Release (Vulkan binary workflow'u `v*` tag'inde
-tetiklenir — `.github/workflows/vulkan-build.yml`). README ekran görüntüleri
-bu kuyruktan ÇIKTI — `docs/images/` dolu, placeholder yorumları kalktı
-(bkz. Backlog (4)).
+**v1.0.0 release kuyruğu — TAMAMLANDI (2026-08-27).** Bu satır bir süre
+BAYAT kaldı ("yapılmadı, onay bekliyor" diyordu); 2026-09-01'de uzaktan
+doğrulanıp düzeltildi. Üçü de bitti: `git push`; `v1.0.0` annotated tag
+(tag nesnesi `448b9d5` → commit `5363056`) push'landı; GitHub Release
+yayında (2026-08-27, taslak değil, 1 asset — Vulkan binary workflow'u `v*`
+tag'inde tetiklendi, `.github/workflows/vulkan-build.yml`). README ekran
+görüntüleri de bu kuyruktan çıkmıştı — `docs/images/` dolu, placeholder
+yorumları kalktı (bkz. Backlog (4)).
 
 **Not (web UI, Dilim 3):** İstatistik panelinin sayıları RAPORDAN gelir —
 `JobOzet` `tiers`/`duzenleme`/`filler_dagilimi` alanlarını yazılan raporun
@@ -482,12 +485,37 @@ Tek SSIM kazancı `high_quality`'de ama bedeli dosyanın 1,35-2,24 katı +
 önce doğrulandı), ölçüm harness'i `experiments/amf_usage/`, tablo ve kalan
 sınır (`high_quality` aralıklı takılması) KI-6 `-usage` ekinde. KI-6'nın
 kalan boyutları ve NVENC/QSV kalibrasyonlarına DOKUNULMADI.
-(7) **review'da kesime tek tık "sessizliğe yasla" aracı — AÇIK:** kontrollü
-genişletme, tavan ~±500 ms; KI-8 Kol A'nın (expand-to-silence) **kullanıcı
-tetiklemeli** hâli. Kol A otomatik uygulandığında kill criteria'dan geçememişti
-(bkz. madde (1) ve KI-8); buradaki fark kararın kullanıcıda olması ve
-tavanın sınırlı tutulması. Tasarım **ayrı oturumda** — bu maddede kod YOK,
-yalnız liste kaydı.
+(7) **review'da kesime tek tık "sessizliğe yasla" aracı — TAMAMLANDI
+(2026-09-01):** kontrollü genişletme, tavan **±500 ms** (`YASLA_TAVAN_MS`);
+KI-8 Kol A'nın (expand-to-silence) **kullanıcı tetiklemeli** hâli. Kol A
+otomatik uygulandığında kill criteria'dan geçememişti (bkz. madde (1) ve
+KI-8); buradaki üç fark o riski kesiyor: kararı kullanıcı verir, genişleme
+yön başına tavanlıdır (KI-8'in ölçtüğü ortalama taşmanın yarısından azı) ve
+plan mutasyona uğramaz.
+
+Aksiyon **sıradan bir kullanıcı editi** üretir — ayrı bir edit sınıfı YOK:
+sonuç overlay'e düşer, orijinal plan mutasyonsuz kalır, `reason` zincirine
+dokunulmaz (KI-3 parse'ı etkilenmez), "Geri al" toggle'ı ve min_keep clamp'i
+aksiyonu kendiliğinden kapsar. Komşu duvarı komşunun sınırı + `min_keep`'tir:
+genişleme oraya varmadan durur, **kesimler birleşmez**. Yeni FFmpeg geçişi
+YOK — sürükleme snap'inin kullandığı ham sessizlik haritasının aynısı.
+Sunucu: `web/review.py` (`yasla_sinirlari`, `yasla_uygula`) +
+`POST /api/jobs/{id}/review/yasla`; istemci: satır düğmesi + `Y` kısayolu.
+
+**Aynı dilimde snap toggle da kapandı** (CapCut mıknatısı): mevcut snap
+koddan doğrulandı — HEP AÇIK'tı, modifier ile geçici kapatma yolu YOKTU ve
+iki katmanda birden koşuyordu (istemcide `yerelSnap`, sunucuda `normalize`).
+Bu yüzden anahtar sunucuya ULAŞMAK zorundaydı: `EditsIstek.snap` (varsayılan
+`True` → v1.0 davranışı birebir korunur, CLI parity etkilenmez). Kapatmak
+yalnız sessizliğe yapışmayı iptal eder; **min_keep clamp'i invariant'tır,
+kapatılamaz**. Tercih oturum içidir — kalıcı ayar bilinçli olarak
+EKLENMEDİ. Üst barda mıknatıs ikonu + `M` kısayolu.
+
+Kısayol seçimi: `Y` ve `M` mevcut haritada boştu (v1.0'da yalnız `Boşluk`,
+`←`, `→` vardı). Kilitler `tests/test_web_review.py` (`TestYaslaSinirlari`,
+`TestYaslaApi`, `TestSnapToggle`); JS test altyapısı yine kurulmadı (Dilim 2
+kararı) — ağır mantık sunucuda ve pytest ile kilitli, istemci gerçek tarayıcı
+koşusuyla doğrulandı.
 
 Devam eden küçük iş (v0.3 kuyruğu): interaktif review'un `wcpp_backend` ile
 uçtan uca doğrulanması — `@pytest.mark.wcpp` referansı
