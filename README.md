@@ -176,7 +176,13 @@ timeline, every cut drawn on it, and a cut list. There you can
 - **undo any cut with one click** — it stays in the list, greyed out, and one
   more click brings it back,
 - **drag a cut boundary**; it snaps to the nearest silence edge,
-- **drag on empty timeline** to add a cut of your own.
+- **drag on empty timeline** to add a cut of your own,
+- **snap a cut to silence with one click** (`Y`) — the "Sessizliğe yasla"
+  button on every row pushes both boundaries outward to the first silence
+  edge, at most 500 ms per direction; it stops early at a neighbouring cut,
+  so cuts never merge,
+- **turn the magnet off** (`M`) when you want a boundary exactly where you
+  drop it — snapping is on by default, and the toggle is shown in the header.
 
 The header keeps a live line — how many cuts, how much will be removed, what
 the new duration will be — so you see the gain before you commit to it.

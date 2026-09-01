@@ -174,7 +174,13 @@ PLAN'dan sonra koşu **gözden geçirme için durur**: video, dalga formlu zaman
 - **tek tıkla bir kesimi geri alırsınız** — listeden silinmez, soluklaşır ve
   bir tıkla geri gelir,
 - **kesim sınırını sürüklersiniz**; tutamaç en yakın sessizlik kenarına yapışır,
-- **boş alanda sürükleyerek kendi kesiminizi eklersiniz.**
+- **boş alanda sürükleyerek kendi kesiminizi eklersiniz,**
+- **tek tıkla kesimi sessizliğe yaslarsınız** (`Y`) — her satırdaki
+  "Sessizliğe yasla" düğmesi kesimin iki sınırını da dışa, ilk sessizlik
+  kenarına taşır (yön başına en çok 500 ms); komşu kesime dayanınca durur,
+  kesimler birleşmez,
+- **mıknatısı kapatırsınız** (`M`) — sınırı tam bıraktığınız yerde
+  istediğinizde; yapışma varsayılan olarak açıktır ve durumu üst barda görünür.
 
 Başlıktaki satır siz düzenledikçe canlı güncellenir — kaç kesim, ne kadar
 kısalacak, yeni süre ne olacak — yani kazanımı onaylamadan önce görürsünüz.
