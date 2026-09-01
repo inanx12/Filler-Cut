@@ -427,6 +427,22 @@ def job_baslat(istek: JobBaslatIstek, request: Request) -> dict[str, object]:
                 "video dosyası seçin (örn. .mp4, .mkv)."
             ),
         )
+    # v1.2 Faz 2: kurulum eksikken iş BAŞLATILAMAZ — arayüzün "sihirbaz
+    # bitene kadar kilitli" sözü istemci tarafında değil BURADA tutulur;
+    # istemciyi atlayıp POST eden de aynı kilide çarpar. Eksik yoksa
+    # (ya da backend whispercpp değilse) yol hiç değişmez.
+    kurulum = getattr(request.app.state, "kurulum", None)
+    if kurulum is not None:
+        eksikler = kurulum.durum().eksikler
+        if eksikler:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Kurulum tamamlanmadan iş başlatılamaz — "
+                    f"eksik: {', '.join(eksikler)}. Sihirbazı tamamlayın "
+                    "ya da `fillercut setup` çalıştırın."
+                ),
+            )
     job = _kayit(request).baslat(hedef, istek.aggressive)
     return job.snapshot()
 

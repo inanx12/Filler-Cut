@@ -14,6 +14,42 @@
 </header>
 
 <main>
+  <!-- Ekran 0 — Sihirbaz: whisper.cpp ikilisi + model indirme (ilk çalıştırma) -->
+  <section id="ekran-kurulum" class="ekran gizli">
+    <h1>Son bir adım</h1>
+    <p class="karsilama">
+      Filler-Cut konuşmayı çözümlemek için whisper.cpp motorunu ve bir dil
+      modelini kullanıyor. Bunlar tek seferlik indirilir; bir dahaki açılışta
+      bu ekranı görmeyeceksiniz.
+    </p>
+
+    <div class="kart kurulum">
+      <ul id="kurulum-eksikler" class="kurulum-liste" aria-label="İndirilecekler"></ul>
+
+      <div id="kurulum-secim">
+        <label for="kurulum-model">Model</label>
+        <select id="kurulum-model" class="kurulum-secici"></select>
+        <p id="kurulum-model-aciklama" class="kurulum-not"></p>
+      </div>
+
+      <div id="kurulum-ilerleme" class="kurulum-ilerleme gizli">
+        <div class="cubuk"><div id="kurulum-cubuk" class="cubuk-dolu"></div></div>
+        <p id="kurulum-durum-metni" class="kurulum-not"></p>
+      </div>
+
+      <p id="kurulum-hata" class="kurulum-hata gizli" role="alert"></p>
+
+      <div class="kurulum-dugmeler">
+        <button id="btn-kurulum-basla" class="dugme birincil">İndirmeyi başlat</button>
+        <button id="btn-kurulum-iptal" class="dugme ikincil gizli">İptal</button>
+      </div>
+      <p class="kurulum-not">
+        İndirme yarıda kalırsa kaldığı yerden devam eder. Komut satırını
+        tercih ederseniz: <code>fillercut setup</code>
+      </p>
+    </div>
+  </section>
+
   <!-- Ekran 1 — Başlangıç: dosya gezgini + mod + Başlat -->
   <section id="ekran-baslangic" class="ekran">
     <h1>Video seç</h1>

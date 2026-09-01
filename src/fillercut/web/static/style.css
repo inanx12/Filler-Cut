@@ -664,3 +664,38 @@ h2.ust-bosluk { margin-top: 20px; }
 }
 
 .cikti-satir .mono { overflow-wrap: anywhere; user-select: all; }
+
+/* ── Kurulum sihirbazı (v1.2 Faz 2) ─────────────────────────────────── */
+
+.kurulum-liste { list-style: none; margin: 0 0 1rem; padding: 0; }
+.kurulum-liste li {
+  display: flex; justify-content: space-between; gap: 1rem;
+  padding: .45rem 0; border-bottom: 1px solid var(--cizgi);
+}
+.kurulum-liste .boyut { color: var(--soluk); font-variant-numeric: tabular-nums; }
+
+#kurulum-secim { margin: 1rem 0; }
+#kurulum-secim label { display: block; margin-bottom: .35rem; font-weight: 600; }
+
+.kurulum-ilerleme { margin: 1rem 0; }
+.cubuk {
+  height: 10px; border-radius: 999px; overflow: hidden;
+  background: var(--cizgi);
+}
+.cubuk-dolu {
+  height: 100%; width: 0; border-radius: 999px;
+  background: var(--yesil); transition: width .2s linear;
+}
+
+.kurulum-secici {
+  width: 100%; padding: 8px 10px; border-radius: 6px;
+  background: var(--kart-ust); color: var(--metin);
+  border: 1px solid var(--cizgi); font: inherit;
+}
+.kurulum-not { color: var(--soluk); font-size: 12px; margin: .5rem 0 0; }
+.kurulum-hata {
+  margin: 1rem 0 0; padding: 10px 12px; border-radius: 6px;
+  color: var(--kirmizi); background: var(--kirmizi-zemin);
+  border: 1px solid var(--kirmizi); white-space: pre-wrap;
+}
+.kurulum-dugmeler { display: flex; gap: 10px; margin-top: 1rem; }

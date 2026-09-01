@@ -1111,6 +1111,163 @@ function yeniIs() {
   gezginYukle(durum.yol); // listeyi tazele (yeni _temiz.mp4 görünsün)
 }
 
+
+/* ── Kurulum sihirbazı (v1.2 Faz 2) ───────────────────────────────────
+ *
+ * İnce kabuk: karar da ilerleme de SUNUCUDA (`web/kurulum.py`), burada
+ * yalnız `GET /api/kurulum` yoklanır ve ekrana basılır. SSE yerine yoklama
+ * BİLİNÇLİ: indirme ilerlemesi tek bir sayıdır, `Last-Event-ID` replay'i ve
+ * yeniden bağlanma sınıfına gerek yok.
+ */
+
+const kurulum = { zamanlayici: null, modellerYuklendi: false };
+
+const KURULUM_ADI = {
+  binary: "whisper.cpp motoru (Vulkan)",
+  model: "dil modeli",
+};
+
+function kurulumYoklamaDurdur() {
+  if (kurulum.zamanlayici !== null) {
+    clearInterval(kurulum.zamanlayici);
+    kurulum.zamanlayici = null;
+  }
+}
+
+function kurulumModelleriDoldur(modeller) {
+  if (kurulum.modellerYuklendi) return;
+  const sec = el("kurulum-model");
+  sec.textContent = "";
+  for (const m of modeller) {
+    const o = document.createElement("option");
+    o.value = m.ad;
+    o.textContent = m.ad + " — " + boyutMetni(m.boyut) + (m.varsayilan_mi ? " (önerilen)" : "");
+    o.dataset.aciklama = m.aciklama || "";
+    if (m.varsayilan_mi) o.selected = true;
+    sec.appendChild(o);
+  }
+  kurulum.modellerYuklendi = true;
+  kurulumAciklamaTazele();
+}
+
+function kurulumAciklamaTazele() {
+  const sec = el("kurulum-model");
+  const secili = sec.options[sec.selectedIndex];
+  el("kurulum-model-aciklama").textContent = secili ? (secili.dataset.aciklama || "") : "";
+}
+
+function kurulumEkraniCiz(v) {
+  kurulumModelleriDoldur(v.modeller || []);
+
+  const liste = el("kurulum-eksikler");
+  liste.textContent = "";
+  const secili = el("kurulum-model").value;
+  for (const eksik of v.eksikler) {
+    const li = document.createElement("li");
+    const ad = document.createElement("span");
+    ad.textContent = KURULUM_ADI[eksik] || eksik;
+    const boyut = document.createElement("span");
+    boyut.className = "boyut";
+    if (eksik === "model") {
+      const m = (v.modeller || []).find((x) => x.ad === secili);
+      boyut.textContent = m ? boyutMetni(m.boyut) : "";
+    } else {
+      boyut.textContent = "";
+    }
+    li.appendChild(ad);
+    li.appendChild(boyut);
+    liste.appendChild(li);
+  }
+
+  const kosuyor = v.durum === "indiriliyor";
+  el("kurulum-secim").classList.toggle("gizli", kosuyor || !v.eksikler.includes("model"));
+  el("kurulum-ilerleme").classList.toggle("gizli", !kosuyor);
+  el("btn-kurulum-basla").classList.toggle("gizli", kosuyor);
+  el("btn-kurulum-iptal").classList.toggle("gizli", !kosuyor);
+  el("btn-kurulum-basla").textContent =
+    v.durum === "iptal" || v.durum === "hata" ? "Yeniden dene" : "İndirmeyi başlat";
+
+  if (kosuyor) {
+    el("kurulum-cubuk").style.width = v.yuzde + "%";
+    const hiz = v.bps ? " · " + (v.bps / 1e6).toFixed(1) + " MB/sn" : "";
+    /* 1 sn altı "~0 sn kaldı" diye görünüyordu (gerçek koşuda ölçüldü). */
+    const kalan = v.kalan_sn && v.kalan_sn >= 1
+      ? " · ~" + Math.round(v.kalan_sn) + " sn kaldı" : "";
+    el("kurulum-durum-metni").textContent =
+      (v.aktif || "") + " · %" + v.yuzde +
+      " (" + boyutMetni(v.inen) + " / " + boyutMetni(v.toplam) + ")" + hiz + kalan;
+  }
+
+  const hata = el("kurulum-hata");
+  if (v.durum === "hata" && v.hata) {
+    hata.textContent = v.hata;
+    hata.classList.remove("gizli");
+  } else if (v.durum === "iptal") {
+    hata.textContent = "İndirme iptal edildi — yarım dosya korundu, yeniden başlatınca kaldığı yerden devam eder.";
+    hata.classList.remove("gizli");
+  } else {
+    hata.textContent = "";
+    hata.classList.add("gizli");
+  }
+}
+
+async function kurulumYokla() {
+  let cevap;
+  try {
+    cevap = await fetch("/api/kurulum");
+  } catch (_) {
+    return; // sunucu geçici olarak yanıtsız; sonraki yoklamada tekrar dener
+  }
+  if (!cevap.ok) return;
+  const v = await cevap.json();
+
+  if (!v.gerekli || v.tamam) {
+    kurulumYoklamaDurdur();
+    if (!el("ekran-kurulum").classList.contains("gizli")) {
+      ekranGoster("ekran-baslangic");
+      gezginYukle(durum.yol);
+    }
+    return;
+  }
+  ekranGoster("ekran-kurulum");
+  kurulumEkraniCiz(v);
+}
+
+async function kurulumBasla() {
+  el("btn-kurulum-basla").disabled = true;
+  try {
+    const govde = {};
+    const sec = el("kurulum-model");
+    if (sec.value) govde.model = sec.value;
+    const cevap = await fetch("/api/kurulum/indir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(govde),
+    });
+    if (!cevap.ok) {
+      const hata = el("kurulum-hata");
+      hata.textContent = await apiHatasi(cevap);
+      hata.classList.remove("gizli");
+      return;
+    }
+  } finally {
+    el("btn-kurulum-basla").disabled = false;
+  }
+  await kurulumYokla();
+}
+
+async function kurulumIptal() {
+  await fetch("/api/kurulum/iptal", { method: "POST" });
+  await kurulumYokla();
+}
+
+function kurulumBaslat() {
+  /* Açılışta bir kez: eksik varsa sihirbaz ekranı, yoksa hiç görünmez. */
+  kurulumYokla();
+  kurulumYoklamaDurdur();
+  kurulum.zamanlayici = setInterval(kurulumYokla, 700);
+}
+
 /* ── bağlama ─────────────────────────────────────────────────────────── */
 
 el("btn-ust").addEventListener("click", () => {
@@ -1120,4 +1277,12 @@ el("btn-baslat").addEventListener("click", baslat);
 el("btn-yeni").addEventListener("click", yeniIs);
 el("btn-hata-yeni").addEventListener("click", yeniIs);
 
+el("btn-kurulum-basla").addEventListener("click", kurulumBasla);
+el("btn-kurulum-iptal").addEventListener("click", kurulumIptal);
+el("kurulum-model").addEventListener("change", () => {
+  kurulumAciklamaTazele();
+  kurulumYokla();
+});
+
 gezginYukle(null); // kök: sunucudaki ev dizini
+kurulumBaslat(); // kurulum eksikse sihirbaz ekranı; değilse hiç görünmez

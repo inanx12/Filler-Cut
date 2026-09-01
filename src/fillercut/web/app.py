@@ -30,6 +30,7 @@ from fillercut import __version__
 from fillercut.config import Config
 from fillercut.pipeline import run as pipeline_run
 from fillercut.web import fs, jobs
+from fillercut.web import kurulum as kurulum_mod
 from fillercut.web.jobs import Job, JobKayit, JobOzet, Kosucu
 from fillercut.web.waveform import peaks_from_wav
 
@@ -103,6 +104,7 @@ def create_app(
     on_ready: Callable[[], None] | None = None,
     fs_home: Path | None = None,
     kayit: JobKayit | None = None,
+    kurulum: kurulum_mod.KurulumYoneticisi | None = None,
 ) -> FastAPI:
     """Filler-Cut web uygulamasını kurar (sunucu başlatmadan).
 
@@ -120,6 +122,9 @@ def create_app(
         kayit: Job kaydı; verilmezse gerçek pipeline koşucusuyla kurulur.
             Route testleri sahte/kontrollü koşuculu kayıt enjekte eder —
             testlerde gerçek video koşusu YOK (handoff).
+        kurulum: İlk-çalıştırma sihirbazının yöneticisi (v1.2 Faz 2);
+            verilmezse gerçek indirme motoruyla kurulur. Testler sahte
+            indiricili bir yönetici enjekte eder — gerçek ağ YOK.
 
     Returns:
         Yapılandırılmış FastAPI uygulaması; ``app.state.config`` config'i taşır.
@@ -127,6 +132,9 @@ def create_app(
     cfg = config if config is not None else Config()
     ev = (fs_home if fs_home is not None else Path.home()).resolve()
     job_kayit = kayit if kayit is not None else JobKayit(kosucu=_pipeline_kosucu(cfg))
+    kurulum_yoneticisi = (
+        kurulum if kurulum is not None else kurulum_mod.KurulumYoneticisi(cfg)
+    )
 
     @asynccontextmanager
     async def _yasam(_: FastAPI) -> AsyncIterator[None]:
@@ -134,7 +142,10 @@ def create_app(
             on_ready()
         yield
         # Kapanış: kuyruktaki işler iptal; koşan iş yarıda kesilmez (jobs.py).
+        # Sihirbaz indirmesi ise İPTAL edilir — yarım `.part` korunur ve
+        # sonraki açılış kaldığı yerden devam eder (indirme motoru sözleşmesi).
         job_kayit.kapat()
+        kurulum_yoneticisi.kapat()
 
     app = FastAPI(
         title="Filler-Cut UI",
@@ -146,6 +157,7 @@ def create_app(
     app.state.config = cfg
     app.state.fs_home = ev
     app.state.kayit = job_kayit
+    app.state.kurulum = kurulum_yoneticisi
 
     # Windows'ta registry .js/.css için yanlış MIME dönebilir (text/plain) —
     # tarayıcı stylesheet'i reddeder. Tipler açıkça sabitlenir (idempotent).
@@ -154,6 +166,7 @@ def create_app(
 
     app.include_router(fs.router)
     app.include_router(jobs.router)
+    app.include_router(kurulum_mod.router)
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:

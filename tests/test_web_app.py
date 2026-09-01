@@ -154,3 +154,41 @@ class TestInstanceKimligi:
         # Kimlik ucu eklendi diye /openapi.json açılmadı.
         client = TestClient(create_app())
         assert client.get("/openapi.json").status_code == 404
+
+
+class TestSihirbazYuzeyi:
+    """Sihirbaz ekranının statik yüzeyi (v1.2 Faz 2).
+
+    JS test altyapısı yok (Dilim 2 kararı) — ağır mantık sunucuda ve
+    `tests/test_web_kurulum.py`de kilitli. Burada yalnız istemcinin
+    ihtiyaç duyduğu id'lerin BULUNDUĞU doğrulanır: biri yeniden
+    adlandırılırsa `app.js` sessizce `null`a çarpardı.
+    """
+
+    def test_kurulum_ekrani_ve_ogeleri_var(self) -> None:
+        html = TestClient(create_app()).get("/").text
+        for oge in (
+            'id="ekran-kurulum"',
+            'id="kurulum-eksikler"',
+            'id="kurulum-model"',
+            'id="kurulum-ilerleme"',
+            'id="kurulum-cubuk"',
+            'id="kurulum-durum-metni"',
+            'id="kurulum-hata"',
+            'id="btn-kurulum-basla"',
+            'id="btn-kurulum-iptal"',
+        ):
+            assert oge in html, f"sihirbaz ekranında eksik: {oge}"
+
+    def test_kurulum_ekrani_baslangicta_gizli(self) -> None:
+        # Kurulu bir makinede sihirbaz HİÇ görünmemeli; ekran gizli başlar ve
+        # `kurulumBaslat()` yalnız eksik varsa açar.
+        html = TestClient(create_app()).get("/").text
+        i = html.index('id="ekran-kurulum"')
+        assert "gizli" in html[i : i + 120]
+
+    def test_js_sihirbaz_uclarini_kullanir(self) -> None:
+        js = TestClient(create_app()).get("/static/app.js").text
+        assert "/api/kurulum" in js
+        assert "/api/kurulum/indir" in js
+        assert "/api/kurulum/iptal" in js
