@@ -74,4 +74,5 @@ testpaths = ["tests"]
 markers = [
     "ffmpeg: gerçek ffmpeg/ffprobe gerektirir — CI'da değil, kullanıcı makinesinde koşar (CI deselect: -m 'not ffmpeg')",
     "wcpp: gerçek whisper-cli binary + GGML model gerektirir — CI'da değil, kullanıcı makinesinde koşar (CI deselect: -m 'not wcpp')",
+    "ag: gerçek ağ indirmesi gerektirir (HF / GitHub Release) — CI'da değil, kullanıcı makinesinde koşar (CI deselect: -m 'not ag')",
 ]
