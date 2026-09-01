@@ -1,0 +1,43 @@
+{
+  "manifest_version": 1,
+  "varliklar": [
+    {
+      "ad": "whisper-cli-vulkan-win-x64",
+      "tur": "binary",
+      "url": "https://github.com/inanx12/Filler-Cut/releases/download/v1.1.0/fillercut-whisper-cli-vulkan-win-x64.zip",
+      "sha256": "01707efa01523d042cd1b5980dabc43c70a68509360b16ee77d23317b90ccdf9",
+      "boyut": 23672623,
+      "varsayilan_mi": true,
+      "arsiv": "zip",
+      "calistirilabilir": "whisper-cli.exe",
+      "aciklama": "whisper.cpp / Vulkan (AMD, Intel, NVIDIA - ayni ikili)"
+    },
+    {
+      "ad": "ggml-large-v3-turbo-q5_0",
+      "tur": "model",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+      "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+      "boyut": 574041195,
+      "varsayilan_mi": true,
+      "aciklama": "Onerilen: hiz ve dogruluk dengesi (Turkce icin repo referansi)"
+    },
+    {
+      "ad": "ggml-small-q5_1",
+      "tur": "model",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin",
+      "sha256": "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb",
+      "boyut": 190085487,
+      "varsayilan_mi": false,
+      "aciklama": "Hafif: yavas baglanti veya dar disk icin; dogruluk daha dusuk"
+    },
+    {
+      "ad": "ggml-large-v3-q5_0",
+      "tur": "model",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-q5_0.bin",
+      "sha256": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
+      "boyut": 1081140203,
+      "varsayilan_mi": false,
+      "aciklama": "Kalite agirlikli: turbo olmayan large-v3, en yavas secenek"
+    }
+  ]
+}
