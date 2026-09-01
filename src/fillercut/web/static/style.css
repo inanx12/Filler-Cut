@@ -564,7 +564,15 @@ body.review-modu .ust { max-width: 1100px; }
 .kesim-listesi .aralik { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
 .kesim-listesi .sure { color: var(--soluk); font-size: 12px; }
 .kesim-listesi .not { color: var(--soluk); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.kesim-listesi .geri { margin-left: auto; flex: none; }
+.kesim-listesi .geri { flex: none; }
+/* "Sessizliğe yasla" iki düğmeyi de sağa iter; ikisi bitişik durur. */
+.kesim-listesi .yasla { margin-left: auto; flex: none; }
+
+/* Mıknatıs: kapalıyken ikon soluk + üstü çizili — durum tek bakışta okunur. */
+.miknatis { display: inline-flex; align-items: center; gap: 6px; }
+.miknatis-ikon { font-size: 15px; line-height: 1; }
+.miknatis.kapali { opacity: .55; }
+.miknatis.kapali .miknatis-ikon { text-decoration: line-through; }
 
 .soluk-metin { color: var(--soluk); }
 
