@@ -322,6 +322,120 @@ mantığı hazır: `native.webview2_var()`. (b) `pywebview`'in core'a çekilmesi
 PyInstaller fazının kararıdır — burada verilmedi. (c) Uygulama/pencere ikonu
 Faz 3/4 konusudur, bu fazda scope dışı.
 
+**v1.2 DAĞITIM EPIC'İ — FAZ 2 (ilk-çalıştırma indirme sihirbazı) TAMAMLANDI
+(2026-09-02, tag YOK).** whisper.cpp ikilisi ve GGML modeli artık elle
+kurulmuyor: `fillercut ui` ilk açılışta eksikleri sihirbazla indiriyor,
+`fillercut setup` aynı işi headless yapıyor. 6 pipeline aşamasına, review
+işlevlerine ve plan/detect mantığına DOKUNULMADI; `pipeline.py` diffi
+`_make_transcriber`'ın çözümlenmiş yol kullanması + `KurulumEksik` +
+`IPUCU_WCPP` metninden ibarettir.
+
+**SPIKE KARARI — model kaynağı Hugging Face KALIR** (kendi release'imize model
+asset'i EKLENMEZ). Kill criteria "HF, GH Release'den %20+ yavaşsa taşı"
+diyordu; ölçüm (`experiments/download_spike/`, aynı oturum/aynı bağlantı):
+
+| ölçüm | HF | GH Release |
+|---|---|---|
+| 20 MiB eşit dilim (medyan, 3 koşu) | 7.04 MiB/sn | 8.48 MiB/sn |
+| tam dosya (gerçek indirme) | **10.63–10.82 MiB/sn** | 8.04 MiB/sn |
+| `Range` resume (%45'te kesip devam) | ÇALIŞIYOR | ÇALIŞIYOR |
+
+Dilimde HF %16.9 düşük (eşiğin ALTINDA) ama tam dosyada sıralama TERSİNE
+dönüyor — dilimdeki fark ramp-up gürültüsüymüş. Resume iki kaynakta da
+çalıştığı için o madde de devreye girmedi. GH kolu mevcut binary zip'iyle
+ölçüldü (model asset'i yok); adaleti sağlamak için iki kol da `Range` ile
+aynı bayt sayısını çekti.
+
+**TUZAK (ölçüldü): HF'in `ETag` başlığı SHA-256 DEĞİLDİR.** 64 hex karakter
+olduğu için öyle görünüyor ama xet içerik hash'idir ve dosyanın SHA-256'sıyla
+uyuşmuyor (turbo-q5_0: ETag `9c7b9c6b…`, gerçek `39422170…`). "ETag'i hash
+diye yaz, indirmeye gerek yok" kestirmesi sessizce yanlış manifest üretirdi.
+Manifest'teki dört hash de İNDİRİLEN BAYTLARDAN hesaplandı; üçü ayrıca HF
+API'siyle (`siblings[].lfs.sha256`) çapraz doğrulandı — hash ve boyut birebir
+tuttu. `tests/test_assets.py::TestOlculenDegerler` bu değerleri kilitler.
+
+**ÇÖZÜMLEME ÖNCELİĞİ (ilk VAR OLAN aday kazanır):** `filler-cut.toml`
+`[asr].whispercpp_*` → `FILLERCUT_WCPP_BINARY`/`FILLERCUT_WCPP_MODEL` →
+sihirbazın `%APPDATA%\fillercut\config.json`'u → eksik (sihirbaz tetiklenir).
+
+**BRIEF'TEN BİLİNÇLİ SAPMA:** brief env var'ı 1. sıraya koyuyordu; toml'un
+ALTINA alındı. Reponun kendi zinciri "CLI arg > config dosyası > default"tur,
+ortam değişkeni orada hiç yoktur — kullanıcının dosyaya AÇIKÇA yazdığı yolun
+ortamdan gelen bir değerle sessizce ezilmesi o zincire aykırı olurdu. Üstelik
+bayat env var bu repoda ÖLÇÜLMÜŞ bir sorundur (`experiments/wcpp_threads`).
+Çakışma pratikte nadir: toml default'ları (`whisper-cli` ve boş dize) yalnız
+kullanıcı yazdığında bir dosyaya çözülür.
+
+**"VAR OLAN" ŞARTI:** bayat yol yapılandırılmış sayılmaz, zincir bir alt
+kaynağa düşer; binary için PATH araması da dahildir (v0.3'ten beri
+`whisper-cli` PATH'ten gelebiliyordu, o kurulum bozulmamalı). Bunun bedeli
+şudur ve BİLİNÇLİDİR: toml'a yazılmış YANLIŞ bir yol hata vermek yerine
+sessizce bir alt kaynağa düşer — `setup --durum` her yolun `kaynak`ını
+gösterdiği için teşhis oradadır.
+
+**SİHİRBAZ YALNIZ whispercpp YOLUNDA TETİKLENİR.** Varsayılan backend hâlâ
+`faster-whisper`'dır ve o kendi modelini kendisi indirir; `cozumle` o durumda
+hiçbir şeyi eksik saymaz. Yani **kutudan çıktığı hâliyle sihirbaz görünmez** —
+paketlenmiş dağıtımda varsayılanın whispercpp'ye çevrilmesi PyInstaller
+fazının kararıdır, bu fazda VERİLMEDİ.
+
+**UI KİLİDİ SUNUCUDADIR:** kurulum eksikken `POST /api/jobs` 409 döner —
+"sihirbaz bitene kadar kilitli" sözü istemcide değil route'ta tutulur,
+istemciyi atlayıp POST eden de aynı kilide çarpar.
+
+**İndirme motoru sözleşmesi** (`kurulum/indir.py`, hepsi kilit testte): akışlı;
+`.part` + atomik rename (yarım dosya "kurulu" sanılmaz); `Range` ile resume ama
+sunucu 200 dönerse BAŞTAN başlar (yarım dosyanın üstüne tam gövde eklemek bozuk
+çıktı üretirdi); SHA-256 tutmazsa dosya SİLİNİR (`.part` kalsaydı sonraki
+deneme onu resume edip aynı bozuk sonuca varırdı); disk alanı önden kontrol
+edilir ama ölçülemiyorsa indirme ENGELLENMEZ; iptalde `.part` KORUNUR; zip
+DÜZ açılır (Vulkan DLL'leri exe'nin YANINDA olmak zorunda) ve zip-slip
+reddedilir. Yeni bağımlılık YOK — `urllib` (stdlib).
+
+**Sihirbaz UI'ı SSE değil YOKLAMA kullanır** (`GET /api/kurulum`, 700 ms):
+job ilerlemesi SSE'dir çünkü orada olaylar ayrık ve sıralı; indirme ilerlemesi
+tek bir sayıdır ve yoklama `Last-Event-ID` replay'i + yeniden bağlanma
+sınıfını tamamen siler. `durum()` yolları HER ÇAĞRIDA yeniden çözer, yani
+`tamam` kalıcı bir durum değildir (kullanıcı dosyayı silerse eksik geri gelir).
+
+**GERÇEK DONANIM DOĞRULAMASI (temiz profil: env var yok, `LOCALAPPDATA`/
+`APPDATA` yönlendirilmiş, `whisper-cli` PATH'te yok):** açılışta sihirbaz
+ekranı çıktı → "İndirmeyi başlat" → 23 MB ikili + 547 MB model gerçekten indi
+(9.7 MB/sn, ilerleme çubuğu ve kalan süre aktı) → ekran KENDİLİĞİNDEN dosya
+gezginine geçti. DLL'ler exe'nin yanında, `.part` kalmadı, `config.json`
+yazıldı, `setup --durum` ikisini de `kaynak: sihirbaz` gösterdi. Ardından
+uçtan uca `fillercut Test1.mp4 --yes` koştu ve çıktı **PARİTE REFERANSIYLA
+BİREBİR AYNI**: SHA-256 `F5185E7E…9004` (%21.67 kazanım, h264_amf) — yani
+sihirbazın indirdiği ikili+model, elle kurulanla fonksiyonel olarak aynı.
+
+**Tuzaklar (bir sonraki agent için):**
+- `typer.confirm` YALNIZ `y/n` anlar; Türkçe bir araçta "e" yazan kullanıcıya
+  "invalid input" diyor. `cli._onay` bu yüzden var (e/evet/y/yes, h/hayır/n/no).
+  Yanıt alınamazsa (EOF/betik) İNDİRME BAŞLAMAZ ve `--yes` önerilir.
+- Konsol çıktısında `→` kullanma: cp1254'te kodlanamıyor (v0.3.3'teki `✓` ile
+  aynı sınıf). `setup` ASCII `->` kullanır ve ilerleme satırları ANSI/`\r`
+  içermez — komut betikten/CI'dan çağrılabilir.
+- `test_whispercpp_alanlari_baglanir` eskiden var OLMAYAN yollar veriyordu ve
+  çözümleme zinciri geliştirme makinesindeki GERÇEK env var'lara düşüyordu.
+  Testlerde artık gerçek geçici dosya kullanılıyor; yeni test yazarken
+  `izole_ev` benzeri bir fixture ile `LOCALAPPDATA`/`APPDATA`/env var'ları
+  izole et, yoksa test makineye bağımlı olur.
+- `ManifestHatasi` bir `ValueError` DEĞİLDİR (route ikisini ayrı yakalar).
+
+**Faz 3/4'e devredilenler:**
+- **PyInstaller:** `fillercut/assets/manifest.json` bundle'a girmeli
+  (`--add-data`); wheel'e girdiği gerçek `hatchling build` ile doğrulandı ama
+  PyInstaller ayrı bir paketleyicidir. `MANIFEST_YOLU` `__file__` göreli
+  olduğu için `_MEIPASS` altında da çözülür — sadece dosyanın kopyalanması şart.
+- **Varsayılan backend'in whispercpp'ye çevrilmesi** paketleme fazının kararı;
+  çevrilmeden sihirbaz kutudan çıktığı hâliyle görünmez.
+- **Inno Setup:** hedef dizin kalıcılığı — `%LOCALAPPDATA%\fillercut`
+  kurulumdan BAĞIMSIZ yaşamalı (kaldırma sırasında modeli silmek 547 MB'ı
+  yeniden indirtir; "kullanıcı verisini de sil" ayrı bir onay olmalı).
+  Ayrıca WebView2 bootstrapper (Faz 1 girdisi) ve ffmpeg kontrolü hâlâ
+  kurucunun işi — bu faz ffmpeg'e DOKUNMADI.
+- Sürüm bump YAPILMADI (v1.1.0 duruyor); Faz 2 bir release değil.
+
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
 **v0.1**
@@ -445,12 +559,15 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pyproject.toml` 1.0.0 + kurulu metadata bayatlık alarmı (red-first doğrulandı) | `424fc2e` |
 | `app.js`: REVIEW aşaması ara durum olaylarında donuyordu (E2E bulgusu) | `70ef7a4` |
 
-**Test sayısı:** 827 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 813'ü
-marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp` marker'lı (gerçek ffmpeg / gerçek
+**Test sayısı:** 947 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 932'si
+marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp`, 1'i `ag` (gerçek ağ indirmesi) marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
-atlar, donanım/model yoksa ilgili testler kendi kendine skip eder. Web testleri
+atlar (`ag` için de: `-m 'not ag'`), donanım/model/ağ yoksa ilgili testler
+kendi kendine skip eder. `ag` marker'lı tek test yalnız 23 MB'lık binary'yi
+indirir — manifest hash'inin CANLI kaynakla uyumunu doğrular; modeller
+(0.5–1 GB) test içinde İNDİRİLMEZ. Web testleri
 (`test_web_app/fs/jobs.py`) marker'sızdır: FastAPI TestClient in-process çalışır,
 gerçek sunucu/video koşmaz.
 
@@ -469,9 +586,19 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/app.py`: `GET /api/instance` (kimlik + canlılık; `INSTANCE_ADI`) — tek instance kilidinin ve hazırlık yoklamasının ortak ucu | `6f83843` |
 | `cli.py`: `ui` yeniden kablolandı — native/tarayıcı karar ağacı, ephemeral port düşüşü, tek instance, bağlı soketle uvicorn, ayrı thread + graceful shutdown (`_dinleyici_ac`, `_instance_sorgula`, `_hazir_bekle`, `_sunucuyu_kos`, `_native_kos`; `_port_bos` düştü) | `0299513` |
 
-**Sıradaki:** dağıtım epic'i **Faz 2+** (ilk-çalıştırma indirme sihirbazı /
-PyInstaller / Inno Setup / release mekaniği) — Faz 1'in devrettiği notlar
-yukarıdaki v1.1 kaydında.
+**v1.2 Faz 2 (ilk-çalıştırma indirme sihirbazı)**
+
+| Modül | Commit |
+|---|---|
+| `assets/manifest.json` + `assets/__init__.py` (şema doğrulama, küratörlü liste, `Varlik`) + kaynak seçimi spike'ı (`experiments/download_spike/`) | `6a0270c` |
+| `kurulum/yollar.py` (hedef dizinler, sihirbaz `config.json`'u, çözümleme önceliği) + `pipeline._make_transcriber` çözümlenmiş yol + `KurulumEksik` | `2793915` |
+| `kurulum/indir.py` (akışlı + `.part`/atomik rename + `Range` resume + SHA-256 + disk kontrolü + iptal + zip-slip korumalı açma) + `ag` marker'ı | `7b6a5fb` |
+| `cli.py`: `fillercut setup` (`--model`, `--yes`, `--durum`) + `_onay` Türkçe istemi + argv dispatch | `31cdce0` |
+| `web/kurulum.py` (durum makinesi + 3 route) + `web/app.py` wiring + `web/jobs.py` 409 kilidi + sihirbaz ekranı (`index.html`/`app.js`/`style.css`) | `bc22e96` |
+
+**Sıradaki:** dağıtım epic'i **Faz 3+** (PyInstaller paketleme / Inno Setup /
+release mekaniği) — Faz 1 ve Faz 2'nin devrettiği notlar yukarıdaki v1.1 ve
+v1.2 kayıtlarında.
 
 Web katmanı bu taşınabilirlik kısıtıyla yazılmıştı — tek port, tek pencere
 varsayımı; tarayıcıya özgü API'lere bel bağlanmadı — ve Faz 1'de bu karşılığını

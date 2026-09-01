@@ -9,7 +9,92 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
-**Arayüz artık kendi penceresinde açılıyor.**
+**Arayüz kendi penceresinde açılıyor ve motoru kendisi indiriyor.**
+
+Filler-Cut artık kendi masaüstü penceresinde açılıyor (Faz 1) ve ilk
+çalıştırmada whisper.cpp motorunu ve dil modelini sizin yerinize
+indiriyor (Faz 2). Elle indirme, zip açma, yol yazma yok.
+
+CLI yine hiç değişmedi.
+
+---
+
+### Eklendi — ilk çalıştırma sihirbazı (dağıtım epic'i Faz 2)
+
+whisper.cpp motorunu ve dil modelini artık elle indirip yollarını yazmanız
+gerekmiyor. `fillercut ui` ilk açılışta bunlar eksikse **sihirbaz ekranını**
+gösteriyor: model seçicisi (boyutlarıyla), tek düğmeyle indirme, yüzde/hız/
+kalan süre, iptal ve yeniden dene. İndirme bitince ekran kendiliğinden video
+seçme ekranına geçiyor; sihirbaz bitene kadar iş başlatılamıyor.
+
+Komut satırını tercih edenler için `fillercut setup` aynı işi yapıyor;
+`fillercut setup --durum` neyin kurulu olduğunu, **hangi kaynaktan geldiğini**
+ve neyin eksik olduğunu raporluyor.
+
+- **Sihirbaz ekranı** (`fillercut ui`) — eksik varlıklar, model seçici,
+  ilerleme çubuğu, iptal/yeniden dene. Kurulum eksikken iş başlatma
+  **sunucuda** kilitli (`POST /api/jobs` → 409), istemciyi atlayan da
+  aynı kilide çarpar.
+- **`fillercut setup`** — `--model AD` ile model seçimi, `--yes` ile onaysız
+  (CI/betik), `--durum` ile rapor.
+- **İndirme motoru** — akışlı indirme, `.part` + atomik rename, `Range` ile
+  kaldığı yerden devam, SHA-256 doğrulama, indirmeden önce disk alanı
+  kontrolü, iptal (yarım dosya korunur).
+- **Manifest** (`fillercut/assets/manifest.json`) — indirilen her şeyin adı,
+  adresi, boyutu ve SHA-256'sı tek yerde.
+
+Seçilebilir modeller:
+
+| model | boyut | ne zaman |
+|---|---|---|
+| `ggml-large-v3-turbo-q5_0` | 547 MB | önerilen — hız/doğruluk dengesi |
+| `ggml-small-q5_1` | 190 MB | yavaş bağlantı ya da dar disk |
+| `ggml-large-v3-q5_0` | 1.08 GB | kalite ağırlıklı, en yavaş |
+
+### Değişti
+
+- `[asr].whispercpp_binary` / `whispercpp_model` **zorunlu değil** artık.
+  Yollar şu sırayla çözülür, ilk **VAR OLAN** aday kazanır:
+  `filler-cut.toml` → `FILLERCUT_WCPP_BINARY`/`FILLERCUT_WCPP_MODEL` →
+  sihirbazın yazdığı `%APPDATA%\fillercut\config.json` → eksik.
+  **Mevcut kurulumlar sihirbazı hiç görmez**; sihirbaz hiçbirini ezmez,
+  kendi ayrı dosyasına yazar. PATH'teki `whisper-cli` de eskisi gibi bulunur.
+- İndirilenler `%LOCALAPPDATA%\fillercut\bin` ve `...\models` altına iner —
+  repoya ve venv'e yazılmaz.
+- `fillercut video.mp4` doğrudan çalıştırılıp ikili/model eksikse **sessiz
+  indirme yok**: net hata + `fillercut setup` / `fillercut ui` önerisi.
+
+### Ölçüldü
+
+Model kaynağı ölçümle seçildi (kill criteria: HF, GitHub Release'den %20+
+yavaşsa modeller kendi release'imize taşınacaktı):
+
+| ölçüm | HF | GitHub Release |
+|---|---|---|
+| 20 MiB eşit dilim (medyan, 3 koşu) | 7.04 MiB/sn | 8.48 MiB/sn |
+| tam dosya (gerçek indirme) | **10.6–10.8 MiB/sn** | 8.04 MiB/sn |
+| `Range` ile resume | çalışıyor | çalışıyor |
+
+Dilimdeki %16.9'luk fark eşiğin altında kaldı ve gerçek boyutlu indirmede
+sıralama tersine döndü — **model kaynağı Hugging Face kaldı**. Ayrıntı:
+`experiments/download_spike/README.md`.
+
+### Bilinen sınırlar
+
+- Sihirbaz yalnız `[asr].backend = "whispercpp"` seçiliyken devreye girer;
+  varsayılan backend (`faster-whisper`) kendi modelini kendisi indirir.
+  Paketlenmiş dağıtımda varsayılanın çevrilmesi PyInstaller fazının kararıdır.
+- **GPU tespiti / CUDA-vs-Vulkan seçimi yok**: sihirbaz tek Vulkan
+  win-x64 ikilisini indirir (AMD, Intel ve NVIDIA'da aynı ikili çalışır).
+  CUDA yolu ileri kullanıcı için manuel kalır.
+- ffmpeg indirilmez — sistem bağımlılığı olarak kalır (kurucu fazının konusu).
+- Native pencere gibi, sihirbaz da yalnız Windows hedefiyle ölçüldü.
+- Tek instance kilidi gibi burada da kalıcılık dosyaya değil dizine bağlıdır:
+  `%LOCALAPPDATA%` taşınırsa indirilenler yeniden inmek zorunda kalır.
+
+---
+
+### Eklendi — native masaüstü penceresi (dağıtım epic'i Faz 1)
 
 `fillercut ui` bugüne kadar tarayıcıda bir sekme açıyordu. Artık Filler-Cut'ın
 kendi masaüstü penceresi var: başlığı "Filler-Cut", görev çubuğunda kendi

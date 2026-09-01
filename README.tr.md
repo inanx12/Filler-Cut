@@ -156,6 +156,14 @@ transkript: konusma_transkript.json
 fillercut ui
 ```
 
+İlk açılışta whisper.cpp motoru ya da model eksikse bir **kurulum sihirbazı**
+çıkar: modeli seçersiniz, tek düğmeye basarsınız, gerisi kendiliğinden iner
+(ilerleme çubuğu, kesintide kaldığı yerden devam, SHA-256 doğrulaması) ve
+`%LOCALAPPDATA%\fillercut` altına yerleşir. Sihirbaz bitene kadar iş
+başlatılamaz. Komut satırını tercih ederseniz `fillercut setup` aynı işi
+yapar; `fillercut setup --durum` neyin kurulu olduğunu ve nereden geldiğini
+raporlar.
+
 Filler-Cut'ı **kendi masaüstü penceresinde** açar (pywebview + Windows
 WebView2 çalışma zamanı); arkasında `http://127.0.0.1:8765` adresinde lokal
 bir sunucu koşar (yalnız loopback — localhost dışına asla bağlanmaz).
@@ -202,6 +210,32 @@ Opsiyonlar: `--port` (varsayılan 8765), `--config YOL` (CLI ile aynı
 `filler-cut.toml`), `--no-native` (tarayıcı modunu zorla), `--native`
 (native pencere şart — yoksa hata ver), `--no-browser` (sunucuyu başlat,
 hiçbir şey açma).
+
+### İlk kurulum
+
+```bash
+fillercut setup
+```
+
+Vulkan `whisper-cli` derlemesini (bu reponun release'lerinden) ve bir GGML
+modelini (Hugging Face'teki `ggerganov/whisper.cpp`'den) indirir.
+Opsiyonlar: `--model AD` model seçimi, `--yes` onaysız (CI/betik), `--durum`
+indirmeden rapor.
+
+| model | boyut | ne zaman |
+|---|---|---|
+| `ggml-large-v3-turbo-q5_0` | 547 MB | önerilen — hız/doğruluk dengesi |
+| `ggml-small-q5_1` | 190 MB | yavaş bağlantı ya da dar disk |
+| `ggml-large-v3-q5_0` | 1.08 GB | kalite ağırlıklı, en yavaş |
+
+Yollar şu sırayla çözülür, ilk **var olan** aday kazanır: `filler-cut.toml`
+→ `FILLERCUT_WCPP_BINARY`/`FILLERCUT_WCPP_MODEL` → sihirbazın kendi
+`%APPDATA%\fillercut\config.json`'u. Yani mevcut bir kurulum sihirbazı hiç
+görmez, sihirbaz da yapılandırmanızı ezmez.
+
+Sihirbaz yalnız **Vulkan** derlemesini kurar — AMD, Intel ve NVIDIA için tek
+ikili. CUDA yolu ileri kullanıcı için manuel kalır
+(`[asr].whispercpp_binary`). ffmpeg sistem bağımlılığı olmayı sürdürür.
 
 Port 8765 doluysa koşu **başarısız olmaz**: boş bir porta düşer ve hangisi
 olduğunu söyler. O portta zaten bir Filler-Cut varsa ikinci `fillercut ui`

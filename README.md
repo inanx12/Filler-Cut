@@ -159,6 +159,13 @@ Example `video_temiz.json` (truncated):
 fillercut ui
 ```
 
+On first launch, if the whisper.cpp engine or a model is missing, a **setup
+wizard** appears: pick a model, press one button, and it downloads (with a
+progress bar, resume on interruption and SHA-256 verification) into
+`%LOCALAPPDATA%\fillercut`. Jobs cannot start until it finishes. Prefer the
+terminal? `fillercut setup` does the same, and `fillercut setup --durum`
+reports what is installed and where it came from.
+
 Opens Filler-Cut in its **own desktop window** (pywebview + the Windows
 WebView2 runtime), backed by a local server on `http://127.0.0.1:8765`
 (loopback only — never binds beyond localhost). Without WebView2 — or without
@@ -204,6 +211,32 @@ Options: `--port` (default 8765), `--config PATH` (the same
 `filler-cut.toml` the CLI uses), `--no-native` (force browser mode),
 `--native` (require the native window — error out if unavailable),
 `--no-browser` (start the server, open nothing).
+
+### First-run setup
+
+```bash
+fillercut setup
+```
+
+Downloads the Vulkan `whisper-cli` build (from this repo's releases) and a
+GGML model (from `ggerganov/whisper.cpp` on Hugging Face). Options:
+`--model NAME` to choose a model, `--yes` for unattended/CI, `--durum` to
+report status instead of downloading.
+
+| model | size | when |
+|---|---|---|
+| `ggml-large-v3-turbo-q5_0` | 547 MB | recommended — speed/accuracy balance |
+| `ggml-small-q5_1` | 190 MB | slow connection or tight disk |
+| `ggml-large-v3-q5_0` | 1.08 GB | quality-weighted, slowest |
+
+Paths resolve in this order, first **existing** candidate wins:
+`filler-cut.toml` → `FILLERCUT_WCPP_BINARY`/`FILLERCUT_WCPP_MODEL` → the
+wizard's own `%APPDATA%\fillercut\config.json`. So an existing setup never
+sees the wizard, and the wizard never overwrites your configuration.
+
+The wizard installs the **Vulkan** build only — one binary for AMD, Intel and
+NVIDIA. The CUDA path stays manual for advanced users (see
+`[asr].whispercpp_binary`). ffmpeg remains a system dependency.
 
 If port 8765 is busy the run does **not** fail: it falls back to a free port
 and tells you which one. If Filler-Cut is already running on that port, a
