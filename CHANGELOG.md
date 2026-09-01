@@ -174,7 +174,7 @@ CLI yine hiç değişmedi.
 
 [1.1.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.1.0
 
-## [1.0.0] — 2026-08-28
+## [1.0.0] — 2026-08-27
 
 **Filler-Cut'ın web arayüzü geldi.** `fillercut ui` yazın; tarayıcıda videonuzu
 seçin, aracın bulduğu kesimleri **kesmeden önce** görün, dinleyin, düzeltin ve
