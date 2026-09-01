@@ -13,6 +13,7 @@ düş" yaklaşımı hem bozuk bir pencere hem de sessiz bir registry mutasyonu
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -144,18 +145,105 @@ class TestPencereAc:
         assert cagrildi == ["kapandi"]
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="WebView2 yalnız Windows'ta")
-class TestGercekRegistry:
-    """Ön-uçuş kontrolümüz pywebview'in kendi cevabıyla aynı mı? (bu makinede)"""
+class TestPywebviewUyumKilidi:
+    """`webview2_var()` ile pywebview'in KENDİ tespiti ayrışmasın (uyum kilidi).
 
-    def test_pywebview_ile_ayni_cevap(self) -> None:
-        bizim = native.webview2_var()
-        if not bizim:
-            pytest.skip(
-                "WebView2 yok — pywebview'in kendi tespitini çağırmak MSHTML "
-                "yoluna girip HKCU'ya yazardı (bkz. modül docstring'i)."
-            )
+    `web/native.py`'deki ölçüt pywebview'in `winforms._is_chromium()`'unun
+    **kopyasıdır** (bkz. o modülün docstring'i: kendi tespitimizi yazmak
+    zorundayız çünkü pywebview'inkini ÇAĞIRMAK, WebView2 yoksa MSHTML yoluna
+    girip HKCU'ya yazıyor). Kopya sessizce bayatlarsa sonuç kötü: "native
+    diyoruz ama pywebview MSHTML açıyor" ya da tersi — "tarayıcıya düşüyoruz
+    ama native çalışacaktı".
+
+    Kilit `tests/data/wcpp_reference_tr.json` mantığındadır: üst-akış
+    davranışı değişirse test PATLAR, ürün sessizce ayrışmaz. İki katman:
+
+    * **kaynak kilidi** — pywebview'in ölçütünü oluşturan sabitler hâlâ
+      `winforms.py` içinde mi? (her makinede koşar, yan etkisiz: dosya
+      okunur, modül import EDİLMEZ)
+    * **canlı cevap kilidi** — bu makinede iki tespit aynı `bool`'u mu
+      veriyor? (yalnız registry ön koşulları sağlanırken koşar)
+    """
+
+    def _winforms_kaynagi(self) -> str:
+        """`winforms.py`'nin kaynağı — modülü IMPORT ETMEDEN.
+
+        `find_spec` yalnız (boş) `webview.platforms` paketini yükler;
+        `winforms`'un kendisi çalışmaz, yani `_set_ie_mode()` riski yoktur.
+        """
+        import importlib.util
+
         pytest.importorskip("webview")
-        from webview.platforms import winforms  # WebView2 VARKEN yan etkisiz
+        spec = importlib.util.find_spec("webview.platforms.winforms")
+        assert spec is not None and spec.origin is not None
+        return Path(spec.origin).read_text(encoding="utf-8")
 
+    def test_pywebview_olcutunun_sabitleri_degismedi(self) -> None:
+        """Kopyaladığımız her sabit hâlâ upstream kaynağında duruyor mu?"""
+        kaynak = self._winforms_kaynagi()
+
+        assert "def _is_chromium(" in kaynak, (
+            "pywebview `_is_chromium` fonksiyonunu kaldırmış/yeniden adlandırmış "
+            "— tespit yöntemi değişti, native.py'deki kopya gözden geçirilmeli."
+        )
+        for guid in native._WEBVIEW2_GUIDLERI:
+            assert guid in kaynak, f"WebView2 kanal GUID'i upstream'de yok: {guid}"
+        assert str(native._NET462_RELEASE) in kaynak, (
+            ".NET 4.6.2 eşiği (Release) upstream'de değişmiş."
+        )
+        assert f"'{native._WEBVIEW2_MIN_ANA_SURUM}." in kaynak, (
+            "WebView2 asgari sürüm dizesi upstream'de değişmiş "
+            "(native.py ANA SÜRÜM karşılaştırması yapar)."
+        )
+        # Registry yolu biçimleri: HKCU düz, HKLM WOW6432Node altı.
+        assert r"Microsoft\EdgeUpdate\Clients" in kaynak
+        assert r"WOW6432Node\Microsoft\EdgeUpdate\Clients" in kaynak
+
+    def test_webview2_yoksa_pywebview_hala_sessizce_mshtmle_dusuyor(self) -> None:
+        """Ön-uçuş kontrolünün VARLIK SEBEBİ hâlâ geçerli mi?
+
+        pywebview bir gün WebView2 yokluğunda exception atmaya başlarsa
+        `web/native.py`'deki ön-uçuş sırası gereksizleşir (ya da sadeleşir).
+        Bu test o günü haber verir; gerekçe kaybolmuş bir savunma sessizce
+        taşınmaktansa gözden geçirilsin.
+        """
+        kaynak = self._winforms_kaynagi()
+        assert "from . import mshtml as IE" in kaynak, (
+            "pywebview MSHTML fallback'ini kaldırmış — native.py'nin ön-uçuş "
+            "gerekçesi (sessizce bozuk pencere + registry yazımı) değişti."
+        )
+        assert "IE._set_ie_mode()" in kaynak, (
+            "MSHTML düşüşünün registry yan etkisi kalkmış olabilir — "
+            "native.py'nin 'pywebview'e hiç dokunma' kuralı gözden geçirilmeli."
+        )
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="WebView2 yalnız Windows'ta")
+    def test_canli_cevap_pywebview_ile_ayni(self) -> None:
+        """İki tespit bu makinede AYNI `bool`'u vermeli.
+
+        Koşma şartı bilinçli olarak `webview2_var()`'ın kendisi DEĞİL, onun
+        ham girdileridir (`_webview2_pv`, `_net_release`): şart sonucumuza
+        bağlansaydı, karşılaştırma mantığındaki bir bozulma testi FAIL değil
+        SKIP yapardı — yani kilit tam da lazım olduğu anda susardı.
+
+        Ham girdiler varken pywebview de `edgechromium` dalını seçer, yani
+        import yan etkisizdir. (Teorik kenar: pv'nin ana sürümü 86'nın altında
+        olan bir makine — 2020 öncesi runtime — burada MSHTML yoluna girerdi;
+        pratikte böyle bir kurulum yok.)
+        """
+        pytest.importorskip("webview")
+        if native._webview2_pv() is None or native._net_release() is None:
+            pytest.skip(
+                "WebView2/.NET registry girdisi yok — pywebview'in kendi "
+                "tespitini çağırmak MSHTML yoluna girip HKCU'ya yazardı "
+                "(bkz. modül docstring'i)."
+            )
+        from webview.platforms import winforms
+
+        # `_is_chromium` upstream'de annotate EDİLMEMİŞTİR (paket `py.typed`
+        # taşıdığı için mypy strict onu çağırmayı hata sayar) — bizim
+        # tarafımızda düzeltilecek bir şey yok, çağrı bilinçli.
+        pywebview_cevabi = winforms._is_chromium()  # type: ignore[no-untyped-call]
+        assert pywebview_cevabi == native.webview2_var()
+        # Aynı kararın pywebview tarafındaki görünür sonucu:
         assert winforms.renderer == "edgechromium"
