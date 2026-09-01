@@ -15,6 +15,7 @@ tarayıcıya özgü API'lere (çoklu sekme vb.) bel bağlanmaz.
 from __future__ import annotations
 
 import mimetypes
+import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -23,7 +24,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ConfigDict
 
+from fillercut import __version__
 from fillercut.config import Config
 from fillercut.pipeline import run as pipeline_run
 from fillercut.web import fs, jobs
@@ -32,6 +35,30 @@ from fillercut.web.waveform import peaks_from_wav
 
 #: Paket içi statik dosya kökü (index.html + app.js + style.css).
 _STATIK = Path(__file__).parent / "static"
+
+#: ``GET /api/instance``'ın kimlik dizesi — tek instance kilidinin anahtarı.
+#: ``cli.ui`` dolu bulduğu portu bu değerle sorgular; **değiştirilirse kilit
+#: sessizce kırılır** (her açılış yeni bir sunucu başlatır).
+INSTANCE_ADI = "fillercut"
+
+
+class InstanceBilgisi(BaseModel):
+    """``GET /api/instance`` cevabı — "bu portta koşan BEN miyim?" sorusu.
+
+    Tek instance kilidi (v1.1 Faz 1) portun DOLU olmasını kanıt saymaz: o
+    portta başka bir uygulama da olabilir. İkinci açılış bu ucu sorgular;
+    ``uygulama`` eşleşirse "zaten çalışıyor" deyip çıkar, eşleşmezse
+    ephemeral porta düşer.
+
+    ``pid`` teşhis içindir (kullanıcı asılı kalan süreci görebilsin);
+    yüzey localhost'a bağlı ve tek kullanıcılıktır.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    uygulama: str
+    surum: str
+    pid: int
 
 
 def _pipeline_kosucu(cfg: Config) -> Kosucu:
@@ -131,6 +158,18 @@ def create_app(
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
         return FileResponse(_STATIK / "index.html", media_type="text/html")
+
+    @app.get("/api/instance", response_model=InstanceBilgisi)
+    def instance_bilgisi() -> InstanceBilgisi:
+        """Kimlik + canlılık ucu (tek instance kilidi ve hazırlık yoklaması).
+
+        ``cli.ui`` bunu İKİ yerde kullanır: (a) dolu porttaki servisin biz
+        olup olmadığını anlamak, (b) pencereye URL vermeden önce sunucunun
+        gerçekten cevap verdiğini doğrulamak. İkincisi için uvicorn'un
+        ``started`` bayrağı tek başına yetmez — bayrak "kabul etmeye hazır"
+        der, bu uç "uygulama katmanı cevap veriyor" der.
+        """
+        return InstanceBilgisi(uygulama=INSTANCE_ADI, surum=__version__, pid=os.getpid())
 
     app.mount("/static", StaticFiles(directory=_STATIK), name="static")
     return app
