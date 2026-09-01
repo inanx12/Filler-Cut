@@ -34,6 +34,16 @@ from fillercut.report.json_report import EditOzeti, reason_kategorileri
 #: kelime sınırından kısa, tipik silencedetect kenar belirsizliğinden uzun.
 SNAP_ESIK_MS = 150
 
+#: "Sessizliğe yasla" aksiyonunun yön başına genişleme tavanı (ms).
+#: **KI-8'in kullanıcı-tetikli hâli.** Orada OTOMATİK expand-to-silence ölçülüp
+#: öldü: sarmalayan konuşma koşusu medyanı 5428 ms olduğu için çıpa bir
+#: büyüklük mertebesi uzaktaydı ve genişletme konuşmaya ortalama 1084 ms
+#: taşıyordu. Buradaki üç fark ölçülen o riski kesiyor: (a) kararı kullanıcı
+#: verir, (b) genişleme yön başına 500 ms ile TAVANLI'dır — yani en kötü
+#: durumda KI-8'in ölçtüğü taşmanın yarısından azı, (c) plan mutasyona
+#: uğramaz, sonuç sıradan bir kullanıcı editi olarak overlay'e düşer.
+YASLA_TAVAN_MS = 500
+
 #: reason kategorisi → UI tür rozeti (handoff: kesin|aday|sessizlik|manuel).
 _KATEGORI_ETIKET = {
     "kesin_filler": "kesin",
@@ -154,6 +164,14 @@ class EklemeIstek(BaseModel):
     bit_ms: StrictInt
 
 
+class YaslaIstek(BaseModel):
+    """``POST /api/jobs/{id}/review/yasla`` gövdesi — hedef kesimin id'si."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+
+
 class EditsIstek(BaseModel):
     """``POST /api/jobs/{id}/review/edits`` gövdesi — overlay'in TAM anlık görüntüsü.
 
@@ -166,6 +184,13 @@ class EditsIstek(BaseModel):
     devre_disi: list[str] = []
     sinirlar: list[SinirIstek] = []
     eklemeler: list[EklemeIstek] = []
+    #: Mıknatıs (snap) açık mı? İstemcinin oturum içi UI tercihi; **veriye ait
+    #: değildir**, o yüzden overlay'de saklanmaz — her istekte taşınır.
+    #: Varsayılan ``True``: alan gönderilmediğinde davranış v1.0 ile birebir
+    #: aynıdır (eski istemci ve CLI parity'si etkilenmez). Kapatmak YALNIZ
+    #: sessizliğe yapışmayı iptal eder; min_keep clamp'i invariant'tır ve
+    #: koşmaya devam eder (bkz. ``normalize``).
+    snap: bool = True
 
 
 def sessizlik_kenarlari(ham_sessizlikler: Sequence[Segment]) -> tuple[int, ...]:
@@ -191,6 +216,51 @@ def snap(deger: int, kenarlar: Sequence[int], esik_ms: int = SNAP_ESIK_MS) -> in
         return deger
     en_yakin = min(kenarlar, key=lambda k: (abs(k - deger), k))
     return en_yakin if abs(en_yakin - deger) <= esik_ms else deger
+
+
+def _disa_kenar(deger: int, kenarlar: Sequence[int], *, sola: bool, tavan_ms: int) -> int:
+    """``deger``den DIŞA doğru ilk sessizlik kenarı; tavan içinde yoksa tavan.
+
+    "İlk" = dışa doğru en yakın olan, en uzak olan değil: kesim gövdesini bir
+    sonraki sessizliğe yaslamak istiyoruz, bulabildiğimiz en uzak sessizliğe
+    fırlatmak değil. Sınır zaten bir kenarın ÜSTÜNDEYSE o kenar sayılmaz
+    (katı ``<`` / ``>``) — aksi hâlde aksiyon hiçbir şey yapmazdı.
+    """
+    if sola:
+        hedef = deger - tavan_ms
+        adaylar = [k for k in kenarlar if hedef <= k < deger]
+        return max(adaylar) if adaylar else hedef
+    hedef = deger + tavan_ms
+    adaylar = [k for k in kenarlar if deger < k <= hedef]
+    return min(adaylar) if adaylar else hedef
+
+
+def yasla_sinirlari(
+    bas: int,
+    bit: int,
+    *,
+    kenarlar: Sequence[int],
+    sol_limit: int,
+    sag_limit: int,
+    tavan_ms: int = YASLA_TAVAN_MS,
+) -> tuple[int, int]:
+    """"Sessizliğe yasla": iki sınırı da dışa, ilk sessizlik kenarına taşır (saf).
+
+    ``sol_limit``/``sag_limit`` komşu duvarlarıdır — genişleme oraya varmadan
+    durur, böylece **kesimler birleşmez** (duvarı çağıran komşunun sınırı +
+    ``min_keep`` olarak verir; değme = union demek olurdu).
+
+    Aksiyon yalnızca GENİŞLETİR: duvar kesimin içinde kalsa bile sınır geri
+    çekilmez (``min``/``max`` bekçileri). Daraltma kullanıcının sürüklemesinin
+    işidir, tek tuşluk bir aksiyonun sessizce yapacağı şey değil.
+    """
+    yeni_bas = min(
+        bas, max(_disa_kenar(bas, kenarlar, sola=True, tavan_ms=tavan_ms), sol_limit)
+    )
+    yeni_bit = max(
+        bit, min(_disa_kenar(bit, kenarlar, sola=False, tavan_ms=tavan_ms), sag_limit)
+    )
+    return yeni_bas, yeni_bit
 
 
 def _adaylar(plan: CutPlan, overlay: Overlay) -> list[_Aday]:
@@ -231,6 +301,59 @@ def _adaylar(plan: CutPlan, overlay: Overlay) -> list[_Aday]:
             )
         )
     return adaylar
+
+
+def yasla_uygula(
+    plan: CutPlan,
+    overlay: Overlay,
+    hedef_id: str,
+    *,
+    total_ms: int,
+    min_keep_ms: int,
+    kenarlar: Sequence[int],
+    tavan_ms: int = YASLA_TAVAN_MS,
+) -> Overlay:
+    """Tek kesime "sessizliğe yasla"yı uygular; SIRADAN bir sınır editi üretir.
+
+    Sonuç overlay'e düşer — orijinal plan mutasyona uğramaz, ``reason``
+    zincirine dokunulmaz (KI-3 parse'ı etkilenmez) ve kesim türü değişmez.
+    Yani "Geri al" toggle'ı, clamp ve rapor sayımları bu aksiyonu da
+    kendiliğinden kapsar; ayrı bir edit sınıfı YOKTUR.
+
+    Komşu duvarları YALNIZ aktif kesimlerden hesaplanır: geri alınmış bir
+    kesim render'a gitmediği için genişlemeyi engellemez.
+
+    Raises:
+        ReviewHatasi: ``hedef_id`` bu planda yoksa.
+    """
+    adaylar = _adaylar(plan, overlay)
+    hedef = next((a for a in adaylar if a.id == hedef_id), None)
+    if hedef is None:
+        raise ReviewHatasi(f"bilinmeyen kesim id'si: {hedef_id}")
+
+    sol_limit, sag_limit = 0, total_ms
+    for a in adaylar:
+        if not a.aktif or a.id == hedef_id:
+            continue
+        if a.bit <= hedef.bas:
+            sol_limit = max(sol_limit, a.bit + min_keep_ms)
+        if a.bas >= hedef.bit:
+            sag_limit = min(sag_limit, a.bas - min_keep_ms)
+
+    yeni_bas, yeni_bit = yasla_sinirlari(
+        hedef.bas,
+        hedef.bit,
+        kenarlar=kenarlar,
+        sol_limit=sol_limit,
+        sag_limit=sag_limit,
+        tavan_ms=tavan_ms,
+    )
+
+    if hedef.manuel:
+        eklemeler = list(overlay.eklemeler)
+        eklemeler[int(hedef_id[1:])] = (yeni_bas, yeni_bit)
+        return replace(overlay, eklemeler=tuple(eklemeler))
+    return replace(overlay, sinirlar={**overlay.sinirlar, hedef_id: (yeni_bas, yeni_bit)})
 
 
 def dogrula(plan: CutPlan, istek: EditsIstek, *, total_ms: int) -> Overlay:

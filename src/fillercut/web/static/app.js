@@ -439,6 +439,10 @@ const review = {
   secili: null,    // seçili kesim id'si (liste ↔ timeline vurgusu)
   surukleme: null, // aktif sürükleme durumu
   gonderiliyor: false,
+  /* Mıknatıs (snap) açık mı? Oturum içi UI tercihi — sunucuda saklanmaz,
+     her edits isteğinde taşınır (sunucu snap'i yeniden uygular, yoksa
+     anahtar etkisiz kalırdı). Varsayılan açık = v1.0 davranışı. */
+  snap: true,
 };
 
 function msPx(ms) {
@@ -543,6 +547,7 @@ function reviewCiz() {
   canliOzetCiz();
   bloklariCiz();
   listeyiCiz();
+  miknatisCiz(); // durum ↔ DOM tek yerden senkron
 }
 
 function canliOzetCiz() {
@@ -616,6 +621,19 @@ function listeyiCiz() {
     not.className = "not";
     not.textContent = k.duzenlendi && !k.manuel ? "sınır değiştirildi" : k.reason;
 
+    /* Tek tık "sessizliğe yasla": kesimin iki sınırını da en yakın sessizlik
+       kenarına genişletir (yön başına en çok ±500 ms). Her türde görünür. */
+    const yaslaDugme = document.createElement("button");
+    yaslaDugme.className = "dugme ikincil dar yasla";
+    yaslaDugme.textContent = "Sessizliğe yasla";
+    yaslaDugme.title =
+      "Kesimi iki yönde de en yakın sessizliğe genişletir (en çok ±500 ms) · Y";
+    yaslaDugme.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      review.secili = k.id;
+      yaslaGonder(k.id);
+    });
+
     const dugme = document.createElement("button");
     dugme.className = "dugme ikincil dar geri";
     dugme.textContent = k.aktif ? "Geri al" : "Geri ver";
@@ -624,7 +642,7 @@ function listeyiCiz() {
       kesimToggle(k.id);
     });
 
-    li.append(rozet, aralik, sure, not, dugme);
+    li.append(rozet, aralik, sure, not, yaslaDugme, dugme);
     li.addEventListener("click", () => {
       review.secili = k.id;
       el("oynatici").currentTime = k.bas_ms / 1000;
@@ -650,17 +668,29 @@ function overlayCikar() {
       .filter((x) => x.duzenlendi && !x.manuel)
       .map((x) => ({ id: x.id, bas_ms: x.bas_ms, bit_ms: x.bit_ms })),
     eklemeler: manueller.map((x) => ({ bas_ms: x.bas_ms, bit_ms: x.bit_ms })),
+    snap: review.snap,
   };
 }
 
+async function yaslaGonder(id) {
+  /* "Sessizliğe yasla" — hesabı SUNUCU yapar (aynı sessizlik haritası,
+     aynı tavan). İstemcide ikinci bir kopya tutulmaz; dönen görünüm
+     sıradan bir sınır editinden ayırt edilemez. */
+  await reviewPost("/review/yasla", { id });
+}
+
 async function editsGonder(overlay) {
+  await reviewPost("/review/edits", overlay);
+}
+
+async function reviewPost(yol, govde) {
   if (review.gonderiliyor) return;
   review.gonderiliyor = true;
   try {
-    const cevap = await fetch("/api/jobs/" + durum.jobId + "/review/edits", {
+    const cevap = await fetch("/api/jobs/" + durum.jobId + yol, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(overlay),
+      body: JSON.stringify(govde),
     });
     if (cevap.status === 404) {
       ekranGoster("ekran-yok");
@@ -718,6 +748,7 @@ const ASGARI_KESIM_MS = 40; // altına inen sürükleme "tıklama" sayılır
 function yerelSnap(ms) {
   /* Sunucudaki snap'in aynadaki hâli — sürüklerken hissedilsin diye.
      Nihai değer yine sunucudan gelir (orası doğruluğun kaynağı). */
+  if (!review.snap) return ms; // mıknatıs kapalı: sürükleme tamamen serbest
   const g = review.gorunum;
   let enIyi = ms;
   let enYakin = g.snap_esik_ms;
@@ -859,6 +890,24 @@ function oynatDurdur() {
 
 el("btn-oynat").addEventListener("click", oynatDurdur);
 
+function miknatisCiz() {
+  const dugme = el("btn-miknatis");
+  dugme.classList.toggle("kapali", !review.snap);
+  dugme.setAttribute("aria-pressed", String(review.snap));
+  dugme.title = review.snap
+    ? "Mıknatıs açık — sürükleme en yakın sessizlik kenarına yapışır (M)"
+    : "Mıknatıs kapalı — sürükleme serbest (M)";
+}
+
+function miknatisToggle() {
+  review.snap = !review.snap;
+  miknatisCiz();
+}
+
+el("btn-miknatis").addEventListener("click", miknatisToggle);
+
+/* Kısayollar: Boşluk / ←→ v1.0'dan; Y ve M bu dilimde eklendi (ikisi de
+   mevcut haritada boştu). */
 document.addEventListener("keydown", (ev) => {
   if (el("ekran-review").classList.contains("gizli")) return;
   const hedef = ev.target;
@@ -873,6 +922,12 @@ document.addEventListener("keydown", (ev) => {
   } else if (ev.code === "ArrowRight") {
     ev.preventDefault();
     oynatici.currentTime = oynatici.currentTime + 5;
+  } else if (ev.code === "KeyY") {
+    ev.preventDefault();
+    if (review.secili) yaslaGonder(review.secili);
+  } else if (ev.code === "KeyM") {
+    ev.preventDefault();
+    miknatisToggle();
   }
 });
 

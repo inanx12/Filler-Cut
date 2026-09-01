@@ -59,16 +59,19 @@ from fillercut.report.json_report import (
 )
 from fillercut.web import fs
 from fillercut.web.review import (
+    SNAP_ESIK_MS,
     EditsIstek,
     Overlay,
     ReviewGorunumu,
     ReviewHatasi,
+    YaslaIstek,
     dogrula,
     gorunum_kur,
     normalize,
     ozet_cikar,
     sessizlik_kenarlari,
     uygulanmis_plan,
+    yasla_uygula,
 )
 from fillercut.web.waveform import OLCEK as WAVEFORM_OLCEK
 
@@ -500,6 +503,12 @@ def review_edits(job_id: str, istek: EditsIstek, request: Request) -> ReviewGoru
 
     Doğruluğun kaynağı sunucudur: istemcinin snap/clamp'i yalnız UX'tir,
     saklanan (ve cevapta dönen) değerler burada üretilenlerdir.
+
+    ``istek.snap`` kullanıcının mıknatıs tercihidir. Sunucu snap'i her zaman
+    yeniden uyguladığı için bu bayrak olmadan istemci tarafındaki bir
+    "kapalı" anahtarı ETKİSİZ kalırdı: kullanıcı serbest bıraktığı sınırın
+    yine kenara yapıştığını görürdü. Eşiğin 0 olması ``snap()``'i kimliğe
+    çevirir (``esik_ms <= 0`` → değer aynen döner).
     """
     job, baglam = _review_job(job_id, request)
     min_keep_ms = _min_keep(request)
@@ -511,6 +520,44 @@ def review_edits(job_id: str, istek: EditsIstek, request: Request) -> ReviewGoru
             total_ms=baglam.total_ms,
             min_keep_ms=min_keep_ms,
             kenarlar=sessizlik_kenarlari(baglam.ham_sessizlikler),
+            snap_esik_ms=SNAP_ESIK_MS if istek.snap else 0,
+        )
+    except ReviewHatasi as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    job.overlay_yaz(overlay)
+    return _gorunum(job, baglam, min_keep_ms=min_keep_ms)
+
+
+@router.post("/api/jobs/{job_id}/review/yasla", response_model=ReviewGorunumu)
+def review_yasla(job_id: str, istek: YaslaIstek, request: Request) -> ReviewGorunumu:
+    """Tek tık "sessizliğe yasla": kesimin iki sınırını da dışa genişletir.
+
+    Sonuç sıradan bir sınır editidir (overlay), plan mutasyona uğramaz.
+
+    ``snap_esik_ms=0`` bilinçlidir: sınırlar zaten AYNI sessizlik haritasına
+    göre hesaplandı. Normalize'ın 150 ms'lik snap'i burada tekrar koşsaydı,
+    tavanda duran bir sınırı tavanın 150 ms ötesindeki bir kenara çekip
+    ``YASLA_TAVAN_MS`` sözünü sessizce bozabilirdi. Clamp (min_keep) ise
+    KOŞAR — o bir UX tercihi değil, invariant'tır.
+    """
+    job, baglam = _review_job(job_id, request)
+    min_keep_ms = _min_keep(request)
+    try:
+        overlay = yasla_uygula(
+            baglam.plan,
+            job.overlay,
+            istek.id,
+            total_ms=baglam.total_ms,
+            min_keep_ms=min_keep_ms,
+            kenarlar=sessizlik_kenarlari(baglam.ham_sessizlikler),
+        )
+        overlay = normalize(
+            baglam.plan,
+            overlay,
+            total_ms=baglam.total_ms,
+            min_keep_ms=min_keep_ms,
+            kenarlar=sessizlik_kenarlari(baglam.ham_sessizlikler),
+            snap_esik_ms=0,
         )
     except ReviewHatasi as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
