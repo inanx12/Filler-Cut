@@ -461,6 +461,33 @@ kalktı, dört yol da diskteki dosya adıyla birebir doğrulandı. Kullanıcın�
 dış backlog listesinde bu **madde 2**'dir; buradaki (2) numarası ondan farklı
 ve hâlâ AÇIK bir kayıttır (spike adayları), o yüzden madde (4) olarak
 yazıldı — madde (3) ile aynı desen: kayıt silinmez, durumu işaretlenir.
+(5) **GitHub Actions Node 20 → 24 — TAMAMLANDI (2026-09-01):** dış listede
+**madde 7**. `actions/checkout` v4 → **v7**, `actions/upload-artifact` v4 →
+**v7**; sürümler her action'ın kendi `action.yml`'sindeki `runs.using`
+alanından doğrulandı (checkout v5+ = node24; upload-artifact **v5 hâlâ
+node20**, node24 v6'da geldi — naif "v5'e çık" hamlesi bu action'ı Node 20'de
+bırakırdı). Doğrulama gerçek koşuyla: workflow `pull_request` ile
+tetiklenmediği için (`workflow_dispatch` + `v*` tag push) dal üzerinde manuel
+dispatch edildi, koşu yeşil ve **annotation yok**; önceki main koşusunda
+(v1.0.0 tag) `Node.js 20 is deprecated … checkout@v4, upload-artifact@v4`
+uyarısı vardı. Üretim koduna dokunulmadı.
+(6) **AMF `-usage` mini-ızgarası — TAMAMLANDI (2026-09-01):** dış listede
+**madde 6**. Karar **mevcut değer kalır — üretim diffi YOK**: 4 klip × 7 kol
+× 3 tekrarda hiçbir kol kill criteria'yı geçemedi (en iyi hız −%2,4, yani
+gürültü; hiçbir kol tabandan küçük dosya üretmedi). Ölçülen iki olgu:
+`varsayilan` ≡ `transcoding` **bit-birebir** (AMF'nin `-usage` varsayılanı
+zaten `transcoding`; md5 ile doğrulandı) ve `ultralowlatency` ≡ `lowlatency`.
+Tek SSIM kazancı `high_quality`'de ama bedeli dosyanın 1,35-2,24 katı +
+%12-40 süre. Kilit `TestBuildEncodeArgs::test_amf_usage_yazilmaz` (kırmızı
+önce doğrulandı), ölçüm harness'i `experiments/amf_usage/`, tablo ve kalan
+sınır (`high_quality` aralıklı takılması) KI-6 `-usage` ekinde. KI-6'nın
+kalan boyutları ve NVENC/QSV kalibrasyonlarına DOKUNULMADI.
+(7) **review'da kesime tek tık "sessizliğe yasla" aracı — AÇIK:** kontrollü
+genişletme, tavan ~±500 ms; KI-8 Kol A'nın (expand-to-silence) **kullanıcı
+tetiklemeli** hâli. Kol A otomatik uygulandığında kill criteria'dan geçememişti
+(bkz. madde (1) ve KI-8); buradaki fark kararın kullanıcıda olması ve
+tavanın sınırlı tutulması. Tasarım **ayrı oturumda** — bu maddede kod YOK,
+yalnız liste kaydı.
 
 Devam eden küçük iş (v0.3 kuyruğu): interaktif review'un `wcpp_backend` ile
 uçtan uca doğrulanması — `@pytest.mark.wcpp` referansı

@@ -676,6 +676,70 @@ geri kalanını etkilemiyor.
 derlemesi** (ASR tarafı, KI-1 sonrası backlog) var — ayrı silikon (AMF video
 motoru ≠ ROCm compute ünitesi), bu kaydı etkilemez.
 
+### KI-6 AMF `-usage` ölçümü — **Çözüldü** (2026-09-01, Radeon RX 9060 XT)
+
+Yukarıdaki kalibrasyon `-rc`, `-quality` ve `-qp_i`/`-qp_p` boyutlarını
+kapatmıştı; **`-usage` ölçülmemişti** ve üretimde hiç geçilmiyordu. Bu ek
+yalnız o tek boyutu kapatır — kalibrasyonun geri kalanı tekrar ölçülmedi,
+NVENC/QSV'ye dokunulmadı. **Karar: mevcut davranış korundu, üretim diffi
+YOK.** Harness `experiments/amf_usage/`, ham kayıt
+`sonuclar/kosular.json` + `sonuclar/izgara.md`.
+
+**Seçenek envanteri** yine `ffmpeg -h encoder=h264_amf`'ten alındı (harness
+listeyi sabit tutmaz, her koşuda ayrıştırır): `transcoding`,
+`ultralowlatency`, `lowlatency`, `webcam`, `high_quality`,
+`lowlatency_high_quality`; varsayılan `-1`.
+
+**Ölçüm.** Taban kol = bayrağın HİÇ geçilmediği bugünkü üretim davranışı.
+Arg seti üretimin `build_encode_args`'ından, komut şablonu
+`render.build_segment_command`'dan geldi (pipeline baştan koşturulmadı;
+ölçülen tek katman RENDER). Korpus `Test1-4` (1080p60 HEVC, 22-34 sn),
+4 klip × 7 kol × **3 tekrar**, süre medyanı ms-int; SSIM/PSNR ffmpeg'in
+kendi filtreleriyle kaynağa karşı (ikisinin de kurulu olduğu `-filters`
+çıktısından doğrulandı).
+
+Tabana göre delta'lar (dört klipteki aralık):
+
+| Kol | ΔSüre | ΔBoyut | ΔSSIM |
+|---|---|---|---|
+| **varsayilan (üretim)** | — | — | — |
+| `transcoding` | −%1,8 … +%1,1 | **%0,0 (dördünde de)** | **0 (dördünde de)** |
+| `ultralowlatency` | −%2,3 … +%1,5 | +%0,3 … +%7,0 | −0,00030 … −0,00006 |
+| `lowlatency` | −%2,4 … +%1,5 | +%0,3 … +%7,0 | −0,00030 … −0,00006 |
+| `webcam` | −%1,6 … +%1,9 | +%5,0 … +%10,9 | −0,00019 … +0,00002 |
+| `high_quality` | **+%12,5 … +%39,5** | **+%35,3 … +%124,2** | +0,00082 … +0,00185 |
+| `lowlatency_high_quality` | −%1,7 … +%0,3 | +%0,4 … +%0,6 | +0,00001 … +0,00002 |
+
+**Kill kriterleri ikisi de geçilemedi.** (a) `> %10` hız: en iyi kol −%2,4 ve
+bu tekrarlar arası gürültünün içinde; tek çift haneli fark `high_quality`'nin
+**aleyhine**. (b) Kalite gerilemeden boyut/kalite kazancı: **hiçbir kol
+tabandan küçük dosya üretmedi**. `high_quality`'nin SSIM kazancı gerçek ama
+bedeli dosyanın 1,35-2,24 katına çıkması — KI-6'nın en başındaki "bedeli daha
+büyük dosya" tercihi qp ofsetinde zaten ödendi, ikinci kez ödenmesi için
+gerekçe yok. `lowlatency_high_quality`'nin +0,00001'lik SSIM'i beşinci
+hanededir, ölçüm gürültüsünden ayrılamaz.
+
+**İki ölçülen olgu (koda/teste bağlandı).**
+
+- **`varsayilan` ≡ `transcoding`, bit-birebir.** AMF'nin `-usage`
+  varsayılanı (`-1`) `transcoding`'in kendisidir: dört klipte de boyut ve SSIM
+  aynı çıktı, `Test4`'te ayrıca md5 ile doğrulandı — hem tüm dosya
+  (`9db54926…`) hem video akışı (`0ac3e5a8…`) iki kolda aynı. Yani bayrağı
+  "açıkça `transcoding`" diye yazmak **hiçbir şey değiştirmez**; ezberden arg
+  yazılmaması kuralının uygulaması — `TestBuildEncodeArgs::test_amf_usage_yazilmaz`
+  (`-qp_b` kilidiyle aynı desen).
+- **`ultralowlatency` ≡ `lowlatency`.** Dört klipte de aynı boyut, aynı SSIM.
+
+**Kalan sınır — `high_quality` takılması (çözülmedi).** `-usage high_quality`
+kolu iki tam ızgara koşusunun **ikisinde de bir kez takıldı** (ilkinde
+`Test3`, ikincisinde `Test4`): normalde ~10 sn süren encode üst sınırda
+(900 sn / 300 sn) bitmedi. Diğer 48 hücrenin hiçbirinde görülmedi. Ama
+**izole 6 tekrarda hiç tekrarlanmadı** (6/6 temiz, ~10,2 sn) — "bu kola özgü"
+diye iddia EDİLEMEZ; uzun sürekli yük altında sürücü/AMF tarafında aralıklı
+bir takılma olabilir. Üretim yolu etkilenmiyor (üretim `-usage` geçmez, taban
+kolun 30+ koşusunda tek takılma yok), bu yüzden ayrı KI açılmadı. Karar zaten
+"kola girme" olduğu için sonucu değiştirmez, yalnız onu güçlendirir.
+
 ## KI-7 — whisper.cpp HIP derlemesi (Windows / RDNA4) — **Çözüldü**
 
 > **Çözüldü (2026-08-27):** build artık çalışıyor; aşağıdaki blokaj kaydı
