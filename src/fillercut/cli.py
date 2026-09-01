@@ -26,18 +26,38 @@ Mevcut arayüz tek-komutlu typer'dır (``fillercut video.mp4``); ikinci bir
 dispatch ``main_entry``'de argv üzerinden yapılır: ilk argüman tam olarak
 ``ui`` ise ayrı ``ui_app`` çalışır, değilse mevcut komut aynen. ("ui" adında
 uzantısız video dosyası işlemek isteyen ``.\\ui`` yazar — kabul edilen kenar.)
+
+v1.1 (dağıtım epic'i Faz 1): ``fillercut ui`` varsayılan olarak **native
+masaüstü penceresinde** açılır (pywebview + WebView2); yoksa tarayıcı moduna
+düşer ve konsola tek satır neden basar — sessiz çökme yok. Üç davranış daha
+değişti: (a) port doluysa artık hata değil **ephemeral porta düşüş**,
+(b) portta zaten bir Filler-Cut varsa ikinci sunucu başlatılmaz, (c) sunucuya
+bağlı soket verilir (``Server.run(sockets=...)``) — gerçek portu yarışsız
+bilmek için. Ölçüm ve karar: ``experiments/pywebview_spike/README.md``.
 """
 
+import socket
 import sys
+import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 import typer
 
 from fillercut import DIST_NAME, __version__
 from fillercut.config import ConfigError, load_config, merge_config
 from fillercut.pipeline import run
+
+# `web.native` YALNIZ `sys` + `collections.abc` import eder (fastapi/pywebview
+# DEĞİL) — düz CLI koşusunun maliyetine dokunmaz. Modül seviyesinde olması
+# şart: `ui` kararı testlerde bu adla mock'lanır.
+from fillercut.web.native import native_hazir
+
+if TYPE_CHECKING:  # uvicorn/fastapi tembel kalır — yalnız tip olarak anılır
+    import uvicorn
+    from fastapi import FastAPI
 
 app = typer.Typer(
     name="fillercut",
@@ -183,22 +203,155 @@ def main(
     )
 
 
-def _port_bos(port: int) -> bool:
-    """127.0.0.1:port bağlanabilir mi? — uvicorn'un İngilizce bind hatası
-    yerine Türkçe, eyleme dökülebilir mesaj basabilmek için ön kontrol.
+#: `fillercut ui`'nin varsayılan portu. Doluysa CRASH YOK — ephemeral (0)
+#: porta düşülür (bkz. `_dinleyici_ac`).
+UI_VARSAYILAN_PORT = 8765
 
-    Kontrol ile uvicorn'un bind'ı arasında teorik bir yarış var; tek
-    kullanıcılı localhost senaryosunda kabul edilen risk (en kötü ihtimalle
-    uvicorn'un kendi hatası görünür).
+#: Sunucunun "cevap veriyor" hâle gelmesi için beklenecek üst sınır. Aşılırsa
+#: pencere HİÇ açılmaz: boş/`connection refused` bir pencere göstermektense
+#: Türkçe hata basıp çıkmak yeğdir.
+UI_HAZIRLIK_TIMEOUT_SN = 20.0
+
+#: Hazırlık yoklamasının iki denemesi arası.
+UI_HAZIRLIK_ARALIK_SN = 0.05
+
+#: Pencere kapandıktan sonra sunucu thread'inin bitmesi için beklenecek süre.
+#: Aşılırsa koşan bir iş (ffmpeg/ASR) vardır — Dilim 1'den beri bilinen sınır:
+#: KOŞAN iş yarıda kesilmez, kullanıcıya tek satır bildirilir.
+UI_KAPANIS_TIMEOUT_SN = 15.0
+
+
+def _dinleyici_ac(port: int) -> socket.socket | None:
+    """127.0.0.1:port'a BAĞLI (henüz dinlemeyen) soket; port doluysa ``None``.
+
+    Soketi uvicorn'a değil BİZ açıyoruz (`Server.run(sockets=[...])`) çünkü
+    ephemeral porta düşüldüğünde gerçek portu **yarışsız** öğrenmenin başka
+    yolu yok: "port 0'a bağlan, portu oku, kapat, uvicorn'a numarayı ver"
+    zincirinde iki adım arasında portu başkası kapabilir ve pencereye yanlış
+    URL verilirdi.
+
+    ``listen`` çağrılmaz — asyncio ``create_server(sock=...)`` içinde kendi
+    yapar. ``SO_REUSEADDR`` de KURULMAZ: Windows'ta o bayrak dolu bir portu
+    "kapmaya" izin verir, yani çakışma sessizce yutulurdu.
     """
-    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", port))
+    except OSError:
+        sock.close()
+        return None
+    return sock
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.bind(("127.0.0.1", port))
-        except OSError:
-            return False
-    return True
+
+def _instance_sorgula(port: int, *, timeout: float = 1.0) -> dict[str, object] | None:
+    """127.0.0.1:port'ta koşan servis BİZ miyiz? — kimlik sözlüğü ya da ``None``.
+
+    Portun dolu olması "Filler-Cut zaten çalışıyor" demek DEĞİLDİR: 8765'te
+    başka bir uygulama da olabilir. Kimlik `GET /api/instance`ten okunur
+    (`web/app.INSTANCE_ADI`); eşleşmezse çağıran ephemeral porta düşer.
+
+    Her hata yolu ``None``'dır (bağlanamama, zaman aşımı, HTTP hatası, JSON
+    olmayan gövde, eksik alan): bu bir yoklamadır, hata yüzeyi değil.
+    """
+    import json
+    import urllib.error
+    import urllib.request
+
+    # Tembel: `web.app` fastapi + pipeline'ı çeker; düz CLI koşusu ödemesin.
+    from fillercut.web.app import INSTANCE_ADI
+
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/api/instance", timeout=timeout
+        ) as cevap:
+            ham = cevap.read(4096)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    try:
+        veri = json.loads(ham)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(veri, dict) or veri.get("uygulama") != INSTANCE_ADI:
+        return None
+    return cast("dict[str, object]", veri)
+
+
+def _hazir_bekle(port: int, timeout: float) -> bool:
+    """Sunucu gerçekten cevap verene kadar yoklar; süre dolarsa ``False``.
+
+    Yoklama uvicorn'un ``started`` bayrağına DEĞİL gerçek bir HTTP isteğine
+    bakar: bayrak "soket kabul etmeye hazır" der, `GET /api/instance` ise
+    "uygulama katmanı cevap veriyor" der. Pencereye URL vermeden önce lazım
+    olan ikincisidir — aksi hâlde WebView2 boş/hata sayfası gösterirdi.
+    """
+    bitis = time.monotonic() + timeout
+    while time.monotonic() < bitis:
+        if _instance_sorgula(port, timeout=1.0) is not None:
+            return True
+        time.sleep(UI_HAZIRLIK_ARALIK_SN)
+    return False
+
+
+def _sunucu_kur(web_app: "FastAPI") -> "uvicorn.Server":
+    """uvicorn sunucusunu kurar (BAŞLATMAZ).
+
+    ``host``/``port`` verilmez — dinleme soketi zaten bağlı ve `run`'a
+    geçirilir; uvicorn'a port numarasını ikinci kez söylemek iki doğruluk
+    kaynağı yaratırdı.
+    """
+    import uvicorn
+
+    return uvicorn.Server(uvicorn.Config(web_app, log_level="warning"))
+
+
+def _sunucuyu_kos(server: "uvicorn.Server", sock: socket.socket) -> None:
+    """Sunucuyu bloklayarak koşturur (çağrıldığı thread'de)."""
+    server.run(sockets=[sock])
+
+
+def _native_kos(
+    server: "uvicorn.Server", sock: socket.socket, url: str, port: int
+) -> None:
+    """Sunucuyu ayrı thread'de koşturur, hazır olunca native pencereyi açar.
+
+    Thread ayrımı zorunludur: pywebview'in mesaj döngüsü ANA thread'de
+    koşmak zorundadır (`web/native.pencere_ac`), uvicorn ise ana thread
+    dışında sinyal kancası kurmayı kendisi atlar (`Server.capture_signals`).
+
+    Thread **daemon değildir**: daemon olsaydı yorumlayıcı çıkışı koşan bir
+    ffmpeg/ASR adımını yarıda keserdi. Kapanış sırası: pencere kapanır →
+    ``kapanista`` → ``should_exit`` → uvicorn lifespan shutdown →
+    ``JobKayit.kapat()`` (kuyruk iptal, review'da bekleyen işler serbest) →
+    thread biter.
+    """
+    from fillercut.web import native
+
+    thread = threading.Thread(
+        target=_sunucuyu_kos, args=(server, sock), name="fillercut-ui-server"
+    )
+    thread.start()
+
+    if not _hazir_bekle(port, UI_HAZIRLIK_TIMEOUT_SN):
+        server.should_exit = True
+        thread.join(timeout=UI_KAPANIS_TIMEOUT_SN)
+        typer.echo(
+            f"Hata: sunucu {UI_HAZIRLIK_TIMEOUT_SN:.0f} saniyede hazır olmadı — "
+            "pencere açılmadı.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    def _kapat() -> None:
+        server.should_exit = True
+
+    native.pencere_ac(url, kapanista=_kapat)
+
+    thread.join(timeout=UI_KAPANIS_TIMEOUT_SN)
+    if thread.is_alive():
+        typer.echo(
+            "Not: koşan bir iş bitmeyi bekliyor — yarıda kesilmiyor, "
+            "bitince süreç kapanacak."
+        )
 
 
 @ui_app.command()
@@ -206,38 +359,80 @@ def ui(
     port: Annotated[
         int,
         typer.Option("--port", help="Dinlenecek port (her zaman 127.0.0.1'e bağlanır)."),
-    ] = 8765,
+    ] = UI_VARSAYILAN_PORT,
     config: Annotated[
         Path | None,
         typer.Option("--config", help="TOML config dosyası (varsayılan: filler-cut.toml)."),
     ] = None,
     no_browser: Annotated[
         bool,
-        typer.Option("--no-browser", help="Tarayıcıyı otomatik açma (headless/test)."),
+        typer.Option("--no-browser", help="Hiçbir pencere/sekme açma (headless/test)."),
     ] = False,
+    native: Annotated[
+        bool | None,
+        typer.Option(
+            "--native/--no-native",
+            help="Native masaüstü penceresi (varsayılan: varsa native, yoksa tarayıcı).",
+        ),
+    ] = None,
 ) -> None:
-    """Web arayüzünü başlatır: http://127.0.0.1:PORT (yalnız localhost)."""
+    """Arayüzü başlatır: native pencere (WebView2) ya da tarayıcı — yalnız localhost.
+
+    Karar ağacı (hepsinin kilidi `tests/test_cli.py`'de):
+
+    * ``--no-browser`` → sunucu koşar, hiçbir şey açılmaz.
+    * ``--no-native`` → tarayıcı modu (native hazır olsa bile).
+    * ``--native`` + native yoksa → **hata**; açık istek sessizce düşürülmez.
+    * varsayılan → native varsa native, yoksa tarayıcı + konsola tek satır neden.
+    """
     try:
         cfg = load_config(config)
     except ConfigError as exc:
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    if not _port_bos(port):
-        typer.echo(
-            f"Hata: port {port} kullanımda — --port ile başka bir port seçin.", err=True
-        )
-        raise typer.Exit(code=1)
+    # 1) Port zaten dolu ve oradaki BİZSEK: ikinci sunucu başlatma, adresi söyle.
+    sock = _dinleyici_ac(port)
+    if sock is None:
+        kimlik = _instance_sorgula(port)
+        if kimlik is not None:
+            typer.echo(
+                f"Filler-Cut zaten çalışıyor (port {port}, pid {kimlik.get('pid')}): "
+                f"http://127.0.0.1:{port}/"
+            )
+            return
+        # 2) Port dolu ama başka bir uygulamada: ephemeral porta düş.
+        sock = _dinleyici_ac(0)
+        if sock is None:  # pragma: no cover - boş port bulunamaması pratikte yok
+            typer.echo("Hata: boş port bulunamadı.", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(f"Uyarı: port {port} başka bir uygulamada — boş porta düşüldü.")
 
-    # Tembel importlar: fastapi/uvicorn yalnız `ui` yolunda yüklenir; düz CLI
-    # koşusu (video işleme) web yığınını hiç ödemesin.
-    import uvicorn
+    gercek_port = int(sock.getsockname()[1])
+    url = f"http://127.0.0.1:{gercek_port}/"
 
+    # Tembel importlar: fastapi/uvicorn/pywebview yalnız `ui` yolunda yüklenir;
+    # düz CLI koşusu (video işleme) web yığınını hiç ödemesin.
     from fillercut.web.app import create_app
 
-    url = f"http://127.0.0.1:{port}/"
+    if no_browser:
+        mod = "yok"
+    elif native is False:
+        mod = "tarayici"
+    else:
+        hazir, neden = native_hazir()
+        if hazir:
+            mod = "native"
+        elif native is True:
+            sock.close()
+            typer.echo(f"Hata: native pencere açılamıyor — {neden}.", err=True)
+            raise typer.Exit(code=1)
+        else:
+            mod = "tarayici"
+            typer.echo(f"Native pencere kullanılamıyor ({neden}) — tarayıcı modu.")
+
     on_ready: Callable[[], None] | None = None
-    if not no_browser:
+    if mod == "tarayici":
         import webbrowser
 
         # Lifespan startup'ta çağrılır — sunucu istekleri kabul etmeye hazırken
@@ -248,8 +443,15 @@ def ui(
         on_ready = _tarayici_ac
 
     web_app = create_app(cfg, on_ready=on_ready)
+    server = _sunucu_kur(web_app)
+
+    if mod == "native":
+        typer.echo(f"Filler-Cut penceresi açılıyor ({url})")
+        _native_kos(server, sock, url, gercek_port)
+        return
+
     typer.echo(f"Filler-Cut UI: {url}  (kapatmak için Ctrl+C)")
-    uvicorn.run(web_app, host="127.0.0.1", port=port, log_level="warning")
+    _sunucuyu_kos(server, sock)
 
 
 if __name__ == "__main__":  # pragma: no cover - alt süreçte koşar

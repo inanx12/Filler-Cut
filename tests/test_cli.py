@@ -8,17 +8,29 @@ from __future__ import annotations
 
 import importlib.metadata
 import io
+import socket as socket_mod
 import subprocess
 import sys
 import tomllib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+import typer
 from typer.testing import CliRunner, Result
 
 import fillercut
-from fillercut.cli import _konsol_akislarini_ayarla, _port_bos, app, main_entry, ui_app
+from fillercut.cli import (
+    _dinleyici_ac,
+    _instance_sorgula,
+    _konsol_akislarini_ayarla,
+    _native_kos,
+    app,
+    main_entry,
+    ui_app,
+)
 from fillercut.config import Config
 from fillercut.models import CutPlan, Segment
 from fillercut.pipeline import PipelineResult
@@ -38,6 +50,67 @@ _RAPOR = build_report(_PLAN, 1_000)
 def _birlesik_cikti(result: Result) -> str:
     """stdout+stderr birleşik (hata mesajları rich ile stderr'e basılır)."""
     return result.output + result.stderr
+
+
+@pytest.fixture(autouse=True)
+def _sizan_soketleri_kapat(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """`ui()` çağıran testlerin açtığı dinleme soketlerini teardown'da kapatır.
+
+    `ui()` soketi kendi açar ve normalde uvicorn kapatır; sunucu mock'landığı
+    için testte kimse kapatmaz. Kapatılmazsa **8765 dolu kalır** ve sonraki
+    testler sessizce ephemeral porta düşer (gerçek bir koşuda görüldü:
+    tarayıcı `http://127.0.0.1:63457/` ile açıldı).
+    """
+    import fillercut.cli as cli_mod
+
+    acilanlar: list[socket_mod.socket] = []
+    gercek = cli_mod._dinleyici_ac
+
+    def _sarmal(port: int) -> socket_mod.socket | None:
+        sock = gercek(port)
+        if sock is not None:
+            acilanlar.append(sock)
+        return sock
+
+    monkeypatch.setattr(cli_mod, "_dinleyici_ac", _sarmal)
+    yield
+    for sock in acilanlar:
+        sock.close()
+
+
+@contextmanager
+def _sahte_servis(kod: int, govde: str) -> Iterator[int]:
+    """127.0.0.1'de tek bir sahte HTTP servisi açar; portunu verir.
+
+    Tek instance kilidi "portta biri var" ile "portta BİZ varız"ı ayırmak
+    zorundadır (`_instance_sorgula`). Bunu TestClient ile sınamak mümkün
+    değildir — TestClient in-process çağırır, gerçek port açmaz; sorgunun
+    kendisi soket + HTTP + JSON parse yoludur.
+    """
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 - stdlib arayüzü
+            veri = govde.encode("utf-8")
+            self.send_response(kod)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(veri)))
+            self.end_headers()
+            self.wfile.write(veri)
+
+        def log_message(self, *_: object) -> None:
+            return  # test çıktısını kirletme
+
+    httpd = HTTPServer(("127.0.0.1", 0), _Handler)
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        yield int(httpd.server_address[1])
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        t.join(timeout=5)
 
 
 def test_help_opsiyonlari_listeler() -> None:
@@ -320,16 +393,18 @@ class TestKonsolAkisiDayanikliligi:
 
 
 class TestUiKomutu:
-    """v1.0: `fillercut ui` — uvicorn 127.0.0.1'de, tarayıcı on_ready kanalıyla.
+    """`fillercut ui` — sunucu 127.0.0.1'e BİZİM açtığımız sokete bağlanır.
 
-    Gerçek sunucu başlatılmaz: `uvicorn.run` mock'lanır (tembel import modül
-    attribute'u üzerinden çağrıldığı için `uvicorn.run` hedefi yeterli).
+    Gerçek sunucu başlatılmaz: bloklayan çağrılar (`_sunucuyu_kos`,
+    `_native_kos`) mock'lanır. v1.1'de uvicorn'a host/port değil **bağlı
+    soket** verilir (`Server.run(sockets=...)`) — ephemeral porta düşüldüğünde
+    gerçek portu yarışsız bilmenin tek yolu budur.
     """
 
     def test_ui_help_opsiyonlari_listeler(self) -> None:
         result = runner.invoke(ui_app, ["--help"])
         assert result.exit_code == 0
-        for opsiyon in ("--port", "--config", "--no-browser"):
+        for opsiyon in ("--port", "--config", "--no-browser", "--native"):
             assert opsiyon in result.output
 
     def test_ana_help_ui_alt_komutunu_anar(self) -> None:
@@ -337,33 +412,35 @@ class TestUiKomutu:
         # rich help metnini 80 sütunda sarar — boşluk normalize edilerek aranır.
         assert "fillercut ui" in " ".join(result.output.split())
 
-    def test_uvicorn_yalniz_loopbackte(self) -> None:
-        with patch("uvicorn.run") as m_run:
+    def test_soket_yalniz_loopbackte(self) -> None:
+        with patch("fillercut.cli._sunucuyu_kos") as m_kos:
             result = runner.invoke(ui_app, ["--no-browser"])
         assert result.exit_code == 0
-        kwargs = m_run.call_args.kwargs
-        assert kwargs["host"] == "127.0.0.1"  # 0.0.0.0 YOK (handoff kilidi)
-        assert kwargs["port"] == 8765
+        sock = m_kos.call_args.args[1]
+        assert sock.getsockname()[0] == "127.0.0.1"  # 0.0.0.0 YOK (handoff kilidi)
+        assert sock.getsockname()[1] == 8765
         assert "http://127.0.0.1:8765/" in result.output
 
     def test_port_opsiyonu_gecer(self) -> None:
-        with patch("uvicorn.run") as m_run:
+        with patch("fillercut.cli._sunucuyu_kos") as m_kos:
             result = runner.invoke(ui_app, ["--port", "9123", "--no-browser"])
         assert result.exit_code == 0
-        assert m_run.call_args.kwargs["port"] == 9123
+        assert m_kos.call_args.args[1].getsockname()[1] == 9123
 
     def test_fastapi_uygulamasi_gecirilir(self) -> None:
         from fastapi import FastAPI
 
-        with patch("uvicorn.run") as m_run:
+        with patch("fillercut.cli._sunucuyu_kos") as m_kos:
             runner.invoke(ui_app, ["--no-browser"])
-        assert isinstance(m_run.call_args.args[0], FastAPI)
+        server = m_kos.call_args.args[0]
+        assert isinstance(server.config.app, FastAPI)
 
     def test_tarayici_on_ready_kanaliyla_acilir(self) -> None:
         import fillercut.web.app as web_app_mod
 
         with (
-            patch("uvicorn.run"),
+            patch("fillercut.cli._sunucuyu_kos"),
+            patch("fillercut.cli.native_hazir", return_value=(False, "test")),
             patch.object(web_app_mod, "create_app", wraps=web_app_mod.create_app) as m_ca,
             patch("webbrowser.open") as m_open,
         ):
@@ -379,7 +456,7 @@ class TestUiKomutu:
         import fillercut.web.app as web_app_mod
 
         with (
-            patch("uvicorn.run"),
+            patch("fillercut.cli._sunucuyu_kos"),
             patch.object(web_app_mod, "create_app", wraps=web_app_mod.create_app) as m_ca,
         ):
             runner.invoke(ui_app, ["--no-browser"])
@@ -393,33 +470,235 @@ class TestUiKomutu:
     def test_config_uygulamaya_akar(self, tmp_path: Path) -> None:
         cfg_file = tmp_path / "fc.toml"
         cfg_file.write_text("config_version = 1\naggressive = true\n", encoding="utf-8")
-        with patch("uvicorn.run") as m_run:
+        with patch("fillercut.cli._sunucuyu_kos") as m_kos:
             result = runner.invoke(ui_app, ["--config", str(cfg_file), "--no-browser"])
         assert result.exit_code == 0
-        web_uygulama = m_run.call_args.args[0]
-        assert web_uygulama.state.config.aggressive is True
+        assert m_kos.call_args.args[0].config.app.state.config.aggressive is True
 
-    def test_port_doluysa_turkce_hata_uvicorn_calismaz(self) -> None:
+
+class TestUiPortCakismasi:
+    """Port doluysa CRASH YOK: ephemeral (0) porta düşülür, gerçek port bildirilir.
+
+    v1.0'da bu yol `Hata: port N kullanımda` + exit 1'di. Native pencere
+    dağıtımında (v1.1) kullanıcı komut satırı bayrağı yazamaz — çift tıklayıp
+    açar; "port dolu" diye hiç açılmayan bir uygulama kabul edilemezdi.
+    """
+
+    def test_dolu_port_ephemerale_duser(self) -> None:
         import socket
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("127.0.0.1", 0))
             s.listen(1)
             dolu_port = s.getsockname()[1]
-            with patch("uvicorn.run") as m_run:
+            with (
+                patch("fillercut.cli._sunucuyu_kos") as m_kos,
+                patch("fillercut.cli._instance_sorgula", return_value=None),
+            ):
                 result = runner.invoke(ui_app, ["--port", str(dolu_port), "--no-browser"])
-        assert result.exit_code == 1
-        assert "kullanımda" in _birlesik_cikti(result)
-        m_run.assert_not_called()
+        assert result.exit_code == 0
+        gercek = m_kos.call_args.args[1].getsockname()[1]
+        assert gercek != dolu_port
+        cikti = _birlesik_cikti(result)
+        assert str(gercek) in cikti  # gerçek port konsola yazıldı
+        assert f"http://127.0.0.1:{gercek}/" in cikti
 
-    def test_port_bos_bos_portta_true(self) -> None:
+    def test_dinleyici_ac_bos_portta_soket_doner(self) -> None:
         import socket
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("127.0.0.1", 0))
             bos_port = s.getsockname()[1]
         # soket kapandı — port artık boş
-        assert _port_bos(bos_port) is True
+        sock = _dinleyici_ac(bos_port)
+        assert sock is not None
+        try:
+            assert sock.getsockname()[1] == bos_port
+        finally:
+            sock.close()
+
+    def test_dinleyici_ac_dolu_portta_none(self) -> None:
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            s.listen(1)
+            assert _dinleyici_ac(s.getsockname()[1]) is None
+
+
+class TestUiTekInstance:
+    """İkinci `fillercut ui`: yeni sunucu BAŞLATMAZ, mevcut adresi söyler."""
+
+    def test_ayni_portta_fillercut_varsa_sunucu_baslamaz(self) -> None:
+        import socket
+
+        kimlik = {"uygulama": "fillercut", "surum": "1.1.0", "pid": 4242}
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            s.listen(1)
+            dolu_port = s.getsockname()[1]
+            with (
+                patch("fillercut.cli._sunucuyu_kos") as m_kos,
+                patch("fillercut.cli._native_kos") as m_native,
+                patch("fillercut.cli._instance_sorgula", return_value=kimlik),
+            ):
+                result = runner.invoke(ui_app, ["--port", str(dolu_port)])
+        assert result.exit_code == 0
+        m_kos.assert_not_called()
+        m_native.assert_not_called()
+        cikti = _birlesik_cikti(result)
+        assert "zaten" in cikti.lower()
+        assert f"http://127.0.0.1:{dolu_port}/" in cikti
+
+    def test_instance_sorgula_gercek_fillercut_cevabini_tanir(self) -> None:
+        with _sahte_servis(200, '{"uygulama":"fillercut","surum":"1.1.0","pid":7}') as port:
+            kimlik = _instance_sorgula(port)
+        assert kimlik is not None
+        assert kimlik["pid"] == 7
+
+    def test_instance_sorgula_yabanci_servisi_reddeder(self) -> None:
+        with _sahte_servis(200, '{"uygulama":"baska-uygulama"}') as port:
+            assert _instance_sorgula(port) is None
+
+    def test_instance_sorgula_json_olmayan_cevapta_none(self) -> None:
+        with _sahte_servis(200, "<html>merhaba</html>") as port:
+            assert _instance_sorgula(port) is None
+
+    def test_instance_sorgula_404te_none(self) -> None:
+        with _sahte_servis(404, "yok") as port:
+            assert _instance_sorgula(port) is None
+
+    def test_instance_sorgula_kapali_portta_none(self) -> None:
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            kapali = s.getsockname()[1]
+        assert _instance_sorgula(kapali, timeout=0.5) is None
+
+
+class TestUiNativeSecimi:
+    """Native pencere / tarayıcı fallback karar ağacı."""
+
+    def test_native_hazirsa_pencere_acilir_tarayici_acilmaz(self) -> None:
+        with (
+            patch("fillercut.cli.native_hazir", return_value=(True, "")),
+            patch("fillercut.cli._native_kos") as m_native,
+            patch("fillercut.cli._sunucuyu_kos") as m_kos,
+            patch("webbrowser.open") as m_open,
+        ):
+            result = runner.invoke(ui_app, [])
+        assert result.exit_code == 0
+        m_native.assert_called_once()
+        m_kos.assert_not_called()
+        m_open.assert_not_called()
+
+    def test_native_hazir_degilse_tarayiciya_duser_ve_neden_yazilir(self) -> None:
+        with (
+            patch("fillercut.cli.native_hazir", return_value=(False, "WebView2 yok")),
+            patch("fillercut.cli._native_kos") as m_native,
+            patch("fillercut.cli._sunucuyu_kos") as m_kos,
+        ):
+            result = runner.invoke(ui_app, [])
+        assert result.exit_code == 0  # SESSİZ ÇÖKME YOK
+        m_native.assert_not_called()
+        m_kos.assert_called_once()
+        assert "WebView2 yok" in _birlesik_cikti(result)
+
+    def test_no_native_hazir_olsa_bile_tarayici(self) -> None:
+        with (
+            patch("fillercut.cli.native_hazir", return_value=(True, "")),
+            patch("fillercut.cli._native_kos") as m_native,
+            patch("fillercut.cli._sunucuyu_kos") as m_kos,
+        ):
+            result = runner.invoke(ui_app, ["--no-native"])
+        assert result.exit_code == 0
+        m_native.assert_not_called()
+        m_kos.assert_called_once()
+
+    def test_native_acikca_istenip_yoksa_hata(self) -> None:
+        """Açık istek sessizce düşürülmez — kullanıcı ne olduğunu bilmeli."""
+        with (
+            patch("fillercut.cli.native_hazir", return_value=(False, "WebView2 yok")),
+            patch("fillercut.cli._native_kos") as m_native,
+            patch("fillercut.cli._sunucuyu_kos") as m_kos,
+        ):
+            result = runner.invoke(ui_app, ["--native"])
+        assert result.exit_code == 1
+        assert "WebView2 yok" in _birlesik_cikti(result)
+        m_native.assert_not_called()
+        m_kos.assert_not_called()
+
+    def test_no_browser_native_hazir_olsa_bile_hicbir_sey_acmaz(self) -> None:
+        with (
+            patch("fillercut.cli.native_hazir", return_value=(True, "")),
+            patch("fillercut.cli._native_kos") as m_native,
+            patch("fillercut.cli._sunucuyu_kos") as m_kos,
+            patch("webbrowser.open") as m_open,
+        ):
+            result = runner.invoke(ui_app, ["--no-browser"])
+        assert result.exit_code == 0
+        m_native.assert_not_called()
+        m_open.assert_not_called()
+        m_kos.assert_called_once()
+
+
+class TestUiNativeYasamDongusu:
+    """Hazırlık yoklaması + pencere kapanınca graceful shutdown."""
+
+    def _server_ve_soket(self) -> tuple[MagicMock, MagicMock]:
+        server = MagicMock()
+        server.should_exit = False
+        return server, MagicMock()
+
+    def test_sunucu_hazir_olmadan_pencere_acilmaz(self) -> None:
+        server, sock = self._server_ve_soket()
+        with (
+            patch("fillercut.cli._sunucuyu_kos"),
+            patch("fillercut.cli._hazir_bekle", return_value=False),
+            patch("fillercut.web.native.pencere_ac") as m_pencere,
+            pytest.raises(typer.Exit) as exc,
+        ):
+            _native_kos(server, sock, "http://127.0.0.1:8765/", 8765)
+        assert exc.value.exit_code == 1
+        m_pencere.assert_not_called()
+        assert server.should_exit is True  # yarım kalan sunucu kapatıldı
+
+    def test_pencere_kapaninca_sunucu_graceful_kapanir(self) -> None:
+        server, sock = self._server_ve_soket()
+
+        def sahte_pencere(url: str, *, kapanista: object = None) -> None:
+            assert callable(kapanista)
+            assert server.should_exit is False  # pencere açıkken sunucu koşar
+            kapanista()
+
+        with (
+            patch("fillercut.cli._sunucuyu_kos"),
+            patch("fillercut.cli._hazir_bekle", return_value=True),
+            patch("fillercut.web.native.pencere_ac", side_effect=sahte_pencere),
+        ):
+            _native_kos(server, sock, "http://127.0.0.1:8765/", 8765)
+        assert server.should_exit is True
+
+    def test_sunucu_threadi_daemon_degil(self) -> None:
+        """Daemon olsaydı yorumlayıcı çıkışta koşan işi yarıda keserdi."""
+        gorulen: dict[str, object] = {}
+
+        def sahte_kos(srv: object, sk: object) -> None:
+            import threading
+
+            gorulen["daemon"] = threading.current_thread().daemon
+            gorulen["ad"] = threading.current_thread().name
+
+        server, sock = self._server_ve_soket()
+        with (
+            patch("fillercut.cli._sunucuyu_kos", side_effect=sahte_kos),
+            patch("fillercut.cli._hazir_bekle", return_value=True),
+            patch("fillercut.web.native.pencere_ac"),
+        ):
+            _native_kos(server, sock, "http://x/", 1)
+        assert gorulen["daemon"] is False
+        assert "fillercut" in str(gorulen["ad"])
 
 
 class TestMainEntryUiDispatch:
