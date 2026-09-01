@@ -7,6 +7,87 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [Unreleased]
+
+**Arayüz artık kendi penceresinde açılıyor.**
+
+`fillercut ui` bugüne kadar tarayıcıda bir sekme açıyordu. Artık Filler-Cut'ın
+kendi masaüstü penceresi var: başlığı "Filler-Cut", görev çubuğunda kendi
+girdisi, sekme kalabalığında kaybolmuyor. İçerideki arayüz birebir aynı —
+aşamalar, gözden geçirme ekranı, istatistik paneli, hepsi değişmedi.
+
+Pencere Windows'un WebView2 çalışma zamanını kullanır. Makinede yoksa (ya da
+`pywebview` kurulu değilse) hiçbir şey bozulmaz: eskisi gibi tarayıcıda
+açılır ve konsola tek satır neden yazılır. Tarayıcıyı tercih ediyorsanız
+`fillercut ui --no-native` her zaman tarayıcıda açar.
+
+İki küçük ama sinir bozucu durum da kapandı. Varsayılan port (8765) doluysa
+program artık hata verip çıkmıyor — boş bir porta düşüyor ve gerçek adresi
+söylüyor. Ve arayüz zaten açıkken ikinci kez `fillercut ui` yazarsanız ikinci
+bir sunucu başlatmıyor; "zaten çalışıyor" deyip mevcut adresi gösteriyor.
+
+CLI yine hiç değişmedi.
+
+### Eklendi
+
+- **Native masaüstü penceresi** (`fillercut ui`, varsayılan) — pywebview +
+  WebView2. Başlık "Filler-Cut", varsayılan boyut 1280×800, minimum boyut
+  960×600 (altında gözden geçirme ekranındaki timeline ile kesim listesi üst
+  üste biniyordu). Bayraklar: `--native` (açıkça iste — yoksa hata),
+  `--no-native` (tarayıcıya zorla), `--no-browser` (hiçbir şey açma).
+- `pywebview` **opsiyonel** bağımlılıktır: `pip install "fillercut[native]"`.
+  Kurulu değilse tarayıcı moduna düşülür.
+- `GET /api/instance` — kimlik + canlılık ucu (`uygulama`, `surum`, `pid`).
+  İkinci açılışın "bu portta koşan BEN miyim?" sorusunu yanıtlar; aynı uç
+  pencereye URL verilmeden önce sunucunun gerçekten cevap verdiğini
+  doğrulamak için de kullanılır.
+- `experiments/pywebview_spike/` — karar ölçümünün harness'i ve bulguları.
+
+### Değişti
+
+- **Port çakışması artık hata değil.** v1.0'da dolu port `Hata: port N
+  kullanımda` + çıkış koduydu; şimdi ephemeral (0) porta düşülür, düşülen
+  port konsola yazılır ve pencereye/tarayıcıya **gerçek** URL verilir.
+  Gerekçe: native dağıtımda kullanıcı komut satırı bayrağı yazamaz.
+- **İkinci `fillercut ui` yeni sunucu başlatmaz.** Varsayılan portta bir
+  Filler-Cut bulursa "zaten çalışıyor (port N, pid P)" deyip 0 ile çıkar;
+  portta başka bir uygulama varsa ephemeral porta düşer.
+- Sunucuya artık host/port değil **bağlı dinleme soketi** verilir
+  (`uvicorn.Server.run(sockets=...)`) — ephemeral porta düşüldüğünde gerçek
+  portu yarışsız bilmenin tek yolu.
+
+### Ölçüldü
+
+Native pencerenin varsayılan olup olmayacağı ölçümle kararlaştırıldı
+(kill criteria: tarayıcı moduna göre +3 sn'den yavaşsa bayrak arkasına
+alınacaktı). Soğuk başlangıçtan arayüzün ilk API çağrısına kadar, 5'er koşu:
+
+| kol | medyan |
+|---|---|
+| tarayıcı | 0.865 sn |
+| native | 1.401 sn |
+
+**Delta +0.536 sn** — eşiğin çok altında, native varsayılan oldu. Ayrıntı ve
+sınırlar: `experiments/pywebview_spike/README.md`.
+
+### Bilinen sınırlar
+
+- **pywebview WebView2'yi bulamazsa exception ATMAZ** — sessizce MSHTML
+  (IE11) motoruna düşer ve o düşüş HKCU'ya `FEATURE_BROWSER_EMULATION`
+  anahtarı yazar. Arayüz `fetch`/`async`/`canvas` kullandığı için sonuç
+  "çökme" değil "sessizce bozuk pencere" olurdu. Bu yüzden WebView2 tespiti
+  **ön-uçuştur** (`web/native.py`): yoksa `webview.platforms.winforms` hiç
+  import edilmez. Kilidi `tests/test_web_native.py`'de.
+- **Tek instance kilidi porta bağlıdır**, kilit dosyasına değil. Kazanç:
+  bayat kilit sınıfı yok. Bedeli: ilk instance yabancı bir servis yüzünden
+  ephemeral porta düşmüşse ikinci açılış onu bulamaz ve kendi sunucusunu
+  başlatır (nadir köşe, belgelidir).
+- İkinci açılış mevcut **pencereye odaklanmaz**, adresini söyler. Odaklama
+  IPC + WinForms thread affinity işi; ucuz olan seçildi.
+- Native pencere yalnız **Windows**'ta denenir; diğer platformlarda tespit
+  doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
+- Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
+
 ## [1.1.0] — 2026-09-01
 
 **Gözden geçirme ekranı iki yeni araç kazandı, transkript CPU'da hızlandı.**

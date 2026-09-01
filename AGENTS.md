@@ -94,7 +94,7 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
-## Mevcut Durum (2026-08-27)
+## Mevcut Durum (2026-09-01)
 
 **v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
 gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
@@ -238,6 +238,90 @@ kalitesi/boyutu değişir**; NVENC/QSV/libx264 satırlarına dokunulmadı.
 hiçbir şey yapmadan 0 koduyla çıkıyordu (sessiz no-op: exit 0, boş stdout) —
 guard `main_entry`'ye bağlandı, kilidi red-first doğrulandı.
 
+**v1.1 DAĞITIM EPIC'İ — FAZ 1 (pywebview kabuğu) TAMAMLANDI (2026-09-01,
+tag YOK).** `fillercut ui` artık **native masaüstü penceresinde** açılıyor
+(pywebview 6.2.1 + WebView2); yoksa tarayıcı moduna düşüyor ve konsola tek
+satır neden basıyor. Web katmanının içeriğine, 6 pipeline aşamasına, review
+işlevlerine (yasla/mıknatıs) ve plan/detect mantığına DOKUNULMADI.
+
+**Kill criteria ölçüldü ve GEÇTİ.** Soğuk başlangıç (açılıştan arayüzün ilk
+`/api/fs/browse` çağrısına kadar, damga SUNUCUDA, 5'er koşu): tarayıcı medyan
+**0.865 sn**, native medyan **1.401 sn** → **delta +0.536 sn**, eşik +3 sn.
+Harness `experiments/pywebview_spike/`. Ölçümün sınırı: tarayıcı kolu SICAK
+koşuldu (Edge zaten açıktı) — yani tarayıcıya EN ELVERİŞLİ senaryoda bile
+native geçti; kapalı tarayıcıda delta daha da küçülür.
+
+**İkinci kill criteria (WebView2 yokluğunda temiz fallback) pywebview'in
+KENDİSİNDE yok — bu yüzden ön-uçuş kontrolü yazıldı.** Kurulu sürümün
+kaynağından ölçüldü (`webview/platforms/winforms.py:131-155`): `_is_chromium()`
+False dönerse pywebview **exception atmaz**, sessizce `mshtml` (IE11)
+backend'ine düşer; arayüz `fetch`/`async`/`canvas`/`ResizeObserver` kullandığı
+için sonuç *çökme* değil **sessizce bozuk pencere** olurdu — ve o düşüş
+`mshtml._set_ie_mode()` ile HKCU'ya `FEATURE_BROWSER_EMULATION` anahtarı
+**YAZAR** (yalnızca "bakmak" için kullanıcının registry'sine dokunmak).
+Bayrak arkasına almak yerine kapsam §2'nin tarif ettiği temiz fallback
+`web/native.py`'de kuruldu: sıra **platform → registry → pywebview import'u**,
+WebView2 yoksa `webview.platforms.winforms` HİÇ import edilmez. Kilidi
+`tests/test_web_native.py::TestNativeHazir`de. Karar gerekçesi: kriterin
+koruduğu risk (bozuk varsayılanı sevk etmek) ön-uçuşla ortadan kalkıyor;
+kullanıcının WebView2'siz makinesi tarayıcı modu + tek satır neden alıyor.
+
+**Fallback karar ağacı:** `--no-browser` → hiçbir şey açma · `--no-native` →
+tarayıcı · `--native` + native yok → **HATA** (açık istek sessizce
+düşürülmez) · varsayılan → native varsa native, yoksa tarayıcı + neden.
+
+**Port ve instance:** 8765 doluysa artık hata değil **ephemeral (0) porta
+düşüş** (gerçek URL pencereye verilir, düşülen port konsola yazılır); o portta
+zaten bir Filler-Cut varsa (`GET /api/instance` kimliği) ikinci sunucu
+BAŞLATILMAZ ("zaten çalışıyor, port N, pid P", exit 0), başka bir uygulamaysa
+ephemeral porta düşülür. **Kilit dosyası YOK** — portun sahibi işletim
+sistemidir, bayat kilit sınıfı da yoktur. Trade-off: ilk instance yabancı bir
+servis yüzünden ephemeral porta düşmüşse ikinci açılış onu bulamaz (nadir
+köşe). İkinci açılış mevcut pencereye **odaklanmaz**, adresini söyler —
+odaklama IPC + WinForms thread affinity işidir, ucuz olan seçildi.
+
+**Yaşam döngüsü:** sunucuya host/port değil **bağlı dinleme soketi** verilir
+(`uvicorn.Server.run(sockets=...)`) — ephemeral porta düşüldüğünde gerçek
+portu YARIŞSIZ bilmenin tek yolu. Native modda sunucu ayrı thread'de koşar
+(pywebview mesaj döngüsü ANA thread ister; uvicorn ana thread dışında sinyal
+kancasını kendisi atlar), thread **daemon DEĞİL** (koşan ffmpeg/ASR yarıda
+kesilmesin). Pencereye URL verilmeden önce **gerçek HTTP yoklaması** yapılır
+(`_hazir_bekle`): uvicorn'un `started` bayrağı "soket hazır" der, gereken
+"uygulama cevap veriyor"dur.
+
+**Gerçek donanımda doğrulandı (Win11 26200, WebView2 151.0.4129.107):** native
+pencere açıldı (`MainWindowTitle` = "Filler-Cut"), `/api/instance` cevap
+verdi, ikinci `fillercut ui` "zaten çalışıyor (port 8765, pid N)" deyip 0 ile
+çıktı, pencere WM_CLOSE ile kapatılınca süreç **graceful** çıktı —
+`msedgewebview2.exe` sayısı 18 → 12 (taban), 8765'te dinleyen kalmadı. 8765'i
+yabancı bir servis tutarken koşu 59573'e düştü ve o portta cevap verdi.
+
+**Tuzaklar (bir sonraki agent için):**
+- `winforms._is_chromium()` içindeki `finally: winreg.CloseKey(net_key)`,
+  .NET anahtarı hiç açılamazsa `net_key`'i tanımsız bulup **NameError**
+  fırlatır — import zamanında olduğu için `guilib.import_winforms()`'un
+  `except ImportError` süzgecinden GEÇER. `native._pywebview_var` bu yüzden
+  geniş `Exception` ile sarar.
+- `PYWEBVIEW_GUI=mshtml` ile `winforms`'u doğrudan import etmek renderer'ı
+  DEĞİŞTİRMEZ: `forced_gui_` yalnız `guilib.initialize()` içinde set edilir.
+  Yani "zorlayıp test edeyim" yolu yoktur; negatif yol sahte registry ile
+  birim testte sınanır.
+- `web/app.INSTANCE_ADI` değişirse tek instance kilidi **sessizce kırılır**
+  (her açılış yeni sunucu başlatır). Kilidi `TestInstanceKimligi`de.
+- `cli.py` testlerinde `ui()` çağıran her test bir dinleme soketi sızdırır
+  (sunucu mock'lu, kimse kapatmaz) → 8765 dolu kalır ve sonraki testler
+  sessizce ephemeral porta düşer. `_sizan_soketleri_kapat` autouse fixture'ı
+  bu yüzden var; kaldırılırsa hata "testler geçiyor ama yanlış portu ölçüyor"
+  şeklinde görünür.
+
+**Faz 2/3'e devredilenler:** (a) **Inno Setup'ın WebView2 Evergreen Bootstrapper
+kontrolü GEREKİR** — bu faz WebView2 yokluğunu tarayıcıya düşerek çözüyor, ama
+paketlenmiş bir masaüstü uygulamasında "tarayıcıda açıldı" kabul edilebilir bir
+son değildir; kurucu `MicrosoftEdgeWebview2Setup.exe`'yi çalıştırmalı. Tespit
+mantığı hazır: `native.webview2_var()`. (b) `pywebview`'in core'a çekilmesi
+PyInstaller fazının kararıdır — burada verilmedi. (c) Uygulama/pencere ikonu
+Faz 3/4 konusudur, bu fazda scope dışı.
+
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
 **v0.1**
@@ -361,8 +445,8 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pyproject.toml` 1.0.0 + kurulu metadata bayatlık alarmı (red-first doğrulandı) | `424fc2e` |
 | `app.js`: REVIEW aşaması ara durum olaylarında donuyordu (E2E bulgusu) | `70ef7a4` |
 
-**Test sayısı:** 765 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 751'i
+**Test sayısı:** 827 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 813'ü
 marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp` marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
@@ -377,10 +461,25 @@ NVIDIA'da, `TestGercekQsvProbe` yalnız Intel iGPU'da (hibrit kip açıkken),
 makinesinde (RX 9060 XT) AMF sınıfı **skip DEĞİL, koştu ve geçti** —
 NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 
-**Sıradaki:** **v1.x geri bildirim + dağıtım epic'i** (pywebview / PyInstaller
-/ Inno). Web katmanı bu taşınabilirlik kısıtıyla yazıldı: tek port, tek
-pencere varsayımı; tarayıcıya özgü API'lere bel bağlanmadı. (KI-1 spike'ı
-tamamlandı; Faz 1+2 ölçüldü ve öldü; bkz. KI-1 — filler kaçağı v1.0'da da
+**v1.1 Faz 1 (pywebview kabuğu)**
+
+| Modül | Commit |
+|---|---|
+| `web/native.py` (WebView2 ön-uçuş tespiti — pywebview'in `_is_chromium()` aynası; `native_hazir` karar yüzeyi; `pencere_ac` 1280×800 / min 960×600) + `pyproject` `native` extra'sı + spike harness'i (`experiments/pywebview_spike/`) | `afeffe6` |
+| `web/app.py`: `GET /api/instance` (kimlik + canlılık; `INSTANCE_ADI`) — tek instance kilidinin ve hazırlık yoklamasının ortak ucu | `6f83843` |
+| `cli.py`: `ui` yeniden kablolandı — native/tarayıcı karar ağacı, ephemeral port düşüşü, tek instance, bağlı soketle uvicorn, ayrı thread + graceful shutdown (`_dinleyici_ac`, `_instance_sorgula`, `_hazir_bekle`, `_sunucuyu_kos`, `_native_kos`; `_port_bos` düştü) | `0299513` |
+
+**Sıradaki:** dağıtım epic'i **Faz 2+** (ilk-çalıştırma indirme sihirbazı /
+PyInstaller / Inno Setup / release mekaniği) — Faz 1'in devrettiği notlar
+yukarıdaki v1.1 kaydında.
+
+Web katmanı bu taşınabilirlik kısıtıyla yazılmıştı — tek port, tek pencere
+varsayımı; tarayıcıya özgü API'lere bel bağlanmadı — ve Faz 1'de bu karşılığını
+verdi: arayüzün kendisi (`web/static/`), `fs.py`, `jobs.py`, `review.py`,
+`waveform.py` **hiç değişmedi**; `web/` altındaki tüm diff yeni `native.py` ile
+`app.py`'ye eklenen kimlik ucundan ibarettir.
+
+(KI-1 spike'ı tamamlandı; Faz 1+2 ölçüldü ve öldü; bkz. KI-1 — filler kaçağı v1.0'da da
 AÇIK bir sınırdır: varsayılan modda kesin filler yakalama 1/8 ölçüldü.)
 (expand-to-silence spike'ı tamamlandı; Kol A + Kol B ölçüldü ve öldü;
 bkz. KI-8 — kesim sınırı eksik kapsaması v1.0'da da AÇIK bir sınırdır:

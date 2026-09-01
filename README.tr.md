@@ -156,11 +156,16 @@ transkript: konusma_transkript.json
 fillercut ui
 ```
 
-`http://127.0.0.1:8765` adresinde lokal bir web arayüzü başlatır (yalnız
-loopback — localhost dışına asla bağlanmaz) ve tarayıcınızı açar. Videoyu
+Filler-Cut'ı **kendi masaüstü penceresinde** açar (pywebview + Windows
+WebView2 çalışma zamanı); arkasında `http://127.0.0.1:8765` adresinde lokal
+bir sunucu koşar (yalnız loopback — localhost dışına asla bağlanmaz).
+WebView2 yoksa — ya da opsiyonel `pywebview` paketi kurulu değilse — hiçbir
+şey bozulmaz: tarayıcı moduna düşer ve konsola tek satır neden yazar. Videoyu
 sunucu taraflı dosya gezginiyle seçersiniz (dosya tarayıcıya **yüklenmez**;
 araç diskten okur, gezgin ev dizininizle sınırlıdır), Normal/Agresif modu
 seçer ve 6 aşamalı pipeline'ın ilerlemesini canlı izlersiniz.
+
+Native pencere için: `pip install "fillercut[native]"`.
 
 ![Video seçme ekranı: sunucu taraflı dosya gezgini ve Normal/Agresif kesim modu seçimi](docs/images/ui-video-sec.png)
 
@@ -194,7 +199,13 @@ rapora da işlenir (`tiers.manuel`, `duzenleme`).
 ![Tamamlandı ekranı: kazanılan süre, tür kırılımı ve çıktı yolları](docs/images/ui-tamamlandi.png)
 
 Opsiyonlar: `--port` (varsayılan 8765), `--config YOL` (CLI ile aynı
-`filler-cut.toml`), `--no-browser`.
+`filler-cut.toml`), `--no-native` (tarayıcı modunu zorla), `--native`
+(native pencere şart — yoksa hata ver), `--no-browser` (sunucuyu başlat,
+hiçbir şey açma).
+
+Port 8765 doluysa koşu **başarısız olmaz**: boş bir porta düşer ve hangisi
+olduğunu söyler. O portta zaten bir Filler-Cut varsa ikinci `fillercut ui`
+ikinci bir sunucu başlatmaz — çalışanın adresini basar.
 
 Hiç düzenleme yapmadan onayladığınızda çıkan dosya, CLI koşusunun ürettiğinin
 **byte-byte aynısıdır** — review ekranı denetim ekler, farklı bir render değil.

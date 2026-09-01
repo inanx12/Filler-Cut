@@ -159,11 +159,16 @@ Example `video_temiz.json` (truncated):
 fillercut ui
 ```
 
-Starts a local web interface at `http://127.0.0.1:8765` (loopback only —
-never binds beyond localhost) and opens your browser. Pick a video with the
-server-side file browser (files are **not** uploaded; the tool reads them
-from disk, and browsing is confined to your home directory), choose
-Normal/Aggressive mode, and watch the 6-stage pipeline progress live.
+Opens Filler-Cut in its **own desktop window** (pywebview + the Windows
+WebView2 runtime), backed by a local server on `http://127.0.0.1:8765`
+(loopback only — never binds beyond localhost). Without WebView2 — or without
+the optional `pywebview` package — nothing breaks: it falls back to your
+browser and prints one line saying why. Pick a video with the server-side
+file browser (files are **not** uploaded; the tool reads them from disk, and
+browsing is confined to your home directory), choose Normal/Aggressive mode,
+and watch the 6-stage pipeline progress live.
+
+For the native window: `pip install "fillercut[native]"`.
 
 ![Video selection screen: the server-side file browser and the Normal/Aggressive cut mode picker](docs/images/ui-video-sec.png)
 
@@ -196,7 +201,14 @@ button for each output. Your edits are recorded in the report too
 ![Result screen: the time saved, the breakdown by cut type and the output paths](docs/images/ui-tamamlandi.png)
 
 Options: `--port` (default 8765), `--config PATH` (the same
-`filler-cut.toml` the CLI uses), `--no-browser`.
+`filler-cut.toml` the CLI uses), `--no-native` (force browser mode),
+`--native` (require the native window — error out if unavailable),
+`--no-browser` (start the server, open nothing).
+
+If port 8765 is busy the run does **not** fail: it falls back to a free port
+and tells you which one. If Filler-Cut is already running on that port, a
+second `fillercut ui` does not start a second server — it prints the address
+of the one that is already up.
 
 Approving without any edits produces **byte-for-byte the same file** as the
 CLI run — the review screen adds control, not a different renderer.
