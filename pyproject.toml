@@ -37,6 +37,14 @@ dev = [
     # test bağımlılığıdır — runtime'a GİRMEZ.
     "httpx>=0.27",
 ]
+# v1.1 Faz 1 — native masaüstü penceresi (`fillercut ui`). OPSİYONELDİR:
+# kurulu değilse `web/native.py` ön-uçuş kontrolü tarayıcı moduna düşürür ve
+# konsola tek satır neden basar (sessiz çökme yok). Core'a çekilmesi
+# PyInstaller fazının kararıdır — burada verilmedi.
+# Doğrulanan sürüm: 6.2.1 (ölçüm: experiments/pywebview_spike/README.md).
+native = [
+    "pywebview>=6",
+]
 # CUDA (RTX 4050): CTranslate2'nin yüklediği cuBLAS/cuDNN DLL'leri bu pip
 # paketlerinden gelir — Windows'ta dizin kaydı fw_backend._register_nvidia_dll_dirs'de.
 cuda = [
