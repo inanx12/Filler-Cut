@@ -59,6 +59,7 @@ from fillercut.report.json_report import (
 )
 from fillercut.web import fs
 from fillercut.web.review import (
+    SNAP_ESIK_MS,
     EditsIstek,
     Overlay,
     ReviewGorunumu,
@@ -502,6 +503,12 @@ def review_edits(job_id: str, istek: EditsIstek, request: Request) -> ReviewGoru
 
     Doğruluğun kaynağı sunucudur: istemcinin snap/clamp'i yalnız UX'tir,
     saklanan (ve cevapta dönen) değerler burada üretilenlerdir.
+
+    ``istek.snap`` kullanıcının mıknatıs tercihidir. Sunucu snap'i her zaman
+    yeniden uyguladığı için bu bayrak olmadan istemci tarafındaki bir
+    "kapalı" anahtarı ETKİSİZ kalırdı: kullanıcı serbest bıraktığı sınırın
+    yine kenara yapıştığını görürdü. Eşiğin 0 olması ``snap()``'i kimliğe
+    çevirir (``esik_ms <= 0`` → değer aynen döner).
     """
     job, baglam = _review_job(job_id, request)
     min_keep_ms = _min_keep(request)
@@ -513,6 +520,7 @@ def review_edits(job_id: str, istek: EditsIstek, request: Request) -> ReviewGoru
             total_ms=baglam.total_ms,
             min_keep_ms=min_keep_ms,
             kenarlar=sessizlik_kenarlari(baglam.ham_sessizlikler),
+            snap_esik_ms=SNAP_ESIK_MS if istek.snap else 0,
         )
     except ReviewHatasi as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None

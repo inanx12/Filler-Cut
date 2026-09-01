@@ -184,6 +184,13 @@ class EditsIstek(BaseModel):
     devre_disi: list[str] = []
     sinirlar: list[SinirIstek] = []
     eklemeler: list[EklemeIstek] = []
+    #: Mıknatıs (snap) açık mı? İstemcinin oturum içi UI tercihi; **veriye ait
+    #: değildir**, o yüzden overlay'de saklanmaz — her istekte taşınır.
+    #: Varsayılan ``True``: alan gönderilmediğinde davranış v1.0 ile birebir
+    #: aynıdır (eski istemci ve CLI parity'si etkilenmez). Kapatmak YALNIZ
+    #: sessizliğe yapışmayı iptal eder; min_keep clamp'i invariant'tır ve
+    #: koşmaya devam eder (bkz. ``normalize``).
+    snap: bool = True
 
 
 def sessizlik_kenarlari(ham_sessizlikler: Sequence[Segment]) -> tuple[int, ...]:

@@ -745,6 +745,45 @@ class TestYaslaApi:
         assert veri["kesilen_ms"] == PLAN.total_cut_ms
 
 
+class TestSnapToggle:
+    """Snap (miknatis) kapatilabilir — saf UI tercihi, clamp'e dokunmaz."""
+
+    def test_varsayilan_acik(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        veri = client.post(
+            f"/api/jobs/{job_id}/review/edits",
+            json={"sinirlar": [{"id": "k0", "bas_ms": 1_950, "bit_ms": 3_050}]},
+        ).json()
+        k0 = next(k for k in veri["kesimler"] if k["id"] == "k0")
+        assert (k0["bas_ms"], k0["bit_ms"]) == (1_900, 3_100)  # yapisti
+
+    def test_kapaliyken_yapisma_yok(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        veri = client.post(
+            f"/api/jobs/{job_id}/review/edits",
+            json={
+                "snap": False,
+                "sinirlar": [{"id": "k0", "bas_ms": 1_950, "bit_ms": 3_050}],
+            },
+        ).json()
+        k0 = next(k for k in veri["kesimler"] if k["id"] == "k0")
+        assert (k0["bas_ms"], k0["bit_ms"]) == (1_950, 3_050)  # serbest
+
+    def test_kapaliyken_clamp_yine_uygulanir(self, client: TestClient, ev: Path) -> None:
+        """Miknatis UI tercihidir; min_keep INVARIANT'tir, kapatilamaz."""
+        job_id = _review_jobu(client, ev)
+        veri = client.post(
+            f"/api/jobs/{job_id}/review/edits",
+            json={
+                "snap": False,
+                "eklemeler": [{"bas_ms": 12_000, "bit_ms": 14_950}],
+            },
+        ).json()
+        m0 = next(k for k in veri["kesimler"] if k["id"] == "m0")
+        # k2 15_000'de basliyor; 50 ms'lik yasak bosluk kapatilir.
+        assert m0["bit_ms"] != 14_950
+
+
 class TestOnay:
     def test_onay_rendera_gecirir(
         self, client: TestClient, ev: Path, kosucu: _ReviewKosucu
