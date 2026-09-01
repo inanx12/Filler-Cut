@@ -374,6 +374,20 @@ class TestBuildEncodeArgs:
         assert "veryslow" not in args
         assert args[args.index("-quality") + 1] in {"balanced", "speed", "quality"}
 
+    def test_amf_usage_yazilmaz(self) -> None:
+        """`-usage` bilinçli olarak YAZILMAZ — mini-ızgarayla ölçüldü (KI-6 eki).
+
+        AMF'nin `-usage` varsayılanı (`-1`) `transcoding`'in kendisidir: bayrağı
+        açıkça `transcoding` geçmek RX 9060 XT'de **bit-birebir aynı** dosyayı
+        üretti (tüm dosya md5 + video akışı md5 aynı). Kalan beş değerin hiçbiri
+        kabul eşiğini geçmedi — hepsi ya aynı hızda ya daha yavaş, hepsi aynı
+        boyutta ya daha büyük (4 klip × 7 kol × 3 tekrar).
+
+        Yani ayarlanacak bir şey yok; `-qp_b` ile aynı gerekçe — ezberden arg
+        yazılmaz.
+        """
+        assert "-usage" not in build_video_args("h264_amf", RenderConfig())
+
     def test_amf_qp_b_yazilmaz(self) -> None:
         """Bu arg setiyle üretilen akışta B-frame yok (ölçüldü: yalnız I ve P).
 

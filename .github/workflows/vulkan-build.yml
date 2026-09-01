@@ -34,8 +34,20 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
+      # Action sürümleri Node 24 runtime'ı için seçildi (v4'ler node20'ydi ve
+      # runner deprecation uyarısı basıyordu). Doğrulama ezberden değil, her
+      # action'ın KENDİ `action.yml`'sindeki `runs.using` alanından yapıldı:
+      # checkout v4=node20 / v5,v6,v7=node24; upload-artifact v4=node20,
+      # v5=node20 (release notu "Node 24 desteği" dese de varsayılan runtime
+      # node20 kaldı — v6 notu bunu açıkça düzeltir), v6,v7=node24.
+      # Her ikisinde de en güncel major (v7) alındı; v6/v7'nin kırıcı
+      # değişiklikleri bu workflow'un kullanımına dokunmuyor (fork PR
+      # bloğu yalnız pull_request_target/workflow_run tetikleyicilerinde,
+      # burada tetikleyici workflow_dispatch + tag push).
+      # Node 24 minimum runner sürümü ister: v2.327.1 (checkout v5 release
+      # notu) — GitHub-hosted runner'lar bunun üstünde.
       - name: Checkout whisper.cpp (sabit tag)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ggml-org/whisper.cpp
           ref: ${{ env.WHISPERCPP_REF }}
@@ -103,7 +115,7 @@ jobs:
           Compress-Archive -Path "$stage\*" -DestinationPath "$env:PACKAGE_NAME.zip"
 
       - name: Artifact upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PACKAGE_NAME }}
           path: ${{ env.PACKAGE_NAME }}.zip
