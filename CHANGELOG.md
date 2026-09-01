@@ -7,6 +7,92 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [1.1.0] — 2026-09-01
+
+**Gözden geçirme ekranı iki yeni araç kazandı, transkript CPU'da hızlandı.**
+
+Kesim sınırını elle sürüklemek her zaman en pratik yol değil: çoğu zaman
+istediğiniz şey "şu kesimi biraz açıp en yakın sessizliğe yaslamak". Artık her
+kesim satırında bunun için tek bir düğme var — **Sessizliğe yasla** (kısayol
+`Y`). Kesimin iki sınırını da dışarı, ilk sessizlik kenarına kadar taşır; o
+yönde 500 ms içinde sessizlik yoksa orada durur. Komşu kesime dayanınca da
+durur, yani iki kesim birbirine yapışıp birleşmez. Beğenmezseniz "Geri al"
+her zamanki gibi çalışıyor.
+
+İkincisi **mıknatıs**: sürüklerken tutamacın en yakın sessizliğe yapışması
+bazen tam istediğiniz yeri kaçırmanıza yol açıyordu. Üst bardaki mıknatıs
+düğmesiyle (kısayol `M`) yapışmayı kapatıp sınırı tam istediğiniz yere
+bırakabilirsiniz. Varsayılan açık — yani hiçbir şeye dokunmazsanız davranış
+v1.0 ile birebir aynı.
+
+Görünmeyen ama hissedilen değişiklik: **GPU'suz makinelerde transkript
+belirgin hızlandı** (ölçülen medyan ~1.4×). whisper.cpp'ye kaç çekirdek
+kullanacağını artık Filler-Cut söylüyor; eskiden makineden bağımsız sabit
+4 çekirdekle koşuyordu. GPU koşusunda fark yok, üretilen transkript birebir
+aynı.
+
+CLI yine hiç değişmedi.
+
+### Eklendi
+
+- **"Sessizliğe yasla"** — kesim satırındaki tek tık aksiyonu (kısayol `Y`),
+  her kesim türünde. Kesimin iki sınırını da dışa, ilk sessizlik kenarına
+  taşır; yön başına tavan **±500 ms**, tavan içinde kenar yoksa tavanda durur.
+  Komşu kesime `min_keep` kalana kadar yaklaşır, **birleşme yok**. Sonuç
+  sıradan bir kullanıcı düzenlemesidir: orijinal plan değişmez, kesimin
+  gerekçe (`reason`) zinciri ve türü korunur, "Geri al" ve sınır kuralları
+  aynen geçerlidir. Yeni bir ffmpeg geçişi eklenmez — sürüklemenin kullandığı
+  sessizlik haritasının aynısı kullanılır.
+- **Mıknatıs anahtarı** — üst barda durumu gösteren düğme (kısayol `M`);
+  kapalıyken sürükleme tamamen serbesttir. Varsayılan **açık**: dokunulmazsa
+  v1.0 davranışı birebir korunur. Tercih oturum içindir (kalıcı ayar yok).
+  Yapışma kapansa da "iki kesim arası ya sıfır ya en az `min_keep`" kuralı
+  koşmaya devam eder — o bir tercih değil, kural.
+
+### Değişti
+
+- **whisper.cpp CPU koşusu hızlandı** — thread sayısı artık makinenin
+  mantıksal çekirdek sayısından geliyor (`-t`); eskiden binary'nin makineden
+  bağımsız sabit varsayılanı (4) kullanılıyordu. 72 koşuluk ölçümde CPU'da
+  medyan **×1.41** (fiziksel çekirdekle ×1.28), GPU'da nötr (×1.00) ve
+  transkript çıktısı 72 koşunun hepsinde birebir aynı. `os.cpu_count()` değer
+  vermezse bayrak hiç geçilmez (eski davranış).
+
+### Belgeler
+
+- README.md ve README.tr.md'ye **arayüz ekran görüntüleri** eklendi
+  (`docs/images/`): tanıtımın altında gözden geçirme ekranı, web arayüzü
+  bölümünde akış sırasıyla video seçme → işleniyor → tamamlandı.
+- İki README'nin web arayüzü bölümüne yasla ve mıknatıs satırları eklendi.
+
+### Altyapı
+
+- GitHub Actions action'ları Node 24 koşan sürümlere yükseltildi
+  (`actions/checkout` v4 → v7, `actions/upload-artifact` v4 → v7). Runner'ın
+  Node 20 kullanımdan kaldırma uyarısı kalktı. Sürümler her action'ın kendi
+  `action.yml`'sindeki `runs.using` alanından doğrulandı — `upload-artifact`
+  v5 hâlâ node20'dir, node24 v6'da gelir.
+
+### Ölçüldü, uygulanmadı
+
+- **AMF `-usage`** mini-ızgarası (4 klip × 7 kol × 3 tekrar, RX 9060 XT): hiçbir
+  değer mevcut ayarı geçemedi — en iyi hız farkı −%2,4 (gürültü) ve hiçbir kol
+  tabandan küçük dosya üretmedi. Encoder ayarları **değişmedi**. Ölçümde iki
+  şey saptandı: AMF'nin `-usage` varsayılanı zaten `transcoding`'dir (bit-birebir
+  aynı çıktı) ve `ultralowlatency` ile `lowlatency` aynı sonucu verir.
+  Ayrıntı `KNOWN_ISSUES.md` KI-6 `-usage` ekinde, ölçüm `experiments/amf_usage/`.
+
+### Bilinen sınırlar
+
+- "Kesimler birleşmez" garantisi **yasla aksiyonuna** aittir; sınırı elle
+  sürüklerken komşuya çok yaklaşırsanız kesimler v1.0'daki gibi birleşebilir.
+- Yaslamadan önceki sınırlara dönen ayrı bir "geri al" yoktur — sürüklemede de
+  yoktu; kesimin tamamını geri almak her ikisini de kapsar.
+- `-t` politikasının üst sınırı ölçülmedi (64+ mantıksal çekirdekli makineler);
+  bilinçli olarak tavan konulmadı — `KNOWN_ISSUES.md` KI-9.
+
+[1.1.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.1.0
+
 ## [1.0.0] — 2026-08-28
 
 **Filler-Cut'ın web arayüzü geldi.** `fillercut ui` yazın; tarayıcıda videonuzu
