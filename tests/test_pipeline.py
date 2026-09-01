@@ -23,6 +23,7 @@ from fillercut.audio.extractor import ExtractionError
 from fillercut.audio.probe import ProbeError
 from fillercut.audio.silence import SilenceDetectionError
 from fillercut.config import AsrConfig, Config, RenderConfig
+from fillercut.kurulum import yollar as kurulum_yollar
 from fillercut.models import CutPlan, Segment, Word
 from fillercut.pipeline import (
     ASAMALAR,
@@ -409,6 +410,77 @@ class TestEncoderSecimi:
         assert "probe: amf ✗; nvenc ✓" in cikti
 
 
+class TestWcppYolCozumlemesi:
+    """v1.2 Faz 2: whispercpp yolları öncelik zincirinden geçer (kurulum/yollar).
+
+    `_make_transcriber` artık ham config değerlerini değil ÇÖZÜLMÜŞ yolları
+    bağlar; böylece sihirbazın indirdiği ikili/model, config'e elle yazmadan
+    da çalışır. Mevcut davranış korunur: config'e yazılmış geçerli yol her
+    zaman kazanır (kilit: `tests/test_kurulum_yollar.py`).
+    """
+
+    def test_sihirbaz_ayarindaki_yollar_baglanir(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from fillercut.pipeline import _make_transcriber
+
+        b = tmp_path / "whisper-cli.exe"
+        b.write_bytes(b"MZ")
+        m = tmp_path / "ggml.bin"
+        m.write_bytes(b"ggml")
+        monkeypatch.setattr(
+            "fillercut.kurulum.yollar.kurulum_oku",
+            lambda: kurulum_yollar.KurulumAyari(binary=str(b), model=str(m)),
+        )
+        monkeypatch.delenv("FILLERCUT_WCPP_BINARY", raising=False)
+        monkeypatch.delenv("FILLERCUT_WCPP_MODEL", raising=False)
+
+        t = _make_transcriber(AsrConfig(backend="whispercpp"))
+        assert (t.model_path, t.binary) == (str(m), str(b))  # type: ignore[attr-defined]
+
+    def test_eksikse_setup_oneren_turkce_hata(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Sessiz sihirbaz YOK: net hata + `fillercut setup` önerisi (brief §6)."""
+        from fillercut.pipeline import KurulumEksik, _make_transcriber
+
+        monkeypatch.setattr("fillercut.kurulum.yollar.kurulum_oku", lambda: None)
+        monkeypatch.delenv("FILLERCUT_WCPP_BINARY", raising=False)
+        monkeypatch.delenv("FILLERCUT_WCPP_MODEL", raising=False)
+        monkeypatch.setenv("PATH", str(tmp_path))  # whisper-cli PATH'te de yok
+
+        with pytest.raises(KurulumEksik) as exc:
+            _make_transcriber(AsrConfig(backend="whispercpp"))
+        mesaj = str(exc.value)
+        assert "fillercut setup" in mesaj
+        assert "fillercut ui" in mesaj
+
+    def test_run_eksik_kurulumda_temiz_cikis(
+        self, girdi: Path, katmanlar: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Eksik kurulum traceback değil temiz çıkış (kod 1) vermeli."""
+        monkeypatch.setattr("fillercut.kurulum.yollar.kurulum_oku", lambda: None)
+        monkeypatch.delenv("FILLERCUT_WCPP_BINARY", raising=False)
+        monkeypatch.delenv("FILLERCUT_WCPP_MODEL", raising=False)
+        monkeypatch.setenv("PATH", str(tmp_path))
+        cfg = Config(asr=AsrConfig(backend="whispercpp"))
+        with pytest.raises(typer.Exit) as exc:
+            run(girdi, config=cfg)
+        assert exc.value.exit_code == 1
+
+    def test_faster_whisper_yolu_cozumlemeye_ugramaz(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """fw kendi modelini indirir — kurulum katmanı o yolda hiç okunmaz."""
+        from fillercut.pipeline import _make_transcriber
+
+        def _patlat() -> None:
+            raise AssertionError("faster-whisper yolunda kurulum ayarı okunmamalı")
+
+        monkeypatch.setattr("fillercut.kurulum.yollar.kurulum_oku", _patlat)
+        _make_transcriber(AsrConfig())
+
+
 class TestBackendSecimi:
     """_make_transcriber: [asr].backend'e göre ASR backend'ini kurar (tembel import)."""
 
@@ -420,19 +492,26 @@ class TestBackendSecimi:
         assert isinstance(t, FasterWhisperTranscriber)
         assert t.language == "tr"
 
-    def test_whispercpp_alanlari_baglanir(self) -> None:
+    def test_whispercpp_alanlari_baglanir(self, tmp_path: Path) -> None:
         from fillercut.pipeline import _make_transcriber
         from fillercut.transcribe.wcpp_backend import WhisperCppTranscriber
 
+        # v1.2: yollar VAR OLMALI — çözümleme zinciri "var olan ilk aday"ı
+        # seçer (bkz. kurulum/yollar.py). Config'e yazılı geçerli yol her
+        # zaman kazanır: env var'lı bir makinede bile bu test o yolu görür.
+        binary = tmp_path / "whisper-cli"
+        binary.write_bytes(b"MZ")
+        model = tmp_path / "m.bin"
+        model.write_bytes(b"ggml")
         asr = AsrConfig(
             backend="whispercpp",
-            whispercpp_binary="/opt/whisper-cli",
-            whispercpp_model="/models/m.bin",
+            whispercpp_binary=str(binary),
+            whispercpp_model=str(model),
             language="tr",
         )
         t = _make_transcriber(asr)
         assert isinstance(t, WhisperCppTranscriber)
-        assert (t.model_path, t.binary, t.language) == ("/models/m.bin", "/opt/whisper-cli", "tr")
+        assert (t.model_path, t.binary, t.language) == (str(model), str(binary), "tr")
 
     def test_bilinmeyen_backend_valueerror(self) -> None:
         from fillercut.pipeline import _make_transcriber

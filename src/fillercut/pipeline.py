@@ -155,6 +155,36 @@ def default_output_path(input_path: Path) -> Path:
     return input_path.with_name(f"{input_path.stem}_temiz.mp4")
 
 
+#: Eksik varlık türünün Türkçe adı — hata mesajında kullanıcıya ne indirileceği.
+_EKSIK_ADI = {"binary": "whisper-cli (Vulkan)", "model": "GGML model dosyası"}
+
+
+class KurulumEksik(ValueError):
+    """whispercpp yolu için gereken ikili/model bulunamadı.
+
+    ``ValueError`` alt sınıfıdır ve bu BİLİNÇLİDİR: ``run``'ın TRANSCRIBE
+    kurulum bloğu zaten ``ValueError``'ı temiz çıkışa çeviriyor (kullanıcı
+    traceback görmez) — ayrı bir yakalama dalı eklemek aynı davranışı ikinci
+    kez yazmak olurdu.
+    """
+
+
+def _kurulum_eksik_mesaji(eksikler: tuple[str, ...]) -> str:
+    """Eksik varlıkları sayan, ne yapılacağını söyleyen Türkçe mesaj.
+
+    SESSİZ SİHİRBAZ YOK (brief §6): düz CLI koşusu kendiliğinden indirmeye
+    başlamaz — GB'larca indirmeyi kullanıcının haberi olmadan başlatmak
+    kabul edilemez. Mesaj iki yolu da gösterir.
+    """
+    ne = " ve ".join(_EKSIK_ADI.get(e, e) for e in eksikler)
+    return (
+        f"whispercpp backend'i için {ne} bulunamadı — "
+        "`fillercut setup` ile indirebilir ya da `fillercut ui` açıp "
+        "sihirbazı kullanabilirsiniz "
+        "(elle kurduysanız [asr].whispercpp_binary / whispercpp_model yollarını yazın)"
+    )
+
+
 def _make_transcriber(asr: AsrConfig) -> Transcriber:
     """``[asr].backend``'e göre ASR backend'ini kurar (DESIGN.md §5 Katman A).
 
@@ -175,11 +205,19 @@ def _make_transcriber(asr: AsrConfig) -> Transcriber:
             language=asr.language,
         )
     if asr.backend == "whispercpp":
+        from fillercut.kurulum.yollar import cozumle
         from fillercut.transcribe.wcpp_backend import WhisperCppTranscriber
 
+        # v1.2 Faz 2: ham config değerleri değil ÇÖZÜLMÜŞ yollar bağlanır —
+        # sihirbazın indirdiği ikili/model config'e elle yazılmadan çalışsın.
+        # Öncelik ve "var olan aday kazanır" kuralı `kurulum/yollar.py`de;
+        # config'e yazılmış geçerli yol HER ZAMAN kazanır (davranış korunur).
+        cozum = cozumle(asr)
+        if cozum.eksikler:
+            raise KurulumEksik(_kurulum_eksik_mesaji(cozum.eksikler))
         return WhisperCppTranscriber(
-            asr.whispercpp_model,
-            binary=asr.whispercpp_binary,
+            cozum.model or "",
+            binary=cozum.binary or "",
             language=asr.language,
         )
     raise ValueError(
@@ -200,8 +238,8 @@ IPUCU_FW = (
     "gerekebilir: pip install -e \".[cuda]\""
 )
 IPUCU_WCPP = (
-    "[asr].whispercpp_binary ve whispercpp_model yollarını kontrol edin "
-    "(whisper-cli ve GGML .bin dosyası sistem bağımlılığıdır)"
+    "[asr].whispercpp_binary ve whispercpp_model yollarını kontrol edin; "
+    "kurulu değilse `fillercut setup` indirir"
 )
 
 
