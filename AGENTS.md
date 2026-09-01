@@ -517,6 +517,39 @@ Kısayol seçimi: `Y` ve `M` mevcut haritada boştu (v1.0'da yalnız `Boşluk`,
 kararı) — ağır mantık sunucuda ve pytest ile kilitli, istemci gerçek tarayıcı
 koşusuyla doğrulandı.
 
+**Tuzak — yasla route'u `normalize`'ı `snap_esik_ms=0` ile çağırır.** Sınırlar
+zaten aynı sessizlik haritasına göre hesaplandı; normalize'ın 150 ms'lik
+snap'i burada TEKRAR koşsaydı, tavanda duran bir sınırı tavanın 150 ms
+ötesindeki bir kenara çekip `YASLA_TAVAN_MS` sözünü sessizce bozabilirdi.
+"Tek normalize çağrısı yeter" diye sadeleştiren bir sonraki agent tavanı
+kırar. Clamp aynı çağrıda KOŞAR — o UX değil invariant.
+
+**Garantinin kapsamı (fazla genelleme yapma).** "Kesimler birleşmez" YALNIZ
+bu aksiyon için geçerlidir: yasla komşu duvarını `komşu sınırı + min_keep`'te
+tutar. **Sürükleme yolu hâlâ birleştirebilir** — `_yasak_bolgeden_cek`
+boşluk `min_keep`'in yarısından azsa sınırı komşuya değdirir (union), bu v1.0
+Dilim 2'den beri bilinçli bir davranıştır ve bu dilimde DEĞİŞTİRİLMEDİ.
+
+**Geri alma semantiği.** "Tek tık geri alma bu aksiyonu da kapsar" demek,
+mevcut "Geri al" toggle'ının yaslanmış kesimde de çalışması demektir (kesim
+pasifleşir, listede kalır, sınırları korunur). Yaslamadan ÖNCEKİ sınırlara
+dönduren bir edit-bazlı undo YOKTUR — sürükleme için de yoktu, parity
+korundu. İstenirse ayrı iş.
+
+**KI-5 tuzağı bu yolda uyanmıyor (kontrol edildi).** KI-8, "kesimi büyüten
+her gelecek mekanizma" için KI-5'i tuzak olarak işaretlemişti (3000 ms'i
+aşan kesim `start + 3000`'e indirgenir, START sabit kaldığı için kesim başka
+yere taşınabilir). Burada uyanmaz: KI-5 indirgemesi PLAN katmanındadır,
+kullanıcı editi ondan SONRA gelir ve bu aksiyon üretim planını genişletmez;
+ayrıca tavan yön başına 500 ms olduğu için o eşiğe bu yoldan ulaşılamaz.
+
+**Gerçek koşuda ölçülen (Test2.mp4, wcpp/Vulkan, tek klip — genelleme yok):**
+kesin filler kesimi `10024-11320` → `9524-11820`, yani **iki yön de tavanda
+durdu**; o kesimin 500 ms komşuluğunda sessizlik kenarı YOKTU. Yani pratikte
+aksiyon çoğu zaman "kenara yaslama" değil "tavan kadar genişletme" gibi
+davranabilir — kenar yakalama yolu birim testlerle kilitli, ama sahadaki
+sıklığı ölçülmedi.
+
 Devam eden küçük iş (v0.3 kuyruğu): interaktif review'un `wcpp_backend` ile
 uçtan uca doğrulanması — `@pytest.mark.wcpp` referansı
 `tests/data/wcpp_reference_tr.json` elle doldurulacak (whisper-cli binary +
