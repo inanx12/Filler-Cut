@@ -59,6 +59,10 @@ if TYPE_CHECKING:  # uvicorn/fastapi tembel kalır — yalnız tip olarak anıl�
     import uvicorn
     from fastapi import FastAPI
 
+    from fillercut.assets import Varlik
+    from fillercut.kurulum.indir import Ilerleme
+    from fillercut.kurulum.yollar import Cozum
+
 app = typer.Typer(
     name="fillercut",
     help="Videodan filler sözcükleri ve gereksiz sessizlikleri keser.",
@@ -70,6 +74,222 @@ app = typer.Typer(
 #: EKLENMEZ (modül docstring'indeki tek-komut gerekçesi); main_entry dispatch
 #: eder. Argümansız çağrı sunucuyu default'larla başlatır (no_args_is_help YOK).
 ui_app = typer.Typer(add_completion=False)
+
+
+#: `fillercut setup` alt komutunun ayrı typer app'i — `ui_app` ile aynı
+#: gerekçe (modül docstring'i): ana app tek-komutlu kalmalı, dispatch
+#: `main_entry`'de argv üzerinden yapılır.
+setup_app = typer.Typer(add_completion=False)
+
+
+def _boyut(bayt: int) -> str:
+    """İnsan okunur boyut — onay ekranında ve durum raporunda."""
+    if bayt >= 1_000_000_000:
+        return f"{bayt / 1_000_000_000:.2f} GB"
+    return f"{bayt / 1_000_000:.0f} MB"
+
+
+#: Onay isteminde "evet" sayılan yanıtlar. İngilizcesi de kabul edilir:
+#: `typer.confirm` YALNIZ y/n anlar ve Türkçe bir araçta "e" yazan kullanıcıya
+#: "invalid input" der — kendi istemimizi yazmamızın sebebi bu (ölçüldü).
+_EVET = frozenset({"e", "evet", "y", "yes"})
+_HAYIR = frozenset({"h", "hayir", "hayır", "n", "no"})
+
+
+def _onay(soru: str) -> bool:
+    """Türkçe evet/hayır istemi; yanıt alınamazsa (EOF/betik) ``False``.
+
+    Betikten çağrıldığında istem boşa düşer — o durumda İNDİRME BAŞLAMAZ ve
+    kullanıcıya `--yes` söylenir: GB'larca indirmeyi "cevap gelmedi, herhalde
+    evettir" diye başlatmak kabul edilemez.
+    """
+    while True:
+        try:
+            yanit = typer.prompt(f"{soru} [E/h]", default="e", show_default=False)
+        except (EOFError, typer.Abort):
+            typer.echo("Onay alınamadı — betikten çağırıyorsanız --yes kullanın.")
+            return False
+        yanit = yanit.strip().lower()
+        if yanit in _EVET:
+            return True
+        if yanit in _HAYIR:
+            return False
+        typer.echo("Lütfen 'e' (evet) ya da 'h' (hayır) yazın.")
+
+
+def _indir_varlik(
+    varlik: "Varlik", hedef_dizin: Path, *, ilerleme_cb: object = None
+) -> Path:
+    """`kurulum.indir.indir`e ince sarmalayıcı — testlerin mock hedefi.
+
+    Ayrı fonksiyon olmasının sebebi test edilebilirlik: `setup`'ın KARAR
+    mantığı (ne inecek, ne inmeyecek, onay nerede sorulacak) gerçek indirme
+    olmadan sınanabilsin. Motorun kendi sözleşmesi ayrı testlerde.
+    """
+    from fillercut.kurulum.indir import indir as _indir
+
+    return _indir(varlik, hedef_dizin, ilerleme_cb=ilerleme_cb)  # type: ignore[arg-type]
+
+
+def _ilerleme_yazici(ad: str) -> "Callable[[Ilerleme], None]":
+    """Konsola %10'luk adımlarla ilerleme basar.
+
+    ANSI/`\\r` KULLANILMAZ: `fillercut setup` betikten ve CI'dan çağrılabilir
+    (brief §6), yönlendirilmiş çıktıda satır satır okunabilir kalmalı — aynı
+    gerekçe v0.3.3'ün konsol akışı temizliğinde de vardı.
+    """
+    son = {"adim": -1}
+
+    def yaz(i: "Ilerleme") -> None:
+        adim = i.yuzde // 10
+        if adim <= son["adim"]:
+            return
+        son["adim"] = adim
+        hiz = f"{i.bps / 1_000_000:.1f} MB/sn" if i.bps else "-"
+        kalan = f", ~{i.kalan_sn:.0f} sn" if i.kalan_sn else ""
+        typer.echo(f"  {ad}: %{i.yuzde} ({_boyut(i.inen)}/{_boyut(i.toplam)}, {hiz}{kalan})")
+
+    return yaz
+
+
+def _durum_bas(cozum: "Cozum") -> None:
+    """`--durum` raporu: ne kurulu, nereden geldi, ne eksik."""
+    from fillercut import assets
+    from fillercut.kurulum import yollar as _yollar
+
+    typer.echo("Filler-Cut kurulum durumu (whisper.cpp backend'i)\n")
+    for etiket, yol, kaynak in (
+        ("whisper-cli", cozum.binary, cozum.binary_kaynak),
+        ("model", cozum.model, cozum.model_kaynak),
+    ):
+        if yol is None:
+            typer.echo(f"  {etiket:<12} EKSİK")
+        else:
+            typer.echo(f"  {etiket:<12} {yol}  (kaynak: {kaynak})")
+    typer.echo(
+        f"\nHedef dizinler:\n  ikili   {_yollar.bin_dizini()}\n"
+        f"  model   {_yollar.model_dizini()}\n  ayar    {_yollar.ayar_dosyasi()}"
+    )
+    typer.echo("\nSeçilebilir modeller (--model ile):")
+    for m in assets.modeller():
+        isaret = " (varsayılan)" if m.varsayilan_mi else ""
+        typer.echo(f"  {m.ad:<26} {_boyut(m.boyut):>8}{isaret}  {m.aciklama}")
+    if cozum.eksikler:
+        typer.echo("\nEksikleri indirmek için: fillercut setup")
+    else:
+        typer.echo("\nKurulum tamam — `fillercut ui` ya da `fillercut video.mp4`.")
+
+
+@setup_app.command()
+def setup(
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="İndirilecek model adı (varsayılan: önerilen)."),
+    ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Onay sorma (CI/betik için tam otomatik)."),
+    ] = False,
+    durum: Annotated[
+        bool,
+        typer.Option("--durum", help="Mevcut kurulumu ve eksikleri raporla, indirme."),
+    ] = False,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="TOML config dosyası (varsayılan: filler-cut.toml)."),
+    ] = None,
+) -> None:
+    """whisper.cpp ikilisini ve GGML modelini indirir (ilk kurulum sihirbazı).
+
+    Yollar `%LOCALAPPDATA%\\fillercut` altına iner, seçim
+    `%APPDATA%\\fillercut\\config.json`'a yazılır. **Mevcut yapılandırma
+    EZİLMEZ**: `filler-cut.toml` ve env var'lar bu ayarın ÜSTÜNDEDİR
+    (bkz. `kurulum/yollar.py`).
+    """
+    from dataclasses import replace as _replace
+
+    from fillercut import assets
+    from fillercut.kurulum import indir as indir_mod
+    from fillercut.kurulum import yollar as _yollar
+
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        typer.echo(f"Hata: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    # Backend faster-whisper olsa bile kullanıcı BU komutu açıkça çağırdı —
+    # whispercpp varlıklarını istiyor demektir; çözümlemeyi ona göre yaparız.
+    cozum = _yollar.cozumle(_replace(cfg.asr, backend="whispercpp"))
+
+    if durum:
+        _durum_bas(cozum)
+        return
+
+    try:
+        secili_model = (
+            assets.varlik_bul(model) if model is not None else assets.varsayilan_model()
+        )
+    except assets.ManifestHatasi as exc:
+        typer.echo(f"Hata: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    if secili_model.tur != "model":
+        typer.echo(
+            f"Hata: {secili_model.ad!r} bir model değil — geçerli modeller: "
+            + ", ".join(m.ad for m in assets.modeller()),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    # --model açıkça verildiyse "zaten kurulu" demek yanlış olur: kullanıcı
+    # BAŞKA bir model istemiş olabilir.
+    model_gerek = model is not None or "model" in cozum.eksikler
+    binary_gerek = "binary" in cozum.eksikler
+
+    if not binary_gerek and not model_gerek:
+        typer.echo("Kurulum zaten tamam — indirilecek bir şey yok.")
+        _durum_bas(cozum)
+        return
+
+    isler: list[tuple[Varlik, Path]] = []
+    if binary_gerek:
+        isler.append((assets.binary_varligi(), _yollar.bin_dizini()))
+    if model_gerek:
+        isler.append((secili_model, _yollar.model_dizini()))
+
+    toplam = sum(v.boyut for v, _ in isler)
+    typer.echo("İndirilecekler:")
+    for v, hedef in isler:
+        typer.echo(f"  {v.ad:<26} {_boyut(v.boyut):>8}  -> {hedef}")
+    typer.echo(f"  {'TOPLAM':<26} {_boyut(toplam):>8}")
+
+    if not yes and not _onay("İndirme başlasın mı?"):
+        typer.echo("Vazgeçildi — hiçbir şey indirilmedi.")
+        return
+
+    _yollar.dizinleri_kur()
+    for v, hedef in isler:
+        try:
+            yol = _indir_varlik(v, hedef, ilerleme_cb=_ilerleme_yazici(v.ad))
+        except indir_mod.Iptal as exc:
+            typer.echo(
+                f"Hata: {exc} — yarım dosya korundu, `fillercut setup` "
+                "kaldığı yerden devam eder.",
+                err=True,
+            )
+            raise typer.Exit(code=1) from exc
+        except indir_mod.IndirmeHatasi as exc:
+            typer.echo(f"Hata: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        # Her başarılı indirme HEMEN yazılır: sonraki iş patlarsa bile
+        # tamamlanan taraf kaydedilmiş olur (yeniden indirilmesin).
+        if v.tur == "binary":
+            _yollar.kurulum_yaz(binary=str(yol))
+        else:
+            _yollar.kurulum_yaz(model=str(yol))
+        typer.echo(f"  {v.ad}: tamam -> {yol}")
+
+    typer.echo("\nKurulum tamam. `fillercut ui` ile açabilirsiniz.")
 
 
 def _akisi_dayaniklilastir(akis: object) -> None:
@@ -110,11 +330,15 @@ def main_entry() -> None:
 
     v1.0: ilk argüman tam olarak ``ui`` ise ``ui_app`` dispatch edilir (modül
     docstring'indeki tek-komut gerekçesi); diğer her yol mevcut ``app``'e
-    DEĞİŞMEDEN gider.
+    DEĞİŞMEDEN gider. v1.2'de ``setup`` aynı desenle eklendi (tam eşleşme:
+    ``setup.mp4`` hâlâ video yoludur).
     """
     _konsol_akislarini_ayarla()
     if sys.argv[1:2] == ["ui"]:
         ui_app(args=sys.argv[2:], prog_name="fillercut ui")
+        return
+    if sys.argv[1:2] == ["setup"]:
+        setup_app(args=sys.argv[2:], prog_name="fillercut setup")
         return
     app()
 
@@ -182,6 +406,7 @@ def main(
     """VIDEO'daki filler'ları ve gereksiz sessizlikleri kes; temiz MP4 + rapor üret.
 
     Web arayüzü için: fillercut ui
+    whisper.cpp kurulumu için: fillercut setup
     """
     try:
         cfg = load_config(config)
