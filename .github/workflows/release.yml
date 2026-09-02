@@ -1,0 +1,248 @@
+name: Release (Windows)
+
+# v1.2 Faz 5 — dağıtım epic'inin kapanışı.
+#
+# Bu workflow `vulkan-build.yml`in YERİNE geçti (o dosya silindi). Sebep bir
+# kronik yara: eski akışta tag push'unda Release'i ELLE açmak gerekiyordu;
+# açılmazsa workflow Release'i whisper.cpp notlarıyla kendisi açıyor ve
+# uygulamanın başlığını/notlarını eziyordu. Artık Release'i workflow açıyor
+# ve notlar TEK KAYNAKTAN — CHANGELOG.md'den — üretiliyor. Manuel adım YOK.
+#
+# İki workflow aynı tag'e koşarsa Release için YARIŞIRLAR; bu yüzden tek
+# dosya ve tek job. Job bölmemenin ikinci sebebi: artefakt round-trip'i
+# (upload/download-artifact) tamamen gereksizleşiyor, iki çıktı da aynı
+# çalışma dizininde duruyor.
+#
+# Action sürümleri her action'ın KENDİ `action.yml`'sindeki `runs.using`
+# alanından doğrulandı (hepsi node24, 2026-09-02):
+#   actions/checkout@v7 · actions/setup-python@v7 · actions/upload-artifact@v7
+# Kayan pin (@main/@master) YOK — kilidi tests/test_release.py'de.
+
+on:
+  workflow_dispatch:
+    inputs:
+      whispercpp_ref:
+        description: "whisper.cpp tag/ref (sabit: v1.9.1; bilinçli değiştirilmedikçe dokunma)"
+        required: true
+        default: "v1.9.1"
+  push:
+    tags:
+      - "v*"   # v1.2.0 / v1.2.0-rc.1 → build + Release
+
+# Release açmak ve asset yüklemek için (gh release create/upload).
+# Manuel dispatch'te release adımı koşmaz; izin zararsız.
+permissions:
+  contents: write
+
+env:
+  PACKAGE_NAME: fillercut-whisper-cli-vulkan-win-x64
+  WHISPERCPP_REF: ${{ inputs.whispercpp_ref || 'v1.9.1' }}
+  # Inno Setup derleyicisi runner'a KURULUR ve hash'i doğrulanır — WebView2
+  # bootstrapper'ıyla aynı desen (packaging/webview2.json). Sürüm PIN'li:
+  # aynı .iss farklı ISCC sürümünde farklı kurucu üretebilir.
+  INNO_URL: "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe"
+  INNO_SHA256: "9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732"
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Filler-Cut
+        uses: actions/checkout@v7
+
+      - name: Checkout whisper.cpp (sabit tag)
+        uses: actions/checkout@v7
+        with:
+          repository: ggml-org/whisper.cpp
+          ref: ${{ env.WHISPERCPP_REF }}
+          path: whisper.cpp
+
+      # ─── 1) whisper-cli Vulkan derlemesi ────────────────────────────────
+      # whisper.cpp resmi release'lerinde Windows Vulkan paketi YOK (upstream
+      # ggml-org/whisper.cpp#3673) — sadece CPU, BLAS, CUDA var. Bu adımlar o
+      # boşluğu doldurur: sabit tag'den kaynak derleme, vendor-agnostic Vulkan
+      # backend (tek binary ile NVIDIA/AMD/Intel).
+      - name: Vulkan SDK kur (LunarG)
+        shell: pwsh
+        run: |
+          winget install --id KhronosGroup.VulkanSDK --silent `
+            --accept-source-agreements --accept-package-agreements
+          $sdk = Get-ChildItem "C:\VulkanSDK" -Directory |
+                 Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $sdk) { throw "Vulkan SDK kurulamadı (C:\VulkanSDK boş)" }
+          echo "VULKAN_SDK=$($sdk.FullName)" >> $env:GITHUB_ENV
+          echo "VULKAN_SDK=$($sdk.FullName)"
+
+      - name: Configure (CMake, Vulkan ON)
+        shell: pwsh
+        run: |
+          # GGML_NATIVE=OFF: dağıtım binary'si runner CPU'suna göre optimize
+          # edilmesin, her x64 CPU'da çalışsın (upstream release deseni).
+          # BUILD_SHARED_LIBS=ON: ggml DLL'leri ayrı üretilsin (zip'e girecek).
+          cmake -S whisper.cpp -B whisper.cpp/build `
+            -DGGML_VULKAN=ON `
+            -DGGML_NATIVE=OFF `
+            -DBUILD_SHARED_LIBS=ON `
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build (whisper-cli)
+        shell: pwsh
+        run: cmake --build whisper.cpp/build --config Release --target whisper-cli -j
+
+      - name: Smoke test 1 — binary çalışıyor mu
+        shell: pwsh
+        run: |
+          # Runner'da GPU yok; --version backend init etmeden çıkar (v1.8.7+).
+          & whisper.cpp\build\bin\Release\whisper-cli.exe --version
+          if ($LASTEXITCODE -ne 0) { throw "whisper-cli --version patladı" }
+
+      - name: Smoke test 2 — uçtan uca transkripsiyon (CPU fallback)
+        shell: pwsh
+        run: |
+          # tiny.en (~78 MB) + repo içindeki jfk.wav. Runner'da Vulkan sürücüsü
+          # yok → ggml CPU backend'e düşer; amaç binary'nin bozuk olmadığını
+          # kanıtlamak, hız ölçmek değil (hız ölçümü KNOWN_ISSUES.md KI-1'de).
+          curl -L -o ggml-tiny.en.bin `
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin
+          & whisper.cpp\build\bin\Release\whisper-cli.exe `
+            -m ggml-tiny.en.bin -f whisper.cpp\samples\jfk.wav -nt
+          if ($LASTEXITCODE -ne 0) { throw "smoke transkripsiyon patladı" }
+
+      - name: Paketle (exe + ggml DLL'leri + LICENSE)
+        shell: pwsh
+        run: |
+          $bin = "whisper.cpp\build\bin\Release"
+          $stage = "stage\$env:PACKAGE_NAME"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item "$bin\whisper-cli.exe" $stage
+          # whisper.dll, ggml.dll, ggml-base.dll, ggml-cpu.dll, ggml-vulkan.dll
+          Copy-Item "$bin\*.dll" $stage
+          # MIT bile olsa binary dağıtımında lisans metni taşınmalı.
+          Copy-Item whisper.cpp\LICENSE $stage
+          Get-ChildItem $stage | Format-Table Name, Length
+          Compress-Archive -Path "$stage\*" -DestinationPath "$env:PACKAGE_NAME.zip"
+
+      # ─── 2) Uygulama exe'leri + kurucu ──────────────────────────────────
+      - name: Python kur
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Bağımlılıklar
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python.exe -m pip install --upgrade pip
+          .venv\Scripts\python.exe -m pip install -e ".[dev]"
+          # build_exe.ps1 / build_setup.ps1 .venv\Scripts\python.exe bekler.
+
+      - name: Inno Setup kur (pin'li + hash doğrulamalı)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = "$env:RUNNER_TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri $env:INNO_URL -OutFile $exe
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:INNO_SHA256) {
+            throw "Inno Setup SHA-256 uyuşmuyor: beklenen $env:INNO_SHA256, gelen $hash"
+          }
+          # Inno'nun kendi kurucusu da Inno ile üretilmiştir; standart sessiz
+          # bayrakları alır. /DIR ile konum sabitlenir ki ISCC yolu tahmin
+          # edilmesin — build_setup.ps1 FILLERCUT_ISCC'yi okur.
+          $dir = "$env:RUNNER_TEMP\InnoSetup6"
+          Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/DIR=$dir" -Wait
+          $iscc = Join-Path $dir 'ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe bulunamadı: $iscc" }
+          echo "FILLERCUT_ISCC=$iscc" >> $env:GITHUB_ENV
+          & $iscc | Select-Object -First 2
+
+      - name: Sürümü etiketten türet
+        shell: pwsh
+        run: |
+          # Tag koşusunda sürüm ETİKETTEN gelir (v1.2.0 → 1.2.0,
+          # v1.2.0-rc.1 → 1.2.0-rc.1). Dispatch'te tag yok; paket sürümü
+          # kullanılır ve release adımı zaten koşmaz.
+          $ref = "${{ github.ref }}"
+          if ($ref.StartsWith('refs/tags/')) {
+            $surum = "${{ github.ref_name }}" -replace '^v',''
+          } else {
+            $surum = (.venv\Scripts\python.exe -c "from fillercut import __version__; print(__version__)").Trim()
+          }
+          echo "SURUM=$surum" >> $env:GITHUB_ENV
+          echo "Sürüm: $surum"
+
+      - name: exe + kurucu build
+        shell: pwsh
+        run: .\scripts\build_setup.ps1 -Surum $env:SURUM
+
+      # ─── 3) Artefaktlar ─────────────────────────────────────────────────
+      # Her koşuda üretilir (dispatch'te manuel doğrulama için) ama 30 günde
+      # silinir + indirmek GitHub hesabı ister — kalıcı dağıtım Release'tir.
+      - name: Artifact — whisper-cli zip
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: ${{ env.PACKAGE_NAME }}.zip
+          retention-days: 30
+
+      - name: Artifact — kurucu
+        uses: actions/upload-artifact@v7
+        with:
+          name: Filler-Cut-Setup
+          path: dist_setup/Filler-Cut-Setup-*.exe
+          retention-days: 30
+
+      # ─── 4) Release (yalnız tag push'u) ─────────────────────────────────
+      - name: Release oluştur / güncelle
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ETIKET: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $kurucu = (Get-ChildItem dist_setup -Filter 'Filler-Cut-Setup-*.exe' |
+                     Select-Object -First 1).FullName
+          $zip = "$PWD\$env:PACKAGE_NAME.zip"
+          foreach ($a in @($kurucu, $zip)) {
+            if (-not (Test-Path $a)) { throw "asset yok: $a" }
+          }
+
+          # Notlar ve başlık CHANGELOG'dan — workflow'a elle YAZILMAZ.
+          # rc etiketleri taban sürüme çözülür (v1.2.0-rc.1 → [1.2.0]).
+          $notlar = "$env:RUNNER_TEMP\notes.md"
+          .venv\Scripts\python.exe scripts\release_notlari.py $env:ETIKET --out $notlar
+          $baslik = (.venv\Scripts\python.exe scripts\release_notlari.py $env:ETIKET --baslik).Trim()
+
+          # Ön-sürüm: etikette '-' varsa (v1.2.0-rc.1). "Latest" olmamalı,
+          # yoksa kullanıcı indirme sayfasında rc'yi kararlı sürüm sanar.
+          $onSurum = $env:ETIKET -match '-'
+
+          $ErrorActionPreference = 'Continue'
+          gh release view $env:ETIKET --repo $env:REPO 2>&1 | Out-Null
+          $varMi = ($LASTEXITCODE -eq 0)
+          $ErrorActionPreference = 'Stop'
+
+          if ($varMi) {
+            # İDEMPOTENT: Release zaten varsa BAŞLIK ve NOTLAR KORUNUR —
+            # yalnız asset'ler güncellenir. Aynı tag'de ikinci koşu (ya da
+            # elle düzenlenmiş notlar) ezilmez. Bu, Faz 5'in çözdüğü kronik
+            # yaranın tam tersi davranıştır.
+            Write-Host "Release var — notlar korunuyor, asset'ler güncelleniyor"
+            gh release upload $env:ETIKET $kurucu $zip --repo $env:REPO --clobber
+            if ($LASTEXITCODE -ne 0) { throw "asset yükleme başarısız" }
+          } else {
+            Write-Host "Release yok — CHANGELOG notlarıyla açılıyor"
+            $args = @(
+              $env:ETIKET, $kurucu, $zip,
+              '--repo', $env:REPO,
+              '--title', $baslik,
+              '--notes-file', $notlar,
+              '--verify-tag'
+            )
+            if ($onSurum) { $args += @('--prerelease', '--latest=false') }
+            gh release create @args
+            if ($LASTEXITCODE -ne 0) { throw "release oluşturma başarısız" }
+          }
+          gh release view $env:ETIKET --repo $env:REPO --json name,isPrerelease,assets

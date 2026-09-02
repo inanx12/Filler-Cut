@@ -17,6 +17,12 @@
 #ifndef Surum
   #define Surum "0.0.0"
 #endif
+#ifndef SayisalSurum
+  ; VersionInfoVersion SAYISAL olmak zorunda: `1.2.0-rc.1` gibi on-surum
+  ; etiketleri ISCC'de kabul edilmez. Gosterim surumu (AppVersion) tam
+  ; etiketi tasir, kaynak surumu yalniz ucluyu.
+  #define SayisalSurum "0.0.0"
+#endif
 #ifndef DistDir
   #define DistDir "..\dist\fillercut"
 #endif
@@ -41,7 +47,7 @@ AppPublisher={#Yayinci}
 AppPublisherURL={#AppUrl}
 AppSupportURL={#AppUrl}/issues
 AppUpdatesURL={#AppUrl}/releases
-VersionInfoVersion={#Surum}
+VersionInfoVersion={#SayisalSurum}
 DefaultDirName={localappdata}\Programs\Filler-Cut
 DefaultGroupName={#AppAdi}
 DisableProgramGroupPage=yes

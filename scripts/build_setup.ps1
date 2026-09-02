@@ -57,6 +57,14 @@ if (-not (Test-Path $Python)) {
 if (-not $Surum) {
     $Surum = (& $Python -c "from fillercut import __version__; print(__version__)").Trim()
 }
+# ISCC'nin VersionInfoVersion alani SAYISAL olmak zorunda: `1.2.0-rc.1` gibi
+# on-surum etiketleri kabul edilmez. Gosterim surumu (AppVersion, kurucu adi)
+# tam etiketi tasir; kaynak surumu yalniz ucluyu.
+if ($Surum -match '^([0-9]+\.[0-9]+\.[0-9]+)') {
+    $SayisalSurum = $Matches[1]
+} else {
+    throw ('gecersiz surum: ' + $Surum + '  (beklenen: 1.2.0 ya da 1.2.0-rc.1)')
+}
 
 # ── ISCC yolu ──────────────────────────────────────────────────────────────
 if (-not $Iscc) { $Iscc = $env:FILLERCUT_ISCC }
@@ -72,7 +80,7 @@ if (-not $Iscc -or -not (Test-Path $Iscc)) {
     throw ('ISCC.exe bulunamadi. -Iscc ile yol verin ya da FILLERCUT_ISCC ' +
            'ortam degiskenini kurun (winget install JRSoftware.InnoSetup).')
 }
-Write-Host "Filler-Cut $Surum · ISCC: $Iscc" -ForegroundColor Cyan
+Write-Host "Filler-Cut $Surum (kaynak surumu $SayisalSurum) · ISCC: $Iscc" -ForegroundColor Cyan
 
 # ── 1) exe build ───────────────────────────────────────────────────────────
 $DistDir = Join-Path $Kok 'dist\fillercut'
@@ -104,8 +112,8 @@ $SetupDir = Join-Path $Kok 'dist_setup'
 if (Test-Path $SetupDir) { Remove-Item $SetupDir -Recurse -Force }
 $Iss = Join-Path $Kok 'packaging\fillercut.iss'
 Invoke-Yerel 'ISCC derlemesi' {
-    & $Iscc "/DSurum=$Surum" "/DDistDir=$DistDir" "/DWebview2Setup=$Wv2Exe" `
-        "/O$SetupDir" $Iss
+    & $Iscc "/DSurum=$Surum" "/DSayisalSurum=$SayisalSurum" "/DDistDir=$DistDir" `
+        "/DWebview2Setup=$Wv2Exe" "/O$SetupDir" $Iss
 }
 
 $Kurucu = Get-ChildItem $SetupDir -Filter '*.exe' | Select-Object -First 1
