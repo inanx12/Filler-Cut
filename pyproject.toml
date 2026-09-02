@@ -36,6 +36,10 @@ dev = [
     # httpx üstüne kurulu; httpx yoksa TestClient import'u patlar). Yalnız
     # test bağımlılığıdır — runtime'a GİRMEZ.
     "httpx>=0.27",
+    # v1.2 Faz 3 paketleme. PIN'li: bootloader ve hook davranışı sürümle
+    # değişir, aynı spec farklı sürümde farklı bundle üretir — build
+    # tekrarlanabilirliği bu pin'e bağlıdır (doğrulanan: 6.22.2).
+    "pyinstaller==6.22.2",
 ]
 # v1.1 Faz 1 — native masaüstü penceresi (`fillercut ui`). OPSİYONELDİR:
 # kurulu değilse `web/native.py` ön-uçuş kontrolü tarayıcı moduna düşürür ve
@@ -75,4 +79,5 @@ markers = [
     "ffmpeg: gerçek ffmpeg/ffprobe gerektirir — CI'da değil, kullanıcı makinesinde koşar (CI deselect: -m 'not ffmpeg')",
     "wcpp: gerçek whisper-cli binary + GGML model gerektirir — CI'da değil, kullanıcı makinesinde koşar (CI deselect: -m 'not wcpp')",
     "ag: gerçek ağ indirmesi gerektirir (HF / GitHub Release) — CI'da değil, kullanıcı makinesinde koşar (CI deselect: -m 'not ag')",
+    "exe: PyInstaller build artefaktı gerektirir (dist/fillercut) — CI'da değil, build sonrası koşar (CI deselect: -m 'not exe')",
 ]

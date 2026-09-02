@@ -32,3 +32,7 @@ experiments/filler_leak/_cache/
 
 # Faz 3 paketleme spike ara dosyalari (WAV)
 experiments/paketleme_spike/_cache/
+
+# PyInstaller ara/cikti dizinleri
+dist_onefile/
+build_onefile/
