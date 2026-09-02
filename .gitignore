@@ -36,3 +36,6 @@ experiments/paketleme_spike/_cache/
 # PyInstaller ara/cikti dizinleri
 dist_onefile/
 build_onefile/
+
+# Inno Setup kurucusu ciktisi
+dist_setup/

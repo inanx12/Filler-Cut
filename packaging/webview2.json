@@ -1,0 +1,26 @@
+{
+  "_aciklama": [
+    "WebView2 Evergreen Bootstrapper — kurucuya gomulur (Faz 4).",
+    "Microsoft bootstrapper'in yeniden dagitimina acikca izin verir:",
+    "'Or, download the bootstrapper and package it with your WebView2 app.'",
+    "(learn.microsoft.com/microsoft-edge/webview2/concepts/distribution)",
+    "",
+    "scripts/build_setup.ps1 dosyayi bu url'den indirir ve sha256'yi bu",
+    "kayitla karsilastirir. TUTMAZSA build DURUR: Microsoft stub'i tazelemis",
+    "demektir; yeni dosyayi indirip imzasini dogrulayip bu kaydi guncelle.",
+    "Binary repoya GIRMEZ (build/ altina iner, gitignore'lu)."
+  ],
+  "url": "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+  "cozulen_url_ornegi": "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/474c9f1d-0fd5-49da-b3b0-df536d328170/MicrosoftEdgeWebview2Setup.exe",
+  "dosya_adi": "MicrosoftEdgeWebview2Setup.exe",
+  "sha256": "17debf797a6c737959bc588236e897936ffac1af5f7e515e674ab32f9edfe719",
+  "boyut": 1783000,
+  "dosya_surumu": "1.3.265.7",
+  "authenticode": {
+    "durum": "Valid",
+    "imzalayan": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+    "veren": "CN=Microsoft Code Signing PCA 2024, O=Microsoft Corporation, C=US"
+  },
+  "sessiz_kurulum_argumanlari": "/silent /install",
+  "dogrulama_tarihi": "2026-09-02"
+}
