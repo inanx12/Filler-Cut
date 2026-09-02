@@ -29,3 +29,6 @@ filler-cut.toml
 
 # Spike ara dosyaları (experiments/filler_leak) — WAV, ham ASR çıktısı, cache
 experiments/filler_leak/_cache/
+
+# Faz 3 paketleme spike ara dosyalari (WAV)
+experiments/paketleme_spike/_cache/

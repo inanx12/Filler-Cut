@@ -6,11 +6,14 @@ gerçek CWD'ye dokunulmaz.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
+from fillercut import config as config_mod
 from fillercut.config import (
+    AsrConfig,
     Config,
     ConfigError,
     load_config,
@@ -433,3 +436,60 @@ class TestTipHatalari:
         )
         with pytest.raises(ConfigError, match="string listesi olmalı"):
             load_config()
+
+
+class TestPaketlenmisVarsayilan:
+    """v1.2 Faz 3: paketlenmiş exe'de varsayılan backend `whispercpp` olur.
+
+    Gerekçe ölçüldü (`experiments/paketleme_spike/README.md`): korpusta wcpp
+    fw'dan DAHA AZ filler kaçırıyor (default 1/4 vs 0/4, aggressive 6/8 vs
+    5/8; her ikisinde de 0 yanlış-pozitif, 0 tier ihlali) ve bu makinede
+    12× hızlı. Paketlenmiş dağıtımın ASR'ı Vulkan whisper.cpp'dir; varsayılan
+    fw kalsaydı Faz 2'nin sihirbazı son kullanıcı için ölü kod olurdu.
+
+    **pip kurulumunun varsayılanı DEĞİŞMEZ** — kilit bu sınıfın var olma
+    sebebidir: mevcut kullanıcılar etkilenmemeli.
+    """
+
+    def test_pip_kurulumunda_varsayilan_faster_whisper(self) -> None:
+        assert Config().asr.backend == "faster-whisper"
+        assert AsrConfig().backend == "faster-whisper"
+
+    def test_paketlenmis_kosuda_varsayilan_whispercpp(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "_MEIPASS", "C:/x", raising=False)
+        assert AsrConfig().backend == "whispercpp"
+        assert Config().asr.backend == "whispercpp"
+
+    def test_paketlenmis_mi_iki_isareti_de_ister(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`sys.frozen` tek başına yetmez — `_MEIPASS` bundle'ın kanıtıdır."""
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+        assert config_mod.paketlenmis_mi() is False
+
+    def test_gelistirme_kosusunda_paketlenmis_degil(self) -> None:
+        assert config_mod.paketlenmis_mi() is False
+
+    def test_toml_paketlenmis_varsayilani_ezer(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Paketlenmiş kullanıcı fw'a dönebilmeli (bundle'da fw de var)."""
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "_MEIPASS", "C:/x", raising=False)
+        yol = tmp_path / "fc.toml"
+        yol.write_text(
+            'config_version = 1\n[asr]\nbackend = "faster-whisper"\n', encoding="utf-8"
+        )
+        assert load_config(yol).asr.backend == "faster-whisper"
+
+    def test_paketlenmiste_toml_yoksa_whispercpp(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "_MEIPASS", "C:/x", raising=False)
+        monkeypatch.chdir(tmp_path)
+        assert load_config(None).asr.backend == "whispercpp"

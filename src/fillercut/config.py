@@ -28,6 +28,37 @@ DEFAULT_CONFIG_NAME = "filler-cut.toml"
 #: Desteklenen tek şema sürümü.
 SUPPORTED_CONFIG_VERSION = 1
 
+#: pip kurulumunun ASR varsayılanı — v0.1'den beri aynı, DEĞİŞMEZ.
+VARSAYILAN_BACKEND = "faster-whisper"
+
+#: Paketlenmiş (PyInstaller) dağıtımın ASR varsayılanı. Gerekçe ölçüldü
+#: (`experiments/paketleme_spike/README.md`): korpusta wcpp fw'dan DAHA AZ
+#: filler kaçırıyor (0 yanlış-pozitif, 0 tier ihlali) ve bu makinede 12×
+#: hızlı; dahası paketlenmiş dağıtımın ASR'ı zaten Vulkan whisper.cpp'dir —
+#: varsayılan fw kalsaydı Faz 2'nin indirme sihirbazı son kullanıcı için ölü
+#: kod olurdu (fw kendi modelini kendisi indirir).
+PAKETLENMIS_BACKEND = "whispercpp"
+
+
+def paketlenmis_mi() -> bool:
+    """PyInstaller bundle'ı içinde mi koşuyoruz?
+
+    İKİ işaret birden aranır: ``sys.frozen`` (donduran her araç koyar) VE
+    ``sys._MEIPASS`` (PyInstaller'ın bundle kökü). Tek başına ``frozen``
+    yetmez — başka bir dondurucu altında yanlış varsayılana geçmeyelim.
+
+    Bu, "paketlenmiş varsayılan pip varsayılanını DEĞİŞTİRMEMELİ" kısıtının
+    mekanizmasıdır: build-time bayrağı yerine çalışma anında **bundle'ın
+    kendi kanıtı** kullanılır, yani kaynak ağacı ile paket tek bir kod
+    tabanından çıkar ve senkron tutulacak ikinci bir dosya doğmaz.
+    """
+    return bool(getattr(sys, "frozen", False)) and hasattr(sys, "_MEIPASS")
+
+
+def varsayilan_backend() -> str:
+    """Bu koşunun ASR varsayılanı (`AsrConfig.backend`'in default_factory'si)."""
+    return PAKETLENMIS_BACKEND if paketlenmis_mi() else VARSAYILAN_BACKEND
+
 
 class ConfigError(Exception):
     """Config yükleme/doğrulama hatası — kullanıcıya gösterilebilir mesaj."""
@@ -53,7 +84,10 @@ class AsrConfig:
     bump gerektirmez.
     """
 
-    backend: str = "faster-whisper"
+    #: Sabit default DEĞİL: paketlenmiş exe'de `whispercpp`, pip kurulumunda
+    #: `faster-whisper` (bkz. `varsayilan_backend`). Kilit:
+    #: `tests/test_config.py::TestPaketlenmisVarsayilan`.
+    backend: str = field(default_factory=varsayilan_backend)
     model_size: str = "turbo"
     device: str = "auto"
     compute_type: str = "default"
