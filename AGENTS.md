@@ -700,10 +700,31 @@ pyproject.toml"dur; rc için build zamanında pyproject'i ezmek ikinci bir
 kaynak yaratırdı. rc, o sürümün *kanalı*dır, farklı bir kod değil.
 
 **Tuzaklar (bir sonraki agent için):**
+- **Boru = yerel kodlama (rc.1'i öldüren tuzak).** `v1.2.0-rc.1` koşusunda
+  adım 12 patladı: `webview2_indir.py` bootstrapper'ı indirdi, SHA-256'sını
+  DOĞRULADI, dosyayı yazdı — sonra **başarı mesajını basarken** öldü
+  (`UnicodeEncodeError: 'charmap' codec`, `U+011F`). Sebep: runner'da çıktı
+  PowerShell'e **boru** ile gidiyor; boru hâlinde Python konsolu değil YEREL
+  kodlamayı kullanır (en-US runner'da `cp1252`). Terminale bağlıyken Windows
+  zaten `WriteConsoleW` ile UTF-8 yazar — bu yüzden yerelde **hiç görülmedi**
+  ve `.ps1` betikleri yerelde koştuğu için Faz 3-4 boyunca saklandı.
+  Savunma iki katman: her araç script'inde
+  `reconfigure(encoding="utf-8", errors="replace")` **ve** workflow env'inde
+  `PYTHONUTF8: "1"`. Kilit `tests/test_konsol_kodlama.py` (13 test,
+  `PYTHONIOENCODING=cp1252` ile subprocess; ağ stub'lı).
+- `errors="replace"` **tek başına yetmez**: çökmeyi durdurur ama mesajı
+  `do?ruland?` yapar. Actions günlüğü UTF-8 okuduğu için harfleri kaybetmeye
+  gerek yok — kilit UTF-8'i şart koşar, `replace` ikinci kemerdir.
+- `sys.stderr`in varsayılan hata politikası Py3.9+ ile `backslashreplace`tır:
+  stderr yolunda çökme zaten olmuyordu, mesaj sessizce `kullanım` diye
+  BOZULUYORDU. "stderr'de patlamıyor" ≠ "stderr doğru".
 - `release_notlari.py` stdout'a basarken `→` gibi süsler Windows-TR
   konsolunda (cp1254) `UnicodeEncodeError` veriyordu — v0.3.3'ün CLI için
   kapattığı sınıfın aynısı. `_konsolu_dayaniklilastir` şart; `--out` yolu
   zaten UTF-8 dosyaya yazar (workflow onu kullanır).
+- PowerShell tarafı bu sınıfta **temiz**: workflow'un 11 bloğu da
+  `shell: pwsh` (PS 7), varsayılan `[Console]::OutputEncoding` UTF-8. Açık
+  olmayan gap Python tarafındaydı.
 - PowerShell'de `-notmatch` de `$Matches`i doldurur ama buna GÜVENME:
   `build_setup.ps1` açık `-match` ile yazıldı, okuyan yanılmasın.
 - Workflow'daki `gh release view` çıkış kodu okunurken `$ErrorActionPreference`
@@ -867,8 +888,8 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pyproject.toml` 1.0.0 + kurulu metadata bayatlık alarmı (red-first doğrulandı) | `424fc2e` |
 | `app.js`: REVIEW aşaması ara durum olaylarında donuyordu (E2E bulgusu) | `70ef7a4` |
 
-**Test sayısı:** 1039 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 1019'u
+**Test sayısı:** 1053 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 1033'ü
 marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp`, 1'i `ag` (gerçek ağ indirmesi), 5'i
 `exe` (PyInstaller artefaktı; yoksa skip gerekçesi "önce build_exe.ps1")
 marker'lı (gerçek ffmpeg / gerçek
@@ -934,6 +955,8 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `scripts/release_notlari.py` — CHANGELOG'dan başlık + notlar (rc → taban sürüm) | `11fc562` |
 | `.github/workflows/release.yml` (eski `vulkan-build.yml` silindi) + `.iss`/`build_setup.ps1` `SayisalSurum` | `f2df121` |
 | `tests/test_release.py` — sürüm tutarlılığı, notlar, workflow sözleşmesi | `11310dd` |
+| araç script'lerinde UTF-8 savunması + workflow `PYTHONUTF8` (rc.1 hotfix) | `f16e2fd` |
+| `tests/test_konsol_kodlama.py` — dar konsol kodlaması kilitleri | `357b3d2` |
 
 **Sıradaki:** dağıtım epic'i (v1.x madde 4) KAPANDI. Kalan v1.x maddeleri
 ayrı işlerdir — madde 5 (PyPI) bu epic'in parçası DEĞİLDİR.
