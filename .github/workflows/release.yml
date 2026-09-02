@@ -150,11 +150,20 @@ jobs:
           # bayrakları alır. /DIR ile konum sabitlenir ki ISCC yolu tahmin
           # edilmesin — build_setup.ps1 FILLERCUT_ISCC'yi okur.
           $dir = "$env:RUNNER_TEMP\InnoSetup6"
-          Start-Process $exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/DIR=$dir" -Wait
+          $kur = Start-Process $exe -PassThru -Wait -ArgumentList `
+            "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/DIR=$dir"
+          if ($kur.ExitCode -ne 0) { throw "Inno Setup kurulumu başarısız (kod $($kur.ExitCode))" }
           $iscc = Join-Path $dir 'ISCC.exe'
           if (-not (Test-Path $iscc)) { throw "ISCC.exe bulunamadı: $iscc" }
           echo "FILLERCUT_ISCC=$iscc" >> $env:GITHUB_ENV
-          & $iscc | Select-Object -First 2
+          # ISCC argümansız çağrılınca kullanımı STDERR'e yazar ve sıfırdan
+          # farklı kodla çıkar; `Stop` altında bu terminating hata olurdu
+          # (aynı sınıf tuzak PyInstaller'da da yaşandı). Sürüm doğrulaması
+          # bu yüzden `Continue` altında yapılır ve kod OKUNMAZ.
+          $eskiEAP = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
+          & $iscc 2>&1 | Select-Object -First 2
+          $ErrorActionPreference = $eskiEAP
 
       - name: Sürümü etiketten türet
         shell: pwsh
@@ -234,15 +243,17 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "asset yükleme başarısız" }
           } else {
             Write-Host "Release yok — CHANGELOG notlarıyla açılıyor"
-            $args = @(
+            # `$args` OTOMATIK degiskendir (Object[]); ustune yazmak calisir
+            # ama okuyan yanilir ve splatting'de siniri belirsizlestirir.
+            $ghArgs = @(
               $env:ETIKET, $kurucu, $zip,
               '--repo', $env:REPO,
               '--title', $baslik,
               '--notes-file', $notlar,
               '--verify-tag'
             )
-            if ($onSurum) { $args += @('--prerelease', '--latest=false') }
-            gh release create @args
+            if ($onSurum) { $ghArgs += @('--prerelease', '--latest=false') }
+            gh release create @ghArgs
             if ($LASTEXITCODE -ne 0) { throw "release oluşturma başarısız" }
           }
           gh release view $env:ETIKET --repo $env:REPO --json name,isPrerelease,assets
