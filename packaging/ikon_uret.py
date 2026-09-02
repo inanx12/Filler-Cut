@@ -15,6 +15,7 @@ Windows aradaki ölçekleri kendisi üretir.
 from __future__ import annotations
 
 import struct
+import sys
 import zlib
 from pathlib import Path
 
@@ -113,6 +114,34 @@ def ico_uret(hedef: Path = CIKTI) -> Path:
     return hedef
 
 
+def _konsolu_dayaniklilastir() -> None:
+    """stdout/stderr'i UTF-8 + ``errors="replace"``e çeker — asla patlamaz.
+
+    **Ölçülen çöküş (2026-09-02, ``v1.2.0-rc.1`` koşusu).** Bu script'in
+    çıktısı runner'da PowerShell'e **boru** ile gidiyordu. Boru hâlinde Python
+    konsolu değil YEREL kodlamayı kullanır (en-US runner'da ``cp1252``) ve
+    Türkçe harfler orada yok — mesaj basarken ``UnicodeEncodeError``. Terminale
+    bağlıyken Windows zaten UTF-8 yazar (``WriteConsoleW``), bu yüzden yerelde
+    hiç görülmedi.
+
+    UTF-8'e çevirmek mesajı BOZULMADAN geçirir (Actions günlüğü UTF-8 okur);
+    ``errors="replace"`` ikinci kemerdir — kodlama ayarlanamazsa da hiçbir
+    satır çökmez. Kilit: ``tests/test_konsol_kodlama.py``.
+    """
+    for akis in (sys.stdout, sys.stderr):
+        yeniden = getattr(akis, "reconfigure", None)
+        if yeniden is None:
+            continue  # konsolsuz koşu / test sarmalayıcısı (StringIO vb.)
+        try:
+            yeniden(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            try:
+                yeniden(errors="replace")
+            except (ValueError, OSError):
+                continue
+
+
 if __name__ == "__main__":
+    _konsolu_dayaniklilastir()
     yol = ico_uret()
     print(f"{yol} ({yol.stat().st_size} bayt, boyutlar: {', '.join(map(str, BOYUTLAR))})")

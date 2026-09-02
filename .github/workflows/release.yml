@@ -36,6 +36,11 @@ permissions:
 
 env:
   PACKAGE_NAME: fillercut-whisper-cli-vulkan-win-x64
+  # Runner en-US'tur: boruya yazan Python'un yerel kodlaması cp1252 olur ve
+  # Türkçe mesajlar UnicodeEncodeError verir (v1.2.0-rc.1 koşusu, adım 12 —
+  # indirme BAŞARILIYDI, çöküş başarı mesajındaydı). UTF-8 modu bunu uçtan
+  # uca kapatır; script'lerin kendi savunma satırı ikinci katmandır.
+  PYTHONUTF8: "1"
   WHISPERCPP_REF: ${{ inputs.whispercpp_ref || 'v1.9.1' }}
   # Inno Setup derleyicisi runner'a KURULUR ve hash'i doğrulanır — WebView2
   # bootstrapper'ıyla aynı desen (packaging/webview2.json). Sürüm PIN'li:

@@ -109,21 +109,30 @@ def en_ust_surum(changelog: Path = CHANGELOG) -> str:
 
 
 def _konsolu_dayaniklilastir() -> None:
-    """stdout/stderr'i ``errors="replace"``e çeker — `cli.main_entry` deseni.
+    """stdout/stderr'i UTF-8 + ``errors="replace"``e çeker — asla patlamaz.
 
-    Notlarda `→` gibi süsler var; Windows-TR konsolunda (cp1254) bunlar
-    kodlanamıyor ve script `UnicodeEncodeError` ile ölüyordu (ölçüldü).
-    Aynı sınıf v0.3.3'te CLI için kapatılmıştı. `--out` yolu zaten UTF-8
-    dosyaya yazar; bu yalnız ekrana basma yolunu korur.
+    **Ölçülen çöküş (2026-09-02, ``v1.2.0-rc.1`` koşusu).** Bu script'in
+    çıktısı runner'da PowerShell'e **boru** ile gidiyordu. Boru hâlinde Python
+    konsolu değil YEREL kodlamayı kullanır (en-US runner'da ``cp1252``) ve
+    Türkçe harfler orada yok — mesaj basarken ``UnicodeEncodeError``. Terminale
+    bağlıyken Windows zaten UTF-8 yazar (``WriteConsoleW``), bu yüzden yerelde
+    hiç görülmedi.
+
+    UTF-8'e çevirmek mesajı BOZULMADAN geçirir (Actions günlüğü UTF-8 okur);
+    ``errors="replace"`` ikinci kemerdir — kodlama ayarlanamazsa da hiçbir
+    satır çökmez. Kilit: ``tests/test_konsol_kodlama.py``.
     """
     for akis in (sys.stdout, sys.stderr):
         yeniden = getattr(akis, "reconfigure", None)
         if yeniden is None:
-            continue
+            continue  # konsolsuz koşu / test sarmalayıcısı (StringIO vb.)
         try:
-            yeniden(errors="replace")
+            yeniden(encoding="utf-8", errors="replace")
         except (ValueError, OSError):
-            continue
+            try:
+                yeniden(errors="replace")
+            except (ValueError, OSError):
+                continue
 
 
 def main(argv: list[str]) -> int:
