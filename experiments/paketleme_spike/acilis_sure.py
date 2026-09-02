@@ -24,6 +24,7 @@ import json
 import socket
 import statistics
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -65,11 +66,33 @@ def tek_kosu(exe: Path, timeout: float = 120.0) -> float | None:
             time.sleep(0.02)
         return None
     finally:
+        _sureci_agacla_oldur(p)
+
+
+def _sureci_agacla_oldur(p: subprocess.Popen[bytes]) -> None:
+    """Süreci ÇOCUKLARIYLA birlikte öldürür.
+
+    `terminate()` yalnız doğrudan süreci öldürür. PyInstaller'ın **onefile**
+    bootloader'ı arşivi açtıktan sonra asıl Python sürecini AYRI bir çocuk
+    olarak koşturur; ebeveyni öldürmek çocuğu öksüz bırakıyordu. Gerçek
+    makinede ölçüldü (Faz 4): bu harness'ın 5 onefile koşusundan sonra beş
+    `fillercut-ui` süreci saatlerce ayakta kaldı, her biri kendi ephemeral
+    portunu tutuyordu. Uygulamanın kusuru DEĞİL — ölçüm harness'ının.
+    """
+    if p.poll() is not None:
+        return
+    if sys.platform == "win32":
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(p.pid)],
+            capture_output=True,
+            check=False,
+        )
+    else:  # pragma: no cover - ölçüm yalnız Windows'ta koşar
         p.terminate()
-        try:
-            p.wait(timeout=20)
-        except subprocess.TimeoutExpired:  # pragma: no cover - ölçüm kolaylığı
-            p.kill()
+    try:
+        p.wait(timeout=20)
+    except subprocess.TimeoutExpired:  # pragma: no cover - ölçüm kolaylığı
+        p.kill()
 
 
 def _artefakt_ozeti(kok: Path) -> tuple[int, int]:
