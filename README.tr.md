@@ -10,6 +10,16 @@ Video dosyasından konuşma analiziyle tamamlayıcı sözcükleri ("ııı", "ş
 
 ## Windows uygulaması (kurucu)
 
+**İndirme:** `Filler-Cut-Setup-<sürüm>.exe` dosyasını
+[Releases sayfasından](https://github.com/inanx12/Filler-Cut/releases/latest)
+alın.
+
+Derleme **imzasızdır**; Windows SmartScreen (ve açıksa Smart App Control)
+ilk çalıştırmada *"Windows bilgisayarınızı korudu"* diyerek engelleyebilir.
+**Ek bilgi → Yine de çalıştır** deyin. Smart App Control açıksa büsbütün
+reddedebilir — onu kapatmak sistem geneli bir karar olduğundan, alternatif
+kaynaktan çalıştırmaktır (bkz. Kurulum).
+
 `Filler-Cut-Setup-<sürüm>.exe` yönetici yetkisi istemeden
 `%LOCALAPPDATA%\Programs\Filler-Cut` altına kurar ve Başlat Menüsüne
 doğrudan arayüzü açan bir kısayol ekler. Kurucu Türkçe ve İngilizce konuşur,
@@ -25,8 +35,6 @@ iki ön koşulu da çözer:
 **Kaldırma indirdiğiniz modeli silmez.** Program klasörü kalkar ama
 `%LOCALAPPDATA%\fillercut` (whisper.cpp ikilisi + model, ~570 MB) ve
 ayarlarınız yerinde kalır; kaldırıcı silmeyi sorar, **varsayılan hayır**.
-
-Kurucu imzasızdır; SmartScreen ilk çalıştırmada uyarabilir.
 
 ```powershell
 .\scripts\build_setup.ps1        # exe build + kurucu -> dist_setup\

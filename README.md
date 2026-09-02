@@ -11,6 +11,15 @@ video files using speech analysis.
 
 ## Windows application (installer)
 
+**Download:** grab `Filler-Cut-Setup-<version>.exe` from the
+[Releases page](https://github.com/inanx12/Filler-Cut/releases/latest).
+
+The build is **unsigned**, so Windows SmartScreen (and Smart App Control, if
+you have it on) may block the first run with *"Windows protected your PC"*.
+Choose **More info → Run anyway**. If Smart App Control is enabled it can
+refuse outright — turning it off is a system-wide decision, so the
+alternative is running from source (see Install).
+
 `Filler-Cut-Setup-<version>.exe` installs per-user (no admin, no UAC) into
 `%LOCALAPPDATA%\Programs\Filler-Cut` and adds a Start Menu entry that opens
 the interface directly. The installer speaks Turkish and English, and resolves
@@ -26,8 +35,6 @@ both prerequisites:
 **Uninstalling keeps your downloaded model.** The program folder is removed,
 but `%LOCALAPPDATA%\fillercut` (whisper.cpp binary + model, ~570 MB) and your
 settings stay. The uninstaller asks whether to delete them — default **no**.
-
-The installer is unsigned, so SmartScreen may warn on first run.
 
 ```powershell
 .\scripts\build_setup.ps1        # exe build + installer -> dist_setup\

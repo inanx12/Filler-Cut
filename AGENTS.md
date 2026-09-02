@@ -94,7 +94,7 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
-## Mevcut Durum (2026-09-01)
+## Mevcut Durum (2026-09-02)
 
 **v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
 gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
@@ -645,6 +645,105 @@ yönlendirmesinde (ağ profili) ve bazı senkronizasyon istemcilerinde de çıka
 - Release asset'i olarak **hem kurucu hem taşınabilir zip** sunulacaksa,
   onefile varyantı `build_exe.ps1 -Onefile` ile aynı spec'ten çıkıyor.
 
+**v1.2 DAĞITIM EPIC'İ — FAZ 5 (release mekaniği) TAMAMLANDI (2026-09-02).**
+Sürüm **1.2.0**; tag ve push İnan'ın onayıyla atılır (bu faz push YAPMADI).
+
+**KRONİK YARA KAPANDI.** Eski akış: tag push'unda `vulkan-build.yml` koşarken
+Release'i **ELLE** açmak gerekiyordu; açılmazsa workflow Release'i whisper.cpp
+notlarıyla kendisi açıyor ve uygulamanın başlığını/notlarını **eziyordu**.
+Yeni akış: `release.yml` Release'i kendisi açar, başlık ve notlar
+`CHANGELOG.md`'den üretilir (`scripts/release_notlari.py`). **Manuel adım
+YOK.** Eski workflow SİLİNDİ — iki workflow aynı tag'e koşarsa Release için
+yarışırlar (kilidi `tests/test_release.py::test_eski_workflow_kaldirildi`).
+
+**TEK DOSYA, TEK JOB.** Job bölmemenin ikinci sebebi: tek job'da artefakt
+round-trip'i (`upload`/`download-artifact`) tamamen gereksizleşiyor, iki çıktı
+da aynı çalışma dizininde duruyor. Adımlar: checkout ×2 → Vulkan SDK →
+whisper-cli derleme + iki smoke → zip → Python + bağımlılıklar → Inno Setup
+kurulumu → sürümü etiketten türetme → `build_setup.ps1` → iki artifact →
+Release.
+
+**İDEMPOTENTLİK (tasarım kararı):** `gh release view` ile bakılır.
+*Release VARSA* → başlık ve notlar **KORUNUR**, yalnız asset'ler `--clobber`
+ile güncellenir (aynı tag'de ikinci koşu, ya da elle düzenlenmiş notlar
+ezilmez). *YOKSA* → CHANGELOG başlığı + `--notes-file` ile açılır. Etikette
+`-` varsa (`v1.2.0-rc.1`) `--prerelease --latest=false` — rc indirme
+sayfasında kararlı sürüm sanılmasın.
+
+**Doğrulanan sürümler (ezberden değil):** action'lar her birinin KENDİ
+`action.yml`'sindeki `runs.using` alanından (2026-09-02, hepsi node24):
+`actions/checkout@v7`, `actions/setup-python@v7`, `actions/upload-artifact@v7`.
+`gh` bayrakları kurulu **gh 2.98.0**'in kendi `--help` çıktısından
+(`--notes-file`, `--verify-tag`, `--prerelease`, `--latest`, `--clobber`).
+Runner'a kurulan **Inno Setup 6.7.3** pin'li ve hash doğrulamalı (WebView2
+deseni): `innosetup-6.7.3.exe`, sha256
+`9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732`, yerelde
+Authenticode `Valid / CN=Pyrsys B.V. (jrsoftware.org)` doğrulandı.
+
+**SÜRÜM TEK KAYNAKTAN:** `pyproject.toml` → `importlib.metadata` →
+`fillercut.__version__`. Exe version resource'u (spec) ve kurucu adı
+(`build_setup.ps1`) bunun türevidir. Tutarlılık kilidi
+`tests/test_release.py::TestSurumTutarliligi`: pyproject == kurulu metadata
+== CHANGELOG'un en üst sürüm başlığı; başlık ISO tarihli, link referansı
+mevcut, `[Unreleased]` kalmamış, sürüm `.iss`e gömülü değil.
+
+**`SayisalSurum` (ölçülen kısıt):** ISCC'nin `VersionInfoVersion` alanı
+SAYISAL olmak zorunda — `1.2.0-rc.1` kabul edilmez. Gösterim sürümü
+(`AppVersion`, kurucu adı) tam etiketi taşır, kaynak sürümü yalnız üçlüyü.
+Yerel provada doğrulandı: `Filler-Cut-Setup-1.2.0-rc.1.exe`, FileVersion
+`1.2.0`, ProductVersion `1.2.0-rc.1`.
+
+**BİLİNÇLİ SAPMA — rc'de uygulamanın kendi sürümü:** rc build'inde
+`fillercut --version` **1.2.0** basar (pyproject sürümü), kurucu ise
+`1.2.0-rc.1` taşır. Sebep: reponun invariant'ı "sürümün tek doğruluk kaynağı
+pyproject.toml"dur; rc için build zamanında pyproject'i ezmek ikinci bir
+kaynak yaratırdı. rc, o sürümün *kanalı*dır, farklı bir kod değil.
+
+**Tuzaklar (bir sonraki agent için):**
+- `release_notlari.py` stdout'a basarken `→` gibi süsler Windows-TR
+  konsolunda (cp1254) `UnicodeEncodeError` veriyordu — v0.3.3'ün CLI için
+  kapattığı sınıfın aynısı. `_konsolu_dayaniklilastir` şart; `--out` yolu
+  zaten UTF-8 dosyaya yazar (workflow onu kullanır).
+- PowerShell'de `-notmatch` de `$Matches`i doldurur ama buna GÜVENME:
+  `build_setup.ps1` açık `-match` ile yazıldı, okuyan yanılmasın.
+- Workflow'daki `gh release view` çıkış kodu okunurken `$ErrorActionPreference`
+  geçici olarak `Continue`ya çekilir — `Stop` altında "release yok" hâli
+  terminating hata olurdu (aynı sınıf ISCC/PyInstaller tuzağı).
+
+### v1.x MADDE 4 — DAĞITIM EPIC'İ KAPANDI (2026-09-02)
+
+Beş faz, tek cümlelik özetleri:
+
+| Faz | Çıktı | Kritik karar |
+|---|---|---|
+| 1 | native pencere (pywebview/WebView2), tarayıcı fallback, ephemeral port, tek instance | pywebview WebView2'yi bulamazsa **çökmez, sessizce MSHTML'e düşer** → ön-uçuş kontrolü şart |
+| 2 | ilk-çalıştırma sihirbazı: manifest + akışlı/resume'lu/SHA-256'lı indirme + `fillercut setup` | model kaynağı **Hugging Face** (ölçüldü); env var **toml'un altında** (bayat env var ölçülmüş bir sorun) |
+| 3 | iki exe (PyInstaller onedir), ikon + version resource, smoke testler | paketlenmiş varsayılan **whispercpp** (korpusta +1/+1, AMD'de 12× hız); **onedir** (onefile +1.54 sn/açılış) |
+| 4 | Inno kurucu: per-user, WebView2 bootstrapper, ffmpeg kontrolü, kaldırmada veri korunur | **ffmpeg pakete GİRMEZ** — kurucu kontrol + yönlendirme yapar |
+| 5 | tek tag-tetikli workflow, CHANGELOG'dan idempotent Release | manuel "Release'i önceden aç" adımı **öldü** |
+
+**Kalıcı kararlar (yeniden tartışılmadan önce buraya bak):**
+- **FFmpeg bundle YOK** — lisans grupları ayrı (LGPL/GPL derlemeye göre);
+  kullanıcının kendi kurulumu kullanılır, uygulama ve kurucu yönlendirir.
+- **Model/ikili kurucuya GİRMEZ** — sihirbazın işi; kurucunun internete
+  çıktığı tek yer WebView2 bootstrapper'ıdır.
+- **CUDA ikilisi YOK** — tek Vulkan win-x64 ikilisi AMD/Intel/NVIDIA'yı
+  sürüyor; CUDA yolu ileri kullanıcı için manuel.
+- **Kod imzalama YOK** — kabul edilmiş risk. SmartScreen ilk çalıştırmada
+  uyarır; README'de "Ek bilgi → Yine de çalıştır" notu var. **SignPath**
+  (OSS için ücretsiz imzalama) tek adayımız, ayrı düşük öncelikli iş.
+- **Taşınabilir onefile zip YOK** — gerçek kullanıcı talebi gelirse
+  `build_exe.ps1 -Onefile` bayrağı hazır.
+
+**Epic'in kazandırdığı üç genel tuzak (başka yerlerde de çıkar):**
+1. **MSIX/sanallaştırma `WinError 17` sınıfı** — "aynı dizin" aynı birim
+   demek DEĞİL; `os.replace` EXDEV verebilir (`kurulum/indir.py::_tasi`).
+2. **PyInstaller onefile bootloader çocuğu** — `terminate()` ebeveyni
+   öldürür, Python çocuğu öksüz kalır; süreç ağacı öldürülmeli.
+3. **PowerShell 5.1 ikilisi** — `.ps1` UTF-8 **BOM'suz** yazılırsa ANSI
+   sanılıp Türkçe karakterde parser patlar; `EAP='Stop'` altında native
+   komutun stderr'e yazması terminating hata olur.
+
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
 **v0.1**
@@ -768,8 +867,8 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pyproject.toml` 1.0.0 + kurulu metadata bayatlık alarmı (red-first doğrulandı) | `424fc2e` |
 | `app.js`: REVIEW aşaması ara durum olaylarında donuyordu (E2E bulgusu) | `70ef7a4` |
 
-**Test sayısı:** 1013 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 993'ü
+**Test sayısı:** 1039 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 1019'u
 marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp`, 1'i `ag` (gerçek ağ indirmesi), 5'i
 `exe` (PyInstaller artefaktı; yoksa skip gerekçesi "önce build_exe.ps1")
 marker'lı (gerçek ffmpeg / gerçek
@@ -827,9 +926,17 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `scripts/build_setup.ps1` — exe build + bootstrapper doğrulama + ISCC, tek komut | `f900003` |
 | `tests/test_kurucu.py` — `.iss` sözleşme kilitleri + WebView2 ölçüt uyumu (üçüncü kopya) | `709c694` |
 
-**Sıradaki:** dağıtım epic'i **Faz 5** (release mekaniği, CI entegrasyonu,
-sürüm bump) — Faz 1–4'ün devrettiği notlar yukarıdaki v1.1 ve v1.2
-kayıtlarında.
+**v1.2 Faz 5 (release mekaniği)**
+
+| Modül | Commit |
+|---|---|
+| `pyproject.toml` 1.2.0 + `CHANGELOG.md` `[1.2.0]` (UTC tarih) | `dc4bab2` |
+| `scripts/release_notlari.py` — CHANGELOG'dan başlık + notlar (rc → taban sürüm) | `11fc562` |
+| `.github/workflows/release.yml` (eski `vulkan-build.yml` silindi) + `.iss`/`build_setup.ps1` `SayisalSurum` | `f2df121` |
+| `tests/test_release.py` — sürüm tutarlılığı, notlar, workflow sözleşmesi | `11310dd` |
+
+**Sıradaki:** dağıtım epic'i (v1.x madde 4) KAPANDI. Kalan v1.x maddeleri
+ayrı işlerdir — madde 5 (PyPI) bu epic'in parçası DEĞİLDİR.
 
 Web katmanı bu taşınabilirlik kısıtıyla yazılmıştı — tek port, tek pencere
 varsayımı; tarayıcıya özgü API'lere bel bağlanmadı — ve Faz 1'de bu karşılığını
