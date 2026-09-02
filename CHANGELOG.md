@@ -9,13 +9,83 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
-**Arayüz kendi penceresinde açılıyor ve motoru kendisi indiriyor.**
+**Bağımsız Windows uygulaması: kendi penceresinde açılıyor, motorunu kendisi indiriyor.**
 
-Filler-Cut artık kendi masaüstü penceresinde açılıyor (Faz 1) ve ilk
-çalıştırmada whisper.cpp motorunu ve dil modelini sizin yerinize
-indiriyor (Faz 2). Elle indirme, zip açma, yol yazma yok.
+Filler-Cut artık Python kurmadan çalışan bir Windows uygulaması (Faz 3),
+kendi masaüstü penceresinde açılıyor (Faz 1) ve ilk çalıştırmada whisper.cpp
+motorunu ve dil modelini sizin yerinize indiriyor (Faz 2). Elle indirme, zip
+açma, yol yazma yok.
 
-CLI yine hiç değişmedi.
+pip ile kuranlar için CLI ve varsayılanlar hiç değişmedi.
+
+---
+
+### Eklendi — bağımsız Windows uygulaması (dağıtım epic'i Faz 3)
+
+Filler-Cut artık Python kurmadan çalışan iki exe olarak paketleniyor:
+`fillercut.exe` (komut satırı) ve `fillercut-ui.exe` (çift tıklayınca
+doğrudan arayüzü açan, konsolsuz sürüm). İkisi de tek klasörde durur;
+ikonu, sürüm bilgisi ve telif kaydı yerinde.
+
+Paketlenmiş uygulamada **varsayılan konuşma motoru whisper.cpp (Vulkan)**
+oldu. Yani ilk açılışta Faz 2'nin sihirbazı devreye girip motoru ve modeli
+indiriyor; ondan sonrası her makinede GPU hızlanmasıyla çalışıyor —
+AMD, Intel ve NVIDIA'da aynı ikili.
+
+**pip ile kuranlar için hiçbir şey değişmedi**: orada varsayılan hâlâ
+`faster-whisper`.
+
+- **`fillercut.exe`** — konsol CLI'ı, bugüne kadarki tüm komutlar aynı.
+- **`fillercut-ui.exe`** — konsolsuz; argüman gerekmez, doğrudan arayüzü
+  açar. (Faz 4'te Başlat Menüsü kısayolu buna basacak.)
+- **Tek komutla build**: `.\scripts\build_exe.ps1` — temiz dist, spec'ten
+  build, artefakt özeti ve smoke testler.
+- Uygulama ikonu (`packaging/fillercut.ico`) — web arayüzünün işaretiyle
+  aynı, üretici script'i repoda.
+
+### Ölçüldü
+
+**Varsayılan backend** (kill criteria: wcpp net +1'den fazla ekstra filler
+kaçırırsa varsayılan değişmez):
+
+| | fw | whispercpp |
+|---|---|---|
+| GT yakalama, normal mod | 0/4 | **1/4** |
+| GT yakalama, agresif mod | 5/8 | **6/8** |
+| yanlış pozitif (16 koşu) | 0 | 0 |
+| tier ihlali (16 koşu) | 0 | 0 |
+| transkripsiyon toplam (4 klip) | 53.59 sn | **4.24 sn** |
+
+wcpp daha az kaçırıyor ve bu makinede 12× hızlı. **Ölçümün sınırı:** bu
+makine AMD; faster-whisper'ın CUDA yolu olmadığı için CPU'da koştu. NVIDIA
+için repo'nun kendi kaydı (KI-1, RTX 4050) iki backend arasında **hız
+beraberliği** gösteriyor — yani orada gerileme değil, berabere.
+
+**onedir vs onefile** (5'er koşu, soğuk başlangıç → sunucu hazır):
+
+| | onedir | onefile |
+|---|---|---|
+| medyan açılış | **0.517 sn** | 2.058 sn |
+| boyut | 277 MB | 206 MB |
+| dosya | 312 | 2 |
+| Windows Defender | temiz | temiz |
+
+Delta +1.54 sn, eşik +3 sn — yani **kill criteria onedir'i zorlamadı**;
+karar trade-off'a dayanıyor: o 1.5 saniye her açılışta ödeniyor (onefile
+arşivi her koşuda %TEMP%'e açıyor) ve "tek dosya" avantajı Faz 4'teki
+kurucuyla zaten kayboluyor. Onefile varyantı `FILLERCUT_ONEFILE=1` ile
+aynı spec'ten üretilebilir.
+
+### Bilinen sınırlar
+
+- **ffmpeg pakete girmez** (kilitli karar): sistem bağımlılığı olarak kalır.
+  Yoksa uygulama stack trace değil tek satır Türkçe hata + kurulum bağlantısı
+  verir; paketlenmiş exe'de de doğrulandı (çıkış kodu 1).
+- **Kod imzalama yok** — exe imzasız dağıtılıyor; SmartScreen ilk açılışta
+  uyarabilir. UPX de bu yüzden kapalı (AV yanlış-pozitif riski).
+- **CUDA ikilisi pakete girmez**: sihirbaz Vulkan indirir, CUDA yolu ileri
+  kullanıcı için manuel kalır.
+- Paketleme yalnız Windows x64 için ölçüldü.
 
 ---
 

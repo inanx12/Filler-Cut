@@ -9,6 +9,28 @@ video files using speech analysis.
 > v0.1 — see [DESIGN.md](DESIGN.md) for the architecture.
 > Türkçe: [README.tr.md](README.tr.md)
 
+## Windows application (packaged)
+
+Prefer not to install Python? `scripts/build_exe.ps1` produces a standalone
+folder with two executables:
+
+| exe | what |
+|---|---|
+| `fillercut.exe` | the console CLI — every command documented below |
+| `fillercut-ui.exe` | no console; opens the interface directly |
+
+The packaged build defaults to the **whisper.cpp (Vulkan)** backend, so the
+first launch runs the setup wizard and then uses GPU acceleration on AMD,
+Intel and NVIDIA alike. **`pip install` users are unaffected — there the
+default is still `faster-whisper`.**
+
+ffmpeg is *not* bundled; it stays a system dependency (see Requirements).
+The executables are unsigned, so SmartScreen may warn on first launch.
+
+```powershell
+.\scripts\build_exe.ps1        # clean build + smoke tests -> dist\fillercut
+```
+
 ## Requirements
 
 - Python ≥ 3.10

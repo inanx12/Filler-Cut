@@ -8,6 +8,28 @@ Video dosyasından konuşma analiziyle tamamlayıcı sözcükleri ("ııı", "ş
 
 > v0.1 — mimari için [DESIGN.md](DESIGN.md).
 
+## Windows uygulaması (paketlenmiş)
+
+Python kurmak istemiyorsanız: `scripts/build_exe.ps1` tek klasörde iki
+çalıştırılabilir üretir.
+
+| exe | ne yapar |
+|---|---|
+| `fillercut.exe` | konsol CLI'ı — aşağıdaki tüm komutlar |
+| `fillercut-ui.exe` | konsolsuz; doğrudan arayüzü açar |
+
+Paketlenmiş sürümde varsayılan motor **whisper.cpp (Vulkan)**'dır: ilk
+açılışta kurulum sihirbazı çalışır, sonrasında AMD, Intel ve NVIDIA'da aynı
+ikiliyle GPU hızlanması kullanılır. **pip ile kuranlar etkilenmez — orada
+varsayılan hâlâ `faster-whisper`.**
+
+ffmpeg pakete *girmez*, sistem bağımlılığı olarak kalır (bkz. Gereksinimler).
+Çalıştırılabilirler imzasızdır; SmartScreen ilk açılışta uyarabilir.
+
+```powershell
+.\scripts\build_exe.ps1        # temiz build + smoke test -> dist\fillercut
+```
+
 ## Gereksinimler
 
 - Python ≥ 3.10

@@ -436,6 +436,112 @@ sihirbazın indirdiği ikili+model, elle kurulanla fonksiyonel olarak aynı.
   kurucunun işi — bu faz ffmpeg'e DOKUNMADI.
 - Sürüm bump YAPILMADI (v1.1.0 duruyor); Faz 2 bir release değil.
 
+**v1.2 DAĞITIM EPIC'İ — FAZ 3 (PyInstaller paketleme) TAMAMLANDI
+(2026-09-02, tag YOK).** İki exe, tek klasör: `fillercut.exe` (konsol CLI) ve
+`fillercut-ui.exe` (konsolsuz, `ui`yi argv'ye enjekte eder). Tek komutla
+build: `scripts/build_exe.ps1`. 6 pipeline aşamasına, review işlevlerine ve
+plan/detect mantığına DOKUNULMADI.
+
+**MANŞET KARAR — paketlenmiş exe'de varsayılan backend `whispercpp`.** Faz
+2'den devredilen soru buydu: varsayılan fw kalsaydı Faz 2'nin sihirbazı son
+kullanıcı için ölü kod olurdu (fw kendi modelini kendisi indirir).
+
+Doğruluk (korpus × GT, `experiments/filler_leak/baseline.py`, 16 koşu):
+
+| | fw | wcpp |
+|---|---|---|
+| default mod yakalama | 0/4 | **1/4** |
+| aggressive mod yakalama | 5/8 | **6/8** |
+| yanlış pozitif | 0 | 0 |
+| tier (mod) ihlali | 0 | 0 |
+
+Hız (`experiments/paketleme_spike/backend_sure.py`, klip başına 3 koşu
+medyan, cache YOK): toplam **fw 53.59 sn vs wcpp 4.24 sn** (%92.1 hızlı).
+Kill criteria "wcpp net +1'den fazla ekstra kaçırırsa" TERSİNE döndü; hız
+eşiği (%15) fazlasıyla geçildi.
+
+**Ölçümün sınırı — fazla genelleme yapma:** bu makine AMD'dir, CTranslate2
+"float16 desteklenmiyor" deyip fw'i **CPU'ya düşürdü**; wcpp Vulkan ile
+GPU'daydı. 12× fark AMD gerçeğidir. NVIDIA için reponun kendi kaydı: KI-1'in
+RTX 4050 koşusunda fw ile wcpp/Vulkan **hız beraberliği**. Yani NVIDIA'da
+gerileme değil berabere, AMD/Intel'de büyük kazanç — karar bu asimetriye
+dayanıyor. Klip düzeyinde doğruluk takası da var (Test2 wcpp, Test3-aggressive
+fw) ve korpus dar (8 damga).
+
+**MEKANİZMA — pip varsayılanı DEĞİŞMEZ (kilit testte).**
+`config.paketlenmis_mi()` İKİ işareti birden arar (`sys.frozen` **ve**
+`sys._MEIPASS`); `AsrConfig.backend` sabit default yerine
+`field(default_factory=varsayilan_backend)`. Ayrı bir build-time yapılandırma
+dosyası SEÇİLMEDİ: senkron tutulacak ikinci bir kaynak doğar, bundle'a
+kopyalanmayı unutmak sessiz davranış farkı üretirdi. Paketlenmiş kullanıcı
+`filler-cut.toml` ile fw'a dönebilir (fw bundle'da duruyor).
+
+**onedir vs onefile — onedir** (`experiments/paketleme_spike/onedir_onefile.md`):
+onedir medyan **0.517 sn** / 277 MB / 312 dosya; onefile **2.058 sn** / 206 MB
+/ 2 dosya; delta **+1.541 sn**. Defender (gerçek zamanlı koruma açık) İKİ
+artefaktı da temiz buldu. **Kill criteria onedir'i ZORLAMADI** (+1.54 sn <
++3 sn eşiği, Defender farkı yok) — karar trade-off'a dayanan bir ÖNERİDİR:
+o 1.5 saniye HER açılışta ödenir (onefile arşivi her koşuda %TEMP%'e 206 MB
+açar) ve "tek dosya" avantajı Faz 4'te kaybolur, Inno zaten klasör kuracak.
+`FILLERCUT_ONEFILE=1` ile aynı spec'ten onefile üretilebilir.
+
+**BUNDLE İÇERİĞİ — hiçbiri tahminle değil, build → çalıştır → hata
+döngüsüyle** (gerekçeler spec'te yorumda): `web/static` + `assets/manifest.json`
+(ikisi de `__file__` göreli çözülür); `copy_metadata("fillercut")` — ÖLÇÜLDÜ,
+kopyalanmayınca `--version` `0.0.0+notinstalled` basıyordu;
+`collect_submodules("uvicorn")` (protokol sınıfları STRING adla import edilir);
+`webview.platforms.winforms/edgechromium` + `clr_loader` (pywebview backend'i
+runtime'da seçer — Faz 1'de ölçülen tembel import);
+`collect_data_files(faster_whisper, ctranslate2)`.
+
+**UPX KAPALI** (imzasız dağıtım + AV yanlış-pozitif riski) ve exe version
+resource'u dolu; sürüm TEK KAYNAKTAN (`fillercut.__version__`) üretilir —
+spec'e elle yazılsaydı bump'ta bayatlardı (v0.3.1'in kök sebebi).
+PyInstaller **6.22.2 PIN'li** (dev extra): aynı spec farklı sürümde farklı
+bundle üretir.
+
+**ffmpeg pakete GİRMEZ** (kilitli karar). Yokluğunda davranış paketlenmiş
+exe'de de doğrulandı: stack trace yok, tek satır Türkçe hata + kurulum
+bağlantısı, **çıkış kodu 1**. Kilit zaten vardı (`tests/test_pipeline.py`,
+`ffmpeg.org/download` içeren üç hata satırı).
+
+**GERÇEK DONANIM DOĞRULAMASI:** artefakt repo DIŞINA kopyalandı
+(`Desktop/Filler-Cut-Dagitim`), temiz profille (env var yok,
+`%LOCALAPPDATA%`/`%APPDATA%` yönlendirilmiş) `fillercut-ui.exe` açıldı →
+native pencere + **sihirbaz ekranı** çıktı → indirme (23 MB ikili + 547 MB
+model) tamamlandı, `.part` kalmadı → paketlenmiş `fillercut.exe Test1.mp4
+--yes` koştu → çıktı **PARİTE REFERANSIYLA BİREBİR AYNI**:
+`F5185E7E…9004` (%21.67 kazanım, h264_amf). Doğrulama sonrası kopya silindi.
+
+**Tuzaklar (bir sonraki agent için):**
+- `scripts/build_exe.ps1` **UTF-8 BOM ile** yazılmalı: PowerShell 5.1
+  BOM'suz `.ps1`i ANSI sanıyor, Türkçe karakter bozuluyor ve parser
+  patlıyor (ölçüldü — em-dash `â€"` oldu).
+- PS 5.1'de `$ErrorActionPreference='Stop'` iken **native komutun STDERR'e
+  yazması terminating hata üretir**; PyInstaller ilerlemesini stderr'e
+  bastığı için build ilk satırda "hata" sayılıyordu. `Invoke-Yerel`
+  sarmalayıcısı native çağrıyı `EAP='Continue'` altında koşturur ve başarıyı
+  yalnız çıkış kodundan okur.
+- Smoke test assertion'ları **ASCII olmalı**: exe konsola locale
+  encoding'iyle yazar (v0.3.3 kararı), Windows-TR'de `İ` `?`e düşer.
+  "EKSİK" arayan ilk hâli gerçek koşuda kırmızı verdi.
+- `dist/` **temizlenmeden** build etme: spec'ten düşen bir veri dosyası eski
+  bundle'da durmaya devam eder ve hata ancak kullanıcıda çıkar. Script
+  `--clean` + dizin silme yapar.
+
+**Faz 4/5'e devredilenler:**
+- **Inno Setup:** `dist/fillercut` klasörünü kurar; kısayol
+  `fillercut-ui.exe`ye basmalı. WebView2 Evergreen Bootstrapper (Faz 1
+  girdisi) ve **ffmpeg kontrolü** hâlâ kurucunun işi. `%LOCALAPPDATA%\fillercut`
+  kurulumdan bağımsız yaşamalı (Faz 2 notu: modeli silmek 547 MB'ı yeniden
+  indirtir). Lisans ekranı için `LICENSE` repoda.
+- **Kod imzalama YOK** (kabul edilmiş risk): SmartScreen ilk açılışta
+  uyarabilir; SignPath araştırması ayrı iş.
+- **Release mekaniği (Faz 5):** `.github/workflows` bu fazda DEĞİŞMEDİ;
+  build hâlâ yerel. Artefakt release'e asılacaksa workflow'a `build_exe.ps1`
+  adımı eklenecek.
+- Sürüm bump YAPILMADI (v1.1.0 duruyor) — epic sonunda tek sürüm.
+
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
 **v0.1**
@@ -559,12 +665,15 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pyproject.toml` 1.0.0 + kurulu metadata bayatlık alarmı (red-first doğrulandı) | `424fc2e` |
 | `app.js`: REVIEW aşaması ara durum olaylarında donuyordu (E2E bulgusu) | `70ef7a4` |
 
-**Test sayısı:** 947 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 932'si
-marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp`, 1'i `ag` (gerçek ağ indirmesi) marker'lı (gerçek ffmpeg / gerçek
+**Test sayısı:** 970 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 950'si
+marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp`, 1'i `ag` (gerçek ağ indirmesi), 5'i
+`exe` (PyInstaller artefaktı; yoksa skip gerekçesi "önce build_exe.ps1")
+marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
-atlar (`ag` için de: `-m 'not ag'`), donanım/model/ağ yoksa ilgili testler
+atlar (`ag` ve `exe` için de: `-m 'not ag and not exe'`),
+donanım/model/ağ/artefakt yoksa ilgili testler
 kendi kendine skip eder. `ag` marker'lı tek test yalnız 23 MB'lık binary'yi
 indirir — manifest hash'inin CANLI kaynakla uyumunu doğrular; modeller
 (0.5–1 GB) test içinde İNDİRİLMEZ. Web testleri
@@ -596,9 +705,18 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `cli.py`: `fillercut setup` (`--model`, `--yes`, `--durum`) + `_onay` Türkçe istemi + argv dispatch | `31cdce0` |
 | `web/kurulum.py` (durum makinesi + 3 route) + `web/app.py` wiring + `web/jobs.py` 409 kilidi + sihirbaz ekranı (`index.html`/`app.js`/`style.css`) | `bc22e96` |
 
-**Sıradaki:** dağıtım epic'i **Faz 3+** (PyInstaller paketleme / Inno Setup /
-release mekaniği) — Faz 1 ve Faz 2'nin devrettiği notlar yukarıdaki v1.1 ve
-v1.2 kayıtlarında.
+**v1.2 Faz 3 (PyInstaller paketleme)**
+
+| Modül | Commit |
+|---|---|
+| `config.py`: `paketlenmis_mi()` + `varsayilan_backend()` — paketlenmiş exe'de whispercpp, pip'te faster-whisper + backend spike'ı (`experiments/paketleme_spike/backend_sure.py`) | `3b6086a` |
+| `packaging/`: `fillercut.spec` (iki exe, onedir, UPX kapalı, version resource, bundle datas/hiddenimports), `entry_cli.py`/`entry_ui.py`, `ikon_uret.py` + `fillercut.ico`; PyInstaller 6.22.2 pin + `exe` marker'ı + onedir/onefile ölçümü | `bccc959` |
+| `scripts/build_exe.ps1` — temiz build + artefakt özeti + smoke test çağrısı (`Invoke-Yerel` native sarmalayıcısı) | `053d117` |
+| `tests/test_paketleme.py` — frozen yol çözümlemesi, spec sözleşmesi, `exe` marker'lı smoke testler | `3700299` |
+
+**Sıradaki:** dağıtım epic'i **Faz 4+** (Inno Setup kurucusu / release
+mekaniği) — Faz 1–3'ün devrettiği notlar yukarıdaki v1.1 ve v1.2
+kayıtlarında.
 
 Web katmanı bu taşınabilirlik kısıtıyla yazılmıştı — tek port, tek pencere
 varsayımı; tarayıcıya özgü API'lere bel bağlanmadı — ve Faz 1'de bu karşılığını
