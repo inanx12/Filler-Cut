@@ -351,3 +351,63 @@ class TestGercekKaynak:
         assert exe.is_file() and exe.stat().st_size > 0
         # DLL'ler exe'nin yanında olmalı (düz arşiv sözleşmesi).
         assert list(tmp_path.glob("*.dll"))
+
+
+class TestFarkliBirimeTasima:
+    """`.part` -> nihai ad taşıması AYNI dizinde bile cihaz sınırı geçebilir.
+
+    Gerçek makinede ölçüldü (Faz 4 kurucu doğrulaması): paketlenmiş
+    (MSIX/AppContainer) bir süreçte Windows dosya sistemi sanallaştırması
+    `%LOCALAPPDATA%\fillercut`i başka bir SÜRÜCÜYE yönlendiriyordu
+    (`E:\WpSystem\...`). `os.replace` orada `errno EXDEV` / `WinError 17`
+    veriyor ve indirme, dosya tamamen inip hash'i DOĞRULANDIKTAN sonra
+    patlıyordu. Aynı sınıf klasör yönlendirmesi (ağ profili) ve bazı
+    senkronizasyon istemcilerinde de görülebilir.
+    """
+
+    def test_exdevde_kopyalayarak_tamamlar(
+        self, sunucu: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import errno
+        import os as os_mod
+
+        gercek = os_mod.replace
+
+        def _exdev(src: object, dst: object) -> None:
+            raise OSError(errno.EXDEV, "Sistem dosyayi farkli bir surucuye tasiyamiyor")
+
+        monkeypatch.setattr(os_mod, "replace", _exdev)
+        yol = indir_mod.indir(_varlik(sunucu), tmp_path)
+        assert yol.read_bytes() == GOVDE
+        assert list(tmp_path.glob("*.part")) == []
+        monkeypatch.setattr(os_mod, "replace", gercek)
+
+    def test_exdevde_hedef_varsa_uzerine_yazar(
+        self, sunucu: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`shutil.move` var olan hedefte patlar — fallback bunu ele almalı."""
+        import errno
+        import os as os_mod
+
+        (tmp_path / "dosya.bin").write_bytes(b"eski bozuk icerik")
+
+        def _exdev(src: object, dst: object) -> None:
+            raise OSError(errno.EXDEV, "farkli surucu")
+
+        monkeypatch.setattr(os_mod, "replace", _exdev)
+        yol = indir_mod.indir(_varlik(sunucu), tmp_path)
+        assert yol.read_bytes() == GOVDE
+
+    def test_exdev_disi_oserror_yutulmaz(
+        self, sunucu: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """İzin hatası gibi GERÇEK sorunlar sessizce kopyalamaya kaçmamalı."""
+        import errno
+        import os as os_mod
+
+        def _erisim(src: object, dst: object) -> None:
+            raise OSError(errno.EACCES, "erisim reddedildi")
+
+        monkeypatch.setattr(os_mod, "replace", _erisim)
+        with pytest.raises(OSError):
+            indir_mod.indir(_varlik(sunucu), tmp_path)

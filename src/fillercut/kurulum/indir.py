@@ -22,6 +22,7 @@ bağımlılık listesini büyütürdü; ihtiyacımız olan Range + akış zaten 
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import shutil
@@ -136,6 +137,34 @@ def _disk_kontrol(hedef_dizin: Path, gereken: int) -> None:
             f"disk alanı yetersiz: {gereken / 1e6:.0f} MB gerekiyor, "
             f"{bos / 1e6:.0f} MB boş — yer açıp yeniden deneyin"
         )
+
+
+def _tasi(kaynak: Path, hedef: Path) -> None:
+    r"""`.part`i nihai adına taşır; cihaz sınırında kopyalamaya düşer.
+
+    `os.replace` **atomiktir ve tercih edilendir**, ama yalnız aynı birim
+    içinde çalışır. Aynı DİZİNDE olmak bunu garanti etmez: gerçek makinede
+    ölçüldü (Faz 4) — paketlenmiş (MSIX/AppContainer) bir süreçte Windows
+    dosya sistemi sanallaştırması `%LOCALAPPDATA%\fillercut`i başka bir
+    SÜRÜCÜYE yönlendiriyor (`E:\WpSystem\...`) ve `os.replace`
+    `errno EXDEV` / `WinError 17` veriyordu. Dosya tamamen inip hash'i
+    doğrulandıktan SONRA patlıyordu — en pahalı anda. Aynı sınıf klasör
+    yönlendirmesinde (ağ profili) ve bazı senkronizasyon istemcilerinde de
+    görülebilir.
+
+    Yalnız `EXDEV` yakalanır: izin hatası gibi GERÇEK sorunlar sessizce
+    kopyalamaya kaçmamalı, yukarı gitmeli.
+    """
+    try:
+        os.replace(kaynak, hedef)
+        return
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+    # `shutil.move` var olan hedefte patlar; bozuk bir eski dosya duruyor
+    # olabilir (hash uyuşmazlığı sonrası yeniden indirme yolu).
+    hedef.unlink(missing_ok=True)
+    shutil.move(str(kaynak), str(hedef))
 
 
 def _iptal_kontrol(iptal: threading.Event | None) -> None:
@@ -272,7 +301,7 @@ def indir(
             "dosya silindi, yeniden deneyin"
         )
 
-    os.replace(part, hedef)
+    _tasi(part, hedef)
 
     if varlik.arsiv == "zip" and varlik.calistirilabilir:
         try:
