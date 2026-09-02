@@ -7,7 +7,7 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
-## [Unreleased]
+## [1.2.0] — 2026-09-02
 
 **Kurulan bir Windows uygulaması: kurucusu var, kendi penceresinde açılıyor, motorunu kendisi indiriyor.**
 
@@ -285,6 +285,8 @@ sınırlar: `experiments/pywebview_spike/README.md`.
 - Native pencere yalnız **Windows**'ta denenir; diğer platformlarda tespit
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
+
+[1.2.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.0
 
 ## [1.1.0] — 2026-09-01
 
