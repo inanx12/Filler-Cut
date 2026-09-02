@@ -542,6 +542,109 @@ model) tamamlandı, `.part` kalmadı → paketlenmiş `fillercut.exe Test1.mp4
   adımı eklenecek.
 - Sürüm bump YAPILMADI (v1.1.0 duruyor) — epic sonunda tek sürüm.
 
+**v1.2 DAĞITIM EPIC'İ — FAZ 4 (Inno Setup kurucusu) TAMAMLANDI
+(2026-09-02, tag YOK).** `dist\fillercut` onedir klasörünü kuran, ön koşulları
+çözen kurucu: `dist_setup\Filler-Cut-Setup-1.1.0.exe` (**82,3 MB**, 264 MB
+dist'ten lzma2/max ile). Tek komut: `scripts/build_setup.ps1`. 6 pipeline
+aşamasına, review işlevlerine ve plan/detect mantığına DOKUNULMADI.
+
+**ISCC bu makineye KURULDU** — `winget install JRSoftware.InnoSetup --scope user`,
+Inno Setup **6.7.3**, `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`. Build
+script'i yolu ezberden yazmaz: `-Iscc` → `FILLERCUT_ISCC` → bilinen konumlar.
+
+**Kurucu kararları ve gerekçeleri:**
+- **Per-user** (`{localappdata}\Programs\Filler-Cut`, `PrivilegesRequired=lowest`):
+  exe'ler imzasız; admin istemek SmartScreen uyarısının üstüne bir de UAC
+  koyardı.
+- **AppId sabit GUID `7E588CAC-CFA7-42FB-B0AB-A4C9B51488A8`** — upgrade
+  Inno'nun kendi mekanizmasıyla bu GUID üzerinden yürür. **DEĞİŞTİRME:**
+  değişirse eski sürüm kaldırılmaz, yan yana iki kayıt olur.
+- Sürüm ve dist dizini ISCC'ye `/D` ile girer (bump Faz 5'in işi).
+- Türkçe + İngilizce; Başlat Menüsü kısayolu **konsolsuz** `fillercut-ui.exe`ye
+  basar; **masaüstü kısayolu varsayılan KAPALI** (Windows 11'de birincil yüzey
+  Başlat/arama; masaüstünü doldurmak yaygın şikâyet — isteyen kutuyu işaretler).
+
+**WEBVIEW2 BOOTSTRAPPER:** kayıt `packaging/webview2.json` —
+`https://go.microsoft.com/fwlink/p/?LinkId=2124703`, **1.783.000 bayt**,
+sha256 `17debf797a6c737959bc588236e897936ffac1af5f7e515e674ab32f9edfe719`,
+FileVersion 1.3.265.7, **Authenticode `Valid` / `CN=Microsoft Corporation`**
+(`Get-AuthenticodeSignature` ile doğrulandı). Binary repoya GİRMEZ:
+`packaging/webview2_indir.py` build sırasında indirip hash'i kayıtla
+karşılaştırır ve **tutmazsa build DURUR** — doğrulanmamış bir üçüncü taraf
+ikilisi kurucuya gömülmez. Microsoft yeniden dağıtıma açıkça izin veriyor
+("Or, download the bootstrapper and package it with your WebView2 app").
+Sessiz kurulum argümanları `/silent /install` **Microsoft'un kendi
+dokümanından** doğrulandı (stub `/?` ile kendini anlatmıyor, string taraması
+da sonuç vermedi).
+
+**ffmpeg:** kurulum SONUNDA `ffmpeg -version` denenir; yoksa bitiş sayfasında
+bilgilendirme. winget VARSA `winget install ffmpeg`, YOKSA yalnız elle kurulum
+bağlantısı (çalışmayacak bir komut önermek kullanıcıyı ikinci hataya sürükler).
+Kurulumu ENGELLEMEZ — uygulama zaten temiz Türkçe hata veriyor (Faz 3).
+
+**KALDIRMA (kritik söz):** kurulum dizini tamamen silinir;
+`%LOCALAPPDATA%\fillercut` ve `%APPDATA%\fillercut` KORUNUR. Kaldırıcı
+"silinsin mi?" diye sorar, **varsayılan HAYIR** (`MB_DEFBUTTON2`, sessiz kipte
+`IDNO`) — 570 MB'ı kazara sildirmek kabul edilemez.
+
+**GERÇEK DONANIM DOĞRULAMASI (uçtan uca):** kurucu koştu → program dizini
+`%LOCALAPPDATA%\Programs\Filler-Cut` (316 dosya, 268 MB), Başlat Menüsü
+kısayolu `fillercut-ui.exe`ye bakıyor, masaüstü kısayolu YOK (varsayılan
+kapalı) → kısayoldan açıldı, native pencere geldi, `/api/instance` cevap
+verdi → kaldırıldı: **(a)** program dizini yok, **(b)** `%LOCALAPPDATA%\fillercut`
+(bin + model) ve `%APPDATA%\fillercut\config.json` YERİNDE, **(c)** "silinsin
+mi?" diyaloğu çıktı (pencere yakalandı: "Kaldırma yardımcısı") ve varsayılanı
+(Hayır) seçildiğinde veri korundu. Registry Uninstall kaydı temiz, AppId
+anahtarı yok, PATH izi yok.
+
+**WebView2 İKİ DALI DA ÖLÇÜLDÜ:**
+- *Var* dalı: gerçek kurulumda bootstrapper log'da HİÇ anılmadı — `Check:
+  WebView2Eksik` False, dosya `{tmp}`ye ayıklanmadı bile.
+- *Yok* dalı: sistem registry'sine DOKUNULMADAN ölçüldü — `.iss`in geçici
+  kopyasında `WebView2Eksik` zorla `True` yapıldı, `Webview2Setup` zararsız
+  bir stub'a (`reg.exe` kopyası) yönlendirildi, ayrı AppId ile derlenip
+  kuruldu. Log: `-- File entry --` ile `{tmp}`ye ayıklandı, `-- Run entry --`
+  ile `Parameters: /silent /install` koştu, `Process exit code: 1` —
+  **ve kurulum yine de tamamlandı** (abort yok). Test kurulumu sonra
+  kaldırıldı.
+
+**BU FAZDA BULUNAN VE DÜZELTİLEN GERÇEK KUSUR (`fix` commit'i):** indirme,
+dosya tamamen inip SHA-256'sı doğrulandıktan SONRA `os.replace` ile
+patlıyordu — `WinError 17` (EXDEV), kaynak ve hedef AYNI dizinde olmasına
+rağmen. Kök neden: paketlenmiş (MSIX/AppContainer) süreçte Windows dosya
+sistemi sanallaştırması `%LOCALAPPDATA%\fillercut`i **başka bir sürücüye**
+yönlendiriyor (`os.path.realpath` → `E:\WpSystem\...`). `kurulum/indir.py`
+artık yalnız EXDEV'de `shutil.move`a düşüyor; EXDEV dışı `OSError`lar
+yutulmuyor. **"Aynı dizin" aynı birim demek DEĞİL** — aynı sınıf klasör
+yönlendirmesinde (ağ profili) ve bazı senkronizasyon istemcilerinde de çıkar.
+
+**Tuzaklar (bir sonraki agent için):**
+- **ISPP satır başındaki `#`i direktif sanar — Pascal yorumunun İÇİNDE bile**
+  ("Unknown preprocessor directive", gerçek derlemede patladı). `[Code]`
+  bölümünde hiçbir satır `#` ile başlamamalı; `#13#10` satır sonuna yazılır.
+  Kilidi `tests/test_kurucu.py::test_ispp_direktif_tuzagi_yok`de.
+- Inno girdileri ters bölü ile satıra bölünür; `.iss`te **ham satırlarda
+  arama yapmak** `Check:`/`Flags:` parametrelerini kaçırır (kilit testi ilk
+  hâlinde buna takıldı) — `mantiksal_satirlar` devamları birleştirir.
+- ISCC de PyInstaller gibi **stderr'e yazar**: PS 5.1'de `EAP='Stop'` altında
+  bu terminating hata olur. `Invoke-Yerel` sarmalayıcısı şart.
+- **MSYS/git-bash `/D...` argümanlarını yola çevirir** — ISCC'yi bash'ten
+  çağırmak "You may not specify more than one script filename" verir.
+  Kurucu derlemesi PowerShell'den koşulur.
+- `packaging/` dizini PyPI'deki `packaging` paketiyle aynı adı taşır;
+  testler `webview2_indir`i **yoldan** yükler (`spec_from_file_location`).
+
+**Faz 5'e devredilenler:**
+- **Sürüm bump + tag + release** (bu fazda YAPILMADI; `pyproject` hâlâ 1.1.0).
+  Kurucu adı sürümden türüyor, `build_setup.ps1 -Surum` ile geçilir.
+- **CI entegrasyonu:** `.github/workflows` bu fazda DEĞİŞMEDİ. Build hâlâ
+  yerel; `build_setup.ps1` CI'da koşabilecek kadar parametrik ama ISCC'nin
+  runner'a kurulması gerekir (`winget` ya da chocolatey).
+- **Kod imzalama YOK** (kabul edilmiş risk): kurucu ve exe'ler imzasız,
+  SmartScreen ilk çalıştırmada uyarır. SignPath araştırması ayrı iş.
+- Release asset'i olarak **hem kurucu hem taşınabilir zip** sunulacaksa,
+  onefile varyantı `build_exe.ps1 -Onefile` ile aynı spec'ten çıkıyor.
+
 Tamamlanan modüller (hepsi `main` dalında, testli):
 
 **v0.1**
@@ -665,8 +768,8 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pyproject.toml` 1.0.0 + kurulu metadata bayatlık alarmı (red-first doğrulandı) | `424fc2e` |
 | `app.js`: REVIEW aşaması ara durum olaylarında donuyordu (E2E bulgusu) | `70ef7a4` |
 
-**Test sayısı:** 970 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 950'si
+**Test sayısı:** 1013 collected (passed/skipped dağılımı donanıma bağlıdır:
+encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 993'ü
 marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp`, 1'i `ag` (gerçek ağ indirmesi), 5'i
 `exe` (PyInstaller artefaktı; yoksa skip gerekçesi "önce build_exe.ps1")
 marker'lı (gerçek ffmpeg / gerçek
@@ -714,8 +817,18 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `scripts/build_exe.ps1` — temiz build + artefakt özeti + smoke test çağrısı (`Invoke-Yerel` native sarmalayıcısı) | `053d117` |
 | `tests/test_paketleme.py` — frozen yol çözümlemesi, spec sözleşmesi, `exe` marker'lı smoke testler | `3700299` |
 
-**Sıradaki:** dağıtım epic'i **Faz 4+** (Inno Setup kurucusu / release
-mekaniği) — Faz 1–3'ün devrettiği notlar yukarıdaki v1.1 ve v1.2
+**v1.2 Faz 4 (Inno Setup kurucusu)**
+
+| Modül | Commit |
+|---|---|
+| `kurulum/indir.py`: `_tasi()` — `.part` taşıması EXDEV'de kopyalamaya düşer (Faz 4 doğrulamasında bulunan gerçek kusur) | `e539fe3` |
+| `experiments/paketleme_spike/acilis_sure.py`: harness süreç ağacını öldürür (onefile bootloader çocuğu öksüz kalıyordu) | `4165c5f` |
+| `packaging/fillercut.iss` + `THIRD_PARTY_NOTICES.md` + `webview2.json` + `webview2_indir.py` | `2e37389` |
+| `scripts/build_setup.ps1` — exe build + bootstrapper doğrulama + ISCC, tek komut | `f900003` |
+| `tests/test_kurucu.py` — `.iss` sözleşme kilitleri + WebView2 ölçüt uyumu (üçüncü kopya) | `709c694` |
+
+**Sıradaki:** dağıtım epic'i **Faz 5** (release mekaniği, CI entegrasyonu,
+sürüm bump) — Faz 1–4'ün devrettiği notlar yukarıdaki v1.1 ve v1.2
 kayıtlarında.
 
 Web katmanı bu taşınabilirlik kısıtıyla yazılmıştı — tek port, tek pencere

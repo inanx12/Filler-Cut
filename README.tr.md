@@ -8,10 +8,33 @@ Video dosyasından konuşma analiziyle tamamlayıcı sözcükleri ("ııı", "ş
 
 > v0.1 — mimari için [DESIGN.md](DESIGN.md).
 
-## Windows uygulaması (paketlenmiş)
+## Windows uygulaması (kurucu)
 
-Python kurmak istemiyorsanız: `scripts/build_exe.ps1` tek klasörde iki
-çalıştırılabilir üretir.
+`Filler-Cut-Setup-<sürüm>.exe` yönetici yetkisi istemeden
+`%LOCALAPPDATA%\Programs\Filler-Cut` altına kurar ve Başlat Menüsüne
+doğrudan arayüzü açan bir kısayol ekler. Kurucu Türkçe ve İngilizce konuşur,
+iki ön koşulu da çözer:
+
+- **WebView2** — çalışma zamanı yoksa Microsoft'un resmi Evergreen
+  Bootstrapper'ını sessizce çalıştırır. Kurulamazsa kurulum yine tamamlanır;
+  "Filler-Cut tarayıcı moduna düşer" uyarısı verilir.
+- **ffmpeg** — pakete *girmez* (lisans grupları ayrı). Eksikse bitiş
+  sayfasında söylenir ve `winget install ffmpeg` komutu verilir; winget
+  yoksa elle kurulum bağlantısı gösterilir. Kurulumu engellemez.
+
+**Kaldırma indirdiğiniz modeli silmez.** Program klasörü kalkar ama
+`%LOCALAPPDATA%\fillercut` (whisper.cpp ikilisi + model, ~570 MB) ve
+ayarlarınız yerinde kalır; kaldırıcı silmeyi sorar, **varsayılan hayır**.
+
+Kurucu imzasızdır; SmartScreen ilk çalıştırmada uyarabilir.
+
+```powershell
+.\scripts\build_setup.ps1        # exe build + kurucu -> dist_setup\
+```
+
+### Çalıştırılabilirler
+
+Yalnız `scripts/build_exe.ps1` da kurucunun taşıdığı klasörü üretir.
 
 | exe | ne yapar |
 |---|---|
@@ -29,6 +52,9 @@ ffmpeg pakete *girmez*, sistem bağımlılığı olarak kalır (bkz. Gereksiniml
 ```powershell
 .\scripts\build_exe.ps1        # temiz build + smoke test -> dist\fillercut
 ```
+
+Üçüncü taraf bileşenler `packaging/THIRD_PARTY_NOTICES.md`'de listelidir;
+kurucu bu dosyayı çalıştırılabilirlerin yanına da kopyalar.
 
 ## Gereksinimler
 

@@ -9,14 +9,57 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 
 ## [Unreleased]
 
-**Bağımsız Windows uygulaması: kendi penceresinde açılıyor, motorunu kendisi indiriyor.**
+**Kurulan bir Windows uygulaması: kurucusu var, kendi penceresinde açılıyor, motorunu kendisi indiriyor.**
 
-Filler-Cut artık Python kurmadan çalışan bir Windows uygulaması (Faz 3),
-kendi masaüstü penceresinde açılıyor (Faz 1) ve ilk çalıştırmada whisper.cpp
-motorunu ve dil modelini sizin yerinize indiriyor (Faz 2). Elle indirme, zip
-açma, yol yazma yok.
+Filler-Cut artık kurucusu olan bir Windows uygulaması (Faz 4): Python
+gerekmiyor (Faz 3), kendi masaüstü penceresinde açılıyor (Faz 1) ve ilk
+çalıştırmada whisper.cpp motorunu ve dil modelini sizin yerinize indiriyor
+(Faz 2). Elle indirme, zip açma, yol yazma yok.
 
 pip ile kuranlar için CLI ve varsayılanlar hiç değişmedi.
+
+---
+
+### Eklendi — Windows kurucusu (dağıtım epic'i Faz 4)
+
+Artık bir kurucu var: `Filler-Cut-Setup-<sürüm>.exe`. Çift tıklayın, kurulur;
+Başlat Menüsünden açılır. Yönetici yetkisi **istemez** (kendi kullanıcı
+klasörünüze kurulur), kurucu Türkçe ve İngilizce konuşur.
+
+Kurucu iki ön koşulu da sizin yerinize çözer:
+
+- **WebView2** — arayüzün kendi penceresinde açılması için gerekli. Yoksa
+  Microsoft'un resmi kurucusunu sessizce çalıştırır. Kurulamazsa kurulum
+  yarıda kalmaz; "Filler-Cut tarayıcı moduna düşer" diye uyarır.
+- **ffmpeg** — Filler-Cut ffmpeg'i dağıtmaz (lisans grupları ayrı). Kurulum
+  sonunda yoksa bunu söyler ve `winget install ffmpeg` komutunu verir;
+  winget yoksa elle kurulum bağlantısını gösterir. Kurulumu engellemez.
+
+**Kaldırma indirdiğiniz modeli silmez.** Program klasörü tamamen gider ama
+`%LOCALAPPDATA%\fillercut` (whisper.cpp ikilisi + model, yarım gigabayt)
+ve ayarlarınız yerinde kalır. Kaldırıcı "bunlar da silinsin mi?" diye
+sorar — **varsayılan hayır**.
+
+- Kurucu: per-user (`%LOCALAPPDATA%\Programs\Filler-Cut`), lzma2 sıkıştırma,
+  MIT lisans sayfası + üçüncü taraf bildirimi (kurulum dizinine de kopyalanır).
+- Başlat Menüsü kısayolu doğrudan arayüzü açar; masaüstü kısayolu isteğe
+  bağlı (varsayılan kapalı).
+- Tek komutla üretim: `.\scripts\build_setup.ps1`
+
+### Düzeltildi
+
+- **İndirme, dosya tamamen inip doğrulandıktan sonra çökebiliyordu.** Yarım
+  dosyanın nihai adına taşınması, `%LOCALAPPDATA%` başka bir sürücüye
+  yönlendirilmiş profillerde (paketlenmiş/sanallaştırılmış ortamlar, klasör
+  yönlendirmesi) `WinError 17` veriyordu. Artık bu durumda kopyalamaya
+  düşülüyor; en pahalı anda kaybedilen indirme yok.
+
+### Bilinen sınırlar
+
+- Kurucu **imzasız**: SmartScreen ilk çalıştırmada uyarabilir ("Daha fazla
+  bilgi" → "Yine de çalıştır"). Kod imzalama kabul edilmiş bir eksiktir.
+- Kurucu uygulama verisi (model/ikili) **indirmez** — o iş uygulamanın kendi
+  sihirbazının. Kurucunun internete çıktığı tek yer WebView2 kurulumudur.
 
 ---
 

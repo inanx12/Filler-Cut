@@ -9,10 +9,34 @@ video files using speech analysis.
 > v0.1 — see [DESIGN.md](DESIGN.md) for the architecture.
 > Türkçe: [README.tr.md](README.tr.md)
 
-## Windows application (packaged)
+## Windows application (installer)
 
-Prefer not to install Python? `scripts/build_exe.ps1` produces a standalone
-folder with two executables:
+`Filler-Cut-Setup-<version>.exe` installs per-user (no admin, no UAC) into
+`%LOCALAPPDATA%\Programs\Filler-Cut` and adds a Start Menu entry that opens
+the interface directly. The installer speaks Turkish and English, and resolves
+both prerequisites:
+
+- **WebView2** — runs Microsoft's official Evergreen Bootstrapper if the
+  runtime is missing. If that fails the install still completes, with a
+  warning that Filler-Cut will fall back to your browser.
+- **ffmpeg** — *not* bundled (licence groups differ). If it is missing the
+  finish page says so and offers `winget install ffmpeg`, or a manual link
+  when winget is unavailable. It never blocks the install.
+
+**Uninstalling keeps your downloaded model.** The program folder is removed,
+but `%LOCALAPPDATA%\fillercut` (whisper.cpp binary + model, ~570 MB) and your
+settings stay. The uninstaller asks whether to delete them — default **no**.
+
+The installer is unsigned, so SmartScreen may warn on first run.
+
+```powershell
+.\scripts\build_setup.ps1        # exe build + installer -> dist_setup\
+```
+
+### The executables
+
+`scripts/build_exe.ps1` alone produces the standalone folder the installer
+ships:
 
 | exe | what |
 |---|---|
@@ -30,6 +54,9 @@ The executables are unsigned, so SmartScreen may warn on first launch.
 ```powershell
 .\scripts\build_exe.ps1        # clean build + smoke tests -> dist\fillercut
 ```
+
+Third-party components are listed in `packaging/THIRD_PARTY_NOTICES.md`,
+which the installer also copies next to the executables.
 
 ## Requirements
 
