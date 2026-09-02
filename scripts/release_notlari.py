@@ -80,15 +80,23 @@ def bolum(surum: str, changelog: Path = CHANGELOG) -> str:
     )
 
 
-def baslik(surum: str, changelog: Path = CHANGELOG) -> str:
+def baslik(
+    surum: str, changelog: Path = CHANGELOG, gosterim: str | None = None
+) -> str:
     """Release başlığı: ``Filler-Cut 1.2.0 — <manşet>``.
 
     Manşet, bölümün ilk kalın satırıdır; yoksa yalnız sürüm kullanılır.
+
+    ``gosterim`` başlıkta YAZILACAK sürümdür; verilmezse ``surum``. Ön-sürüm
+    etiketlerinde bu ikisi ayrışır: notlar `[1.2.0]` bölümünden gelir ama
+    başlık `1.2.0-rc.1` demeli — yoksa Releases sayfasında rc, kararlı
+    sürümle aynı başlığı taşır ve ayırt edilemez.
     """
+    ad = gosterim if gosterim is not None else surum
     m = _MANSET.search(bolum(surum, changelog))
     if not m:
-        return f"Filler-Cut {surum}"
-    return f"Filler-Cut {surum} — {m.group('metin').rstrip('.')}"
+        return f"Filler-Cut {ad}"
+    return f"Filler-Cut {ad} — {m.group('metin').rstrip('.')}"
 
 
 def en_ust_surum(changelog: Path = CHANGELOG) -> str:
@@ -129,8 +137,10 @@ def main(argv: list[str]) -> int:
 
     try:
         surum = surum_normalize(args.etiket)
+        # Başlıkta ETİKETİN kendisi görünür (v atılmış hâli): `1.2.0-rc.1`.
+        gosterim = args.etiket.lstrip("vV")
         cikti = (
-            baslik(surum, args.changelog)
+            baslik(surum, args.changelog, gosterim)
             if args.baslik
             else bolum(surum, args.changelog)
         )

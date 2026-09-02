@@ -221,3 +221,15 @@ class TestReleaseWorkflow:
 
     def test_release_izni_var(self, wf: str) -> None:
         assert "contents: write" in wf
+
+    def test_on_surum_basligi_etiketi_gosterir(self) -> None:
+        """rc başlığı kararlı sürümle AYNI görünmemeli.
+
+        Notlar `[1.2.0]` bölümünden gelir ama başlık `1.2.0-rc.1` demeli;
+        yoksa Releases sayfasında ikisi ayırt edilemez.
+        """
+        n = _notlar()
+        surum = _pyproject_surum()
+        rc = n.baslik(surum, CHANGELOG, f"{surum}-rc.1")
+        assert rc.startswith(f"Filler-Cut {surum}-rc.1 — ")
+        assert rc != n.baslik(surum, CHANGELOG)
