@@ -199,7 +199,10 @@ fillercut video.mp4 --cikti xml --srt -y
   **Dosya → İçe Aktar** ile açılır; kaynak videoya bağlıdır, yeniden kodlama
   yoktur, kesimleri sürükleyip düzeltebilirsiniz. Bu kolda RENDER hiç koşmaz.
 - `video.srt` — standart altyazı (`--srt`). İkisi de `--output` ile verilen
-  klasöre yazılır.
+  klasöre yazılır. Altyazı **kesilmiş** zaman çizgisindedir: kesilen
+  bölgedeki kelimeler düşer, kalanlar öne kayar — yani üretilen videonun
+  ya da XML zaman çizgisinin üstüne doğrudan oturur. Kaynak zamanlı kayıt
+  `video_transkript.json`'da durmaya devam eder.
 
 > Kesim sınırları kareye yapıştırılırken **konuşma lehine** yuvarlanır: parça
 > başı aşağı, sonu yukarı. Yani hiçbir hece kırpılmaz; kesime en fazla bir

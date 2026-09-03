@@ -203,7 +203,10 @@ fillercut video.mp4 --cikti xml --srt -y
   re-encode and you can drag the cut boundaries around. RENDER never runs on
   this branch.
 - `video.srt` — a standard subtitle file (`--srt`). Both land in the folder
-  given by `--output`.
+  given by `--output`. Subtitles are on the **cut** timeline: words inside a
+  removed region are dropped and the rest shift earlier, so the file drops
+  straight onto the rendered video or the XML timeline. The source-timed
+  record stays in `video_transkript.json`.
 
 > Cut boundaries are snapped to frames **in favour of speech**: a segment's
 > start rounds down and its end rounds up. No syllable is ever clipped; at

@@ -775,7 +775,44 @@ kalır: encode edilmeyen bir koşuda 4 ffmpeg probe'u ödemek boşadır ve alan
 `Config.__post_init__`te (TOML + CLI tek kapı) hem `POST /api/jobs`ta 400
 ile ölür — arayüzü atlayıp POST eden de aynı kapıya çarpar.
 
+**RESOLVE İÇE AKTARIMI: XML PASS, SRT'de KUSUR ÇIKTI VE DÜZELTİLDİ
+(2026-09-03).** Gerçek DaVinci Resolve 21 içe aktarımında XML tarafı geçti
+(1212 kare = `00:00:20:12`, parçalar gap'siz, 60 fps NDF). SRT ise kelime
+zamanlarını **KAYNAK** zaman çizgisinde yazıyordu: XML çizgisi 20,2 sn iken
+son altyazı ~25,7 saniyeye taşıyordu. Kök neden yalnız `srt.py` değil
+`pipeline.py`'ın SIRASIYDI — altyazı transkriptin hemen ardından, PLAN daha
+KURULMADAN yazılıyordu, yani yazan tarafın elinde plan hiç yoktu.
+
+Düzeltme (`export/srt.remap_words` + SRT'nin RENDER'dan SONRA yazılması):
+`t_yeni = (t - keep.start_ms) + bu keep'ten ÖNCE tutulan toplam süre`.
+Kaynak-zamanlı kayıt zaten `<ad>_transkript.json`tadır ve **orada kalır**
+(kilit testte). SRT `render_plan`'dan yazılır — web review'unun düzenlemeleri
+de altyazıya yansır. Ölçüldü: son damga 20096 ms ≤ rapor `remaining` 20113 ms
+≤ XML 20200 ms. **XML çıktısı bit-birebir aynı kaldı** (`diff` temiz).
+
+**BİLİNÇLİ SAPMA — sınıra binen kelimede MIDPOINT kuralı.** Ortası bir keep'in
+içindeyse kelime KALIR ve zamanı keep sınırlarına clamp'lenir; değilse DÜŞER.
+"Herhangi bir kesişme yeter" deseydik kesilen filler'ın kuyruğu altyazıda
+kalırdı (görüntü var, ses yok); "tamamen içinde olsun" deseydik padding'in
+ucundan traşladığı her kelime silinirdi (padding 80/120 ms, tipik kelime
+~300 ms). Clamp edilen kelime altyazıda gerçek süresinden kısa görünür —
+kesim o sesi zaten kaldırdığı için doğrudur.
+
+**`plan` ZORUNLU keyword'dür** (`build_srt`/`write_srt`): opsiyonel olsaydı
+aynı kusur tek bir unutulmuş argüman kadar uzakta kalırdı. Bloklama remap'ten
+SONRA koşar ve parametreleri (700/6000/84) DEĞİŞMEDİ — kesim sınırında
+duraklama çöktüğü için bloklar doğal olarak birleşiyor (Test1: 5 → 4 blok).
+
 **Tuzaklar (bir sonraki agent için):**
+- **"Kaynak zaman çizgisi mi, kesilmiş zaman çizgisi mi?" bu repoda tekrar
+  eden bir sorudur.** Kural: `<ad>_transkript.json` KAYNAK çizgidedir (pahalı
+  ASR çıktısının ham kaydı), kullanıcıya giden her şey (video, XML, SRT)
+  KESİLMİŞ çizgidedir. Yeni bir çıktı eklerken önce bunu cevapla — SRT
+  kusuru tam olarak bu sorunun sorulmamasıydı.
+- **Bir çıktının plana ihtiyacı varsa yazma yeri de plandan SONRA olmalı.**
+  SRT ilk sürümde TRANSCRIBE'ın hemen ardındaydı; orada plan yok. Sıra
+  kusuru tip sistemiyle görünmüyordu çünkü fonksiyon plan İSTEMİYORDU —
+  argümanı zorunlu yapmak sırayı da zorunlu yaptı.
 - **ffprobe'da ses akışı da `r_frame_rate` taşır ve değeri `0/0`'dır**
   (ölçüldü). Akış seçimi `codec_type`'a göre yapılmazsa kare hızı sessizce
   çöp olur; `export/medya.parse_medya` bu yüzden akışı türle seçer.
@@ -1033,13 +1070,16 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `export/srt.py` — kelime listesinden standart SRT | `3f92738` |
 | `pipeline.py`/`config.py`/`cli.py` — çıktı kolu (mp4\|xml) + `--srt` | `c147598` |
 | `web/` — dışa aktarım seçimi kartı + sonuç ekranı SRT satırı | `a0dbaf1` |
+| `export/srt.py` — SRT kesilmiş zaman çizgisine remap (Resolve kusuru) | `97bc2ca` |
+| `pipeline.py` — SRT RENDER'dan sonra, uygulanmış plandan yazılır | `33a24ec` |
 
 **Sıradaki:** dağıtım epic'i (v1.x madde 4) KAPANDI. Kalan v1.x maddeleri
 ayrı işlerdir — madde 5 (PyPI) bu epic'in parçası DEĞİLDİR.
 v1.2.1 Dalga A (FCP7 XML + SRT) bitti; **sürüm bump + CHANGELOG + tag
-YAPILMADI** (release ayrı iş) ve **DaVinci Resolve içe aktarım doğrulaması
-İnan'da bekliyor** — artefakt `Desktop\Filler-Cut-Test\xml-test\Test1.xml`,
-beklenen zaman çizgisi 5 parça / 1212 kare (60 fps NDF → `00:00:20:12`).
+YAPILMADI** (release ayrı iş). Resolve içe aktarımında **XML PASS** (1212
+kare / `00:00:20:12`, gap yok), **SRT'de kusur çıktı ve düzeltildi**
+(yukarıda); düzeltilmiş `Test1.srt`'nin Resolve doğrulaması İnan'da
+bekliyor — tüm blokların `00:00:20:12` içinde kalması gerekir.
 
 Web katmanı bu taşınabilirlik kısıtıyla yazılmıştı — tek port, tek pencere
 varsayımı; tarayıcıya özgü API'lere bel bağlanmadı — ve Faz 1'de bu karşılığını
