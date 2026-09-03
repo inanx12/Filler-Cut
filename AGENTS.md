@@ -835,6 +835,67 @@ duraklama çöktüğü için bloklar doğal olarak birleşiyor (Test1: 5 → 4 b
   gerektirmez, CI'da koşar) — `ag`/`ffmpeg`/`wcpp`/`exe` ailesinden farkı
   budur. Gerçek dosya okuyan tek test ayrıca `ffmpeg` marker'lıdır.
 
+**v1.2.1 DALGA B (sürükle-bırak + dosya seçici) TAMAMLANDI (2026-09-03,
+sürüm bump YOK).** Yalnız `web/` katmanı; pipeline'a, 6 aşamaya, `ASAMALAR`
+sözleşmesine ve Dalga A'nın `cikti`/SRT davranışına DOKUNULMADI.
+
+**MEVCUT ALTYAPI KULLANILDI, PARALEL UÇ YAZILMADI.** Klasör gezinme zaten
+`GET /api/fs/browse`tedir (v1.0 Dilim 1) ve **tarayıcı modundaki "dosya
+seçici" ODUR** — yeniden yazılmadı, tüketildi. Sunucuya eklenen tek şey
+`POST /api/fs/sec`: bir YOLU seçim için doğrular, iş BAŞLATMAZ (kullanıcı o
+anda henüz mod/dışa aktarım tercihlerini yapmamıştır).
+
+**TEK KAPI:** hapis + klasör/varlık/uzantı kuralları artık
+`fs.secimi_dogrula`da ORTAK gövdededir ve `POST /api/jobs` de onu çağırır.
+Kod/mesaj sözleşmesi değişmedi (mevcut job kilitleri yeşil); tek iyileşme
+klasör bırakıldığında "dosya bulunamadı" yerine "Klasör seçilemez" denmesi —
+kontrol varlıktan ÖNCE geliyor.
+
+**BROWSE CEVABINA `uzantilar` EKLENDİ.** İstemci kabul listesini ezberlemek
+yerine sunucudan okur; JS'e gömmek ikinci doğruluk kaynağı olurdu. Kilit
+testi JS'te gömülü uzantı ARANMADIĞINI da doğrular.
+
+**pywebview API'leri ezberden DEĞİL, kurulu 6.2.1'in kaynağından:**
+`create_file_dialog(dialog_type, directory, allow_multiple, save_filename,
+file_types)` (`window.py:519`); `FileDialog.OPEN = 10` (eski `OPEN_DIALOG`
+sabiti deprecation uyarısı basıyor); `file_types` biçimi
+`util.parse_file_type` ile doğrulanır ve uymayan dize diyaloğu AÇMADAN
+`ValueError` fırlatır — kilit testi doğrulamayı **kurulu pywebview'in
+kendisine** yaptırır.
+
+**SÜRÜKLE-BIRAKTA TAM YOL BİR PLATFORM SINIRIDIR.** Tarayıcı API'si disk
+yolunu sayfaya VERMEZ. pywebview onu ayrı bir kanaldan taşır (WebView2:
+`postMessageWithAdditionalObjects` → `_dnd_state['paths']` → olay
+sözlüğündeki dosyaya `pywebviewFullPath`). Kaydın çalışması için
+`_dnd_state['num_listeners'] > 0` olmalı; sayaç `element.events.drop +=`
+ile artar. **Tarayıcı modunda bu kanal yoktur ve olmayacaktır** — bırakma
+orada açık bir mesajla reddedilip kullanıcı gezgine yönlendirilir (bilinçli
+sapma; alternatifi GB'lık videoyu yüklemekti, o karar v1.0'da kapandı).
+
+**İş koşarken bırakma reddedilir** ve ölçüt AKTİF EKRANDIR — kuyruk tasarımı
+bu dalganın kapsamı değildi ve sessizce ikinci iş başlatmak şaşırtırdı. Bu
+kural istemci tarafındadır (JS test altyapısı yok); kilidi statik yüzey
+testidir, davranışın kendisi gerçek tarayıcıda ölçüldü.
+
+**Tuzaklar (bir sonraki agent için):**
+- **`web/native.py` DÜZ CLI KOŞUSUNDA DA IMPORT EDİLİR** (`cli.py` modül
+  seviyesinde import eder). Bu dalgada sözleşme bir kez KIRILDI:
+  `dosya_turleri()` uzantı listesini `web.fs`ten alıyordu ve import modül
+  seviyesindeydi — `fs` fastapi+pydantic çekiyor, yani video işleyen
+  kullanıcı hiç açmayacağı web yığınını ödüyordu (ölçüldü). Import dal
+  içine alındı; regresyon kilidi `TestIncelikSozlesmesi` (ayrı yorumlayıcı
+  + kaynak taraması). **`native.py`ye yeni bir üst-seviye import eklerken
+  önce o testi çalıştır.**
+- **Sayfa genelinde `dragover`/`drop` varsayılanı engellenmeli**: aksi
+  hâlde pencere bırakılan dosyaya GİDER ve native modda geri dönüş düğmesi
+  yoktur (arayüz kaybolur).
+- **`DROPZONE_SECICI` iki dosyada birden yaşar** (`native.py` sabiti +
+  `index.html` id'si). Ad değişirse native sürükle-bırak SESSİZCE ölür;
+  kilidi `TestPencereAcKopru`de.
+- **MagicMock'ta `pencere.events.loaded += f` attribute'u YENİDEN BAĞLAR** —
+  `pencere.events.loaded.__iadd__.called` yanlış nesneye bakar. Kayıt
+  `mock_calls` izinden doğrulanır.
+
 ### v1.x MADDE 4 — DAĞITIM EPIC'İ KAPANDI (2026-09-02)
 
 Beş faz, tek cümlelik özetleri:
@@ -1073,13 +1134,21 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `export/srt.py` — SRT kesilmiş zaman çizgisine remap (Resolve kusuru) | `97bc2ca` |
 | `pipeline.py` — SRT RENDER'dan sonra, uygulanmış plandan yazılır | `33a24ec` |
 
+**v1.2.1 Dalga B (sürükle-bırak + dosya seçici)**
+
+| Modül | Commit |
+|---|---|
+| `web/native.py` — native dosya diyaloğu + pywebview sürükle-bırak köprüsü | `543d65f` |
+| `web/fs.py` + `web/static/` — `POST /api/fs/sec` (tek kapı) + dropzone arayüzü | `b136a5f` |
+
 **Sıradaki:** dağıtım epic'i (v1.x madde 4) KAPANDI. Kalan v1.x maddeleri
 ayrı işlerdir — madde 5 (PyPI) bu epic'in parçası DEĞİLDİR.
-v1.2.1 Dalga A (FCP7 XML + SRT) bitti; **sürüm bump + CHANGELOG + tag
-YAPILMADI** (release ayrı iş). Resolve içe aktarımında **XML PASS** (1212
-kare / `00:00:20:12`, gap yok), **SRT'de kusur çıktı ve düzeltildi**
-(yukarıda); düzeltilmiş `Test1.srt`'nin Resolve doğrulaması İnan'da
-bekliyor — tüm blokların `00:00:20:12` içinde kalması gerekir.
+v1.2.1 Dalga A (FCP7 XML + SRT) ve Dalga B (sürükle-bırak + dosya seçici)
+bitti; **sürüm bump + CHANGELOG + tag YAPILMADI** (release ayrı iş).
+Bekleyen iki manuel doğrulama: (a) Dalga A — Resolve'da XML PASS, SRT'de
+kusur çıkıp düzeltildi, düzeltilmiş `Test1.srt`'nin tüm blokları
+`00:00:20:12` içinde kalmalı; (b) Dalga B — native exe'de ve tarayıcı
+modunda dropzone + dosya seçici.
 
 Web katmanı bu taşınabilirlik kısıtıyla yazılmıştı — tek port, tek pencere
 varsayımı; tarayıcıya özgü API'lere bel bağlanmadı — ve Faz 1'de bu karşılığını

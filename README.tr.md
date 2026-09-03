@@ -253,6 +253,12 @@ sunucu taraflı dosya gezginiyle seçersiniz (dosya tarayıcıya **yüklenmez**;
 araç diskten okur, gezgin ev dizininizle sınırlıdır), Normal/Agresif modu
 seçer ve 6 aşamalı pipeline'ın ilerlemesini canlı izlersiniz.
 
+Videoyu **sürükleyip bırakabilirsiniz** de: kendi penceresinde açıldığında
+dosyayı pencereye bırakmak ya da "Dosya seç…" ile Windows'un kendi dosya
+diyaloğunu açmak yeter. Tarayıcı modunda bırakma çalışmaz — tarayıcılar
+güvenlik gereği dosyanın disk yolunu sayfaya vermez; o modda gezgin zaten
+seçicidir ve arayüz sizi oraya yönlendirir.
+
 Native pencere için: `pip install "fillercut[native]"`.
 
 ![Video seçme ekranı: sunucu taraflı dosya gezgini ve Normal/Agresif kesim modu seçimi](docs/images/ui-video-sec.png)

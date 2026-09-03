@@ -258,6 +258,13 @@ and watch the 6-stage pipeline progress live.
 
 For the native window: `pip install "fillercut[native]"`.
 
+You can also **drag and drop** a video: in the desktop window, drop the file
+onto the page or press "Dosya seç…" to open the native Windows file dialog.
+Drag and drop does not work in browser mode — browsers do not hand the page a
+file's disk path — and the UI says so and points you at the file browser,
+which is the picker in that mode.
+
+
 ![Video selection screen: the server-side file browser and the Normal/Aggressive cut mode picker](docs/images/ui-video-sec.png)
 
 ![Processing screen: the 6-stage pipeline with the duration of each stage](docs/images/ui-isleniyor.png)
