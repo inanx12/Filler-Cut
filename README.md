@@ -16,9 +16,16 @@ video files using speech analysis.
 
 The build is **unsigned**, so Windows SmartScreen (and Smart App Control, if
 you have it on) may block the first run with *"Windows protected your PC"*.
-Choose **More info → Run anyway**. If Smart App Control is enabled it can
-refuse outright — turning it off is a system-wide decision, so the
+This warning is **expected** (it flags the missing code signature, not
+malware): choose **More info → Run anyway**. If Smart App Control is enabled
+it can refuse outright — turning it off is a system-wide decision, so the
 alternative is running from source (see Install).
+
+![SmartScreen "More info → Run anyway" step](docs/assets/smartscreen.png)
+
+> The lack of a signature is an accepted trade-off; an application to
+> **SignPath** (free code signing for open-source projects) is under review.
+> Once signed, this warning goes away.
 
 `Filler-Cut-Setup-<version>.exe` installs per-user (no admin, no UAC) into
 `%LOCALAPPDATA%\Programs\Filler-Cut` and adds a Start Menu entry that opens

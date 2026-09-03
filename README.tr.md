@@ -16,9 +16,16 @@ alın.
 
 Derleme **imzasızdır**; Windows SmartScreen (ve açıksa Smart App Control)
 ilk çalıştırmada *"Windows bilgisayarınızı korudu"* diyerek engelleyebilir.
-**Ek bilgi → Yine de çalıştır** deyin. Smart App Control açıksa büsbütün
-reddedebilir — onu kapatmak sistem geneli bir karar olduğundan, alternatif
-kaynaktan çalıştırmaktır (bkz. Kurulum).
+Bu **beklenen** bir uyarıdır (kötü amaçlı yazılım işareti değil, yalnızca
+kod imzası eksikliği): **Ek bilgi → Yine de çalıştır** deyin. Smart App
+Control açıksa büsbütün reddedebilir — onu kapatmak sistem geneli bir karar
+olduğundan, alternatif kaynaktan çalıştırmaktır (bkz. Kurulum).
+
+![SmartScreen "Ek bilgi → Yine de çalıştır" adımı](docs/assets/smartscreen.png)
+
+> İmzasızlık kabul edilmiş bir karardır; açık kaynak projelere ücretsiz kod
+> imzası veren **SignPath** başvurusu değerlendiriliyor. İmza geldiğinde bu
+> uyarı kaybolur.
 
 `Filler-Cut-Setup-<sürüm>.exe` yönetici yetkisi istemeden
 `%LOCALAPPDATA%\Programs\Filler-Cut` altına kurar ve Başlat Menüsüne
