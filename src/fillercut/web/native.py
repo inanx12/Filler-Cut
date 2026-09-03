@@ -216,8 +216,11 @@ class NativeKopru:
     minimumda tutmak o sınırı dar tutar.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, baslangic_dizini: str | None = None) -> None:
         self._pencere: Any = None
+        #: Dosya diyaloğunun açılış klasörü — ilk izinli kök (ya da ev).
+        #: ``None`` → pywebview'in kendi varsayılanı ("").
+        self._baslangic_dizini = baslangic_dizini
 
     def pencereyi_bagla(self, pencere: Any) -> None:
         """`create_window` sonrası pencereyi köprüye tanıtır.
@@ -243,6 +246,7 @@ class NativeKopru:
         try:
             sonuc = pencere.create_file_dialog(
                 webview.FileDialog.OPEN,
+                directory=self._baslangic_dizini or "",
                 allow_multiple=False,
                 file_types=dosya_turleri(),
             )
@@ -317,7 +321,12 @@ def surukle_birak_kur(pencere: Any) -> None:
         return
 
 
-def pencere_ac(url: str, *, kapanista: Callable[[], None] | None = None) -> None:
+def pencere_ac(
+    url: str,
+    *,
+    kapanista: Callable[[], None] | None = None,
+    baslangic_dizini: str | None = None,
+) -> None:
     """Native pencereyi açar ve kullanıcı kapatana kadar BLOKLAR.
 
     Ana thread'de çağrılmalıdır: pywebview'in WinForms mesaj döngüsü orada
@@ -329,10 +338,12 @@ def pencere_ac(url: str, *, kapanista: Callable[[], None] | None = None) -> None
         kapanista: Pencere kapandığında çağrılır — `cli.ui` sunucuyu bununla
             graceful kapatır. ``finally`` içindedir: pencere hata ile
             sonlansa bile sunucu ARDA KALMAZ.
+        baslangic_dizini: Native dosya diyaloğunun açılış klasörü (v1.2.1
+            B.2) — ``cli.ui`` ilk izinli kökü (yoksa ev dizinini) geçirir.
     """
     import webview
 
-    kopru = NativeKopru()
+    kopru = NativeKopru(baslangic_dizini=baslangic_dizini)
     pencere = webview.create_window(
         PENCERE_BASLIK,
         url,

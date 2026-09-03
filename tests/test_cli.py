@@ -667,7 +667,9 @@ class TestUiNativeYasamDongusu:
     def test_pencere_kapaninca_sunucu_graceful_kapanir(self) -> None:
         server, sock = self._server_ve_soket()
 
-        def sahte_pencere(url: str, *, kapanista: object = None) -> None:
+        def sahte_pencere(
+            url: str, *, kapanista: object = None, baslangic_dizini: object = None
+        ) -> None:
             assert callable(kapanista)
             assert server.should_exit is False  # pencere açıkken sunucu koşar
             kapanista()

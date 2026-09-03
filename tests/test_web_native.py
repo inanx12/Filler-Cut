@@ -460,3 +460,36 @@ class TestIncelikSozlesmesi:
                 raise AssertionError(
                     f"native.py {no}. satırda modül seviyesinde web.fs import'u: {satir!r}"
                 )
+
+
+class TestBaslangicDizini:
+    """Native dosya diyaloğunun açılış klasörü — ilk izinli kök (B.2)."""
+
+    def test_dosya_sec_baslangic_dizinini_gecirir(self) -> None:
+        pencere = MagicMock()
+        pencere.create_file_dialog.return_value = (r"D:\a.mp4",)
+        kopru = native.NativeKopru(baslangic_dizini=r"D:\Videolar")
+        kopru.pencereyi_bagla(pencere)
+        kopru.dosya_sec()
+        _, kwargs = pencere.create_file_dialog.call_args
+        assert kwargs["directory"] == r"D:\Videolar"
+
+    def test_baslangic_yoksa_bos_dize(self) -> None:
+        """None → pywebview'in kendi varsayılanı ('')."""
+        pencere = MagicMock()
+        pencere.create_file_dialog.return_value = None
+        kopru = native.NativeKopru()
+        kopru.pencereyi_bagla(pencere)
+        kopru.dosya_sec()
+        _, kwargs = pencere.create_file_dialog.call_args
+        assert kwargs["directory"] == ""
+
+    def test_pencere_ac_baslangici_koprue_gecirir(self) -> None:
+        sahte = MagicMock()
+        pencere = MagicMock()
+        sahte.create_window.return_value = pencere
+        with patch.dict(sys.modules, {"webview": sahte}):
+            native.pencere_ac("http://x/", baslangic_dizini=r"D:\Videolar")
+        kopru = sahte.create_window.call_args.kwargs["js_api"]
+        kopru.dosya_sec()
+        assert pencere.create_file_dialog.call_args.kwargs["directory"] == r"D:\Videolar"

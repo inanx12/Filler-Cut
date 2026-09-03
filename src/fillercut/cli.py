@@ -558,7 +558,12 @@ def _sunucuyu_kos(server: "uvicorn.Server", sock: socket.socket) -> None:
 
 
 def _native_kos(
-    server: "uvicorn.Server", sock: socket.socket, url: str, port: int
+    server: "uvicorn.Server",
+    sock: socket.socket,
+    url: str,
+    port: int,
+    *,
+    baslangic_dizini: str | None = None,
 ) -> None:
     """Sunucuyu ayrı thread'de koşturur, hazır olunca native pencereyi açar.
 
@@ -592,7 +597,7 @@ def _native_kos(
     def _kapat() -> None:
         server.should_exit = True
 
-    native.pencere_ac(url, kapanista=_kapat)
+    native.pencere_ac(url, kapanista=_kapat, baslangic_dizini=baslangic_dizini)
 
     thread.join(timeout=UI_KAPANIS_TIMEOUT_SN)
     if thread.is_alive():
@@ -635,9 +640,21 @@ def ui(
     """
     try:
         cfg = load_config(config)
+        # İzinli kökleri BURADA çöz (socket açılmadan): var olmayan bir kök
+        # ConfigError verir ve aynı temiz Türkçe hata yoluna girer. Çözülmüş
+        # liste create_app'e geçer (orada yeniden çözülmez) ve native diyaloğun
+        # açılış klasörünü besler. Tembel import: `fs` fastapi çeker, düz CLI
+        # yolu ödememeli (bu dal zaten `ui` komutu).
+        from fillercut.web import fs as _fs
+
+        izinli_kokler = _fs.izinli_kokler_coz(cfg.ui.izinli_kokler, Path.home())
     except ConfigError as exc:
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+
+    # Native dosya diyaloğunun açılış klasörü: ilk izinli kök, yoksa ev dizini
+    # (basit ve tahmin edilebilir — "son kullanılan" durumu tutmak IPC ister).
+    baslangic_dizini = str(izinli_kokler[0]) if izinli_kokler else str(Path.home())
 
     # 1) Port zaten dolu ve oradaki BİZSEK: ikinci sunucu başlatma, adresi söyle.
     sock = _dinleyici_ac(port)
@@ -690,12 +707,12 @@ def ui(
 
         on_ready = _tarayici_ac
 
-    web_app = create_app(cfg, on_ready=on_ready)
+    web_app = create_app(cfg, izinli_kokler=izinli_kokler, on_ready=on_ready)
     server = _sunucu_kur(web_app)
 
     if mod == "native":
         typer.echo(f"Filler-Cut penceresi açılıyor ({url})")
-        _native_kos(server, sock, url, gercek_port)
+        _native_kos(server, sock, url, gercek_port, baslangic_dizini=baslangic_dizini)
         return
 
     typer.echo(f"Filler-Cut UI: {url}  (kapatmak için Ctrl+C)")
