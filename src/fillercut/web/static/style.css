@@ -185,6 +185,45 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   font-size: 14px;
 }
 
+/* ── sürükle-bırak alanı ──────────────────────────────────────────────── */
+
+.dropzone {
+  border: 1px dashed var(--cizgi);
+  border-radius: 10px;
+  padding: 18px 16px;
+  margin-bottom: 14px;
+  text-align: center;
+  background: var(--kart);
+  transition: border-color .12s, background .12s;
+}
+
+/* Sürükleme sırasındaki vurgu — mod kartlarının seçili hâliyle aynı dil. */
+.dropzone.uzerinde {
+  border-color: rgba(56, 139, 253, .75);
+  background: rgba(56, 139, 253, .10);
+}
+
+.dropzone-baslik { font-weight: 600; margin: 0 0 4px; }
+.dropzone-alt { color: var(--soluk); font-size: 13px; margin: 0; }
+
+/* Bırakma sonucu / red gerekçesi. Boşken hiç yer kaplamaz. */
+.dropzone-not { font-size: 13px; margin: 8px 0 0; }
+.dropzone-not:empty { display: none; }
+.dropzone-not.hata { color: var(--kirmizi); }
+.dropzone-not.bilgi { color: var(--soluk); }
+
+.baglanti-dugme {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--vurgu);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.baglanti-dugme:disabled { color: var(--soluk); cursor: default; }
+
 /* ── mod seçimi ───────────────────────────────────────────────────────── */
 
 .modlar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

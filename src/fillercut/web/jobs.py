@@ -441,25 +441,10 @@ def job_baslat(istek: JobBaslatIstek, request: Request) -> dict[str, object]:
     Dosya yolu gezginle AYNI hapisten geçer — browse API'sini atlayıp elle
     yol POST'lamak da ev dizini dışına çıkamaz.
     """
-    ev = fs.ev_dizini(request)
-    hedef = fs.guvenli_yol(istek.path, ev)
-    if hedef is None:
-        raise HTTPException(
-            status_code=403,
-            detail="Ev dizini dışındaki dosya işlenemez — yol reddedildi.",
-        )
-    if not hedef.is_file():
-        raise HTTPException(
-            status_code=400, detail=f"Video dosyası bulunamadı: {hedef}"
-        )
-    if hedef.suffix.lower() not in fs.VIDEO_UZANTILARI:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Desteklenmeyen dosya uzantısı: {hedef.suffix or '(yok)'} — "
-                "video dosyası seçin (örn. .mp4, .mkv)."
-            ),
-        )
+    # v1.2.1: hapis + klasör/varlık/uzantı kuralları `fs.secimi_dogrula`da
+    # ORTAK gövdededir — `POST /api/fs/sec` (sürükle-bırak, native diyalog)
+    # ile bu uç aynı kararı verir. Kod/mesaj sözleşmesi değişmedi.
+    hedef = Path(fs.secimi_dogrula(istek.path, fs.ev_dizini(request)).yol)
     # v1.2.1: geçersiz çıktı kolu istemcide değil BURADA ölür — arayüzü
     # atlayıp POST eden de aynı kapıya çarpar (kurulum kilidiyle aynı ilke).
     # Tek doğruluk kaynağı `config.CIKTI_SECENEKLERI`; pipeline'a ulaşan

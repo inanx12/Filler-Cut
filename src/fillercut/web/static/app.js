@@ -26,6 +26,7 @@ const durum = {
   secili: null,     // {ad, yol, boyut}
   jobId: null,
   es: null,         // aktif EventSource
+  uzantilar: [],    // kabul edilen uzantılar — SUNUCUDAN gelir (browse cevabı)
 };
 
 /* ── yardımcılar ─────────────────────────────────────────────────────── */
@@ -147,6 +148,10 @@ async function gezginYukle(yol) {
   const veri = await cevap.json();
   durum.yol = veri.yol;
   durum.ust = veri.ust;
+  /* Kabul listesi SUNUCUDAN gelir (fs.VIDEO_UZANTILARI); JS'e gömmek ikinci
+     bir doğruluk kaynağı yaratırdı. Yalnız hızlı geri bildirim için —
+     kabul kararı her hâlükârda /api/fs/sec'te verilir. */
+  durum.uzantilar = veri.uzantilar || [];
   secimiTemizle();
   yolYaz(veri.parcalar, veri.yol);
   el("btn-ust").disabled = veri.ust === null;
@@ -231,6 +236,178 @@ async function baslat() {
   }
   const snapshot = await cevap.json();
   kosuBaslat(snapshot);
+}
+
+/* ── Sürükle-bırak + dosya seçici ────────────────────────────────────────
+ *
+ * İKİ MOD, TEK KAPI. Yolu bulmanın yolu moda göre değişir:
+ *
+ *   native (pywebview/WebView2) — tarayıcı API'si tam yolu VERMEZ; pywebview
+ *     onu ayrı bir kanaldan taşır ve Python tarafı `fillercutDosyaBirakildi`
+ *     ile buraya geri verir (web/native.py). Dosya seçici de aynı sebeple
+ *     Python'un `window.pywebview.api.dosya_sec` ucudur.
+ *   tarayıcı — tam yol YOKTUR ve elde etmenin bir yolu da yok (güvenlik
+ *     sınırı, bizim eksiğimiz değil). O modda bırakma, kullanıcıyı gezgine
+ *     yönlendiren açık bir mesajla reddedilir; gezgin zaten seçicidir.
+ *
+ * Kabul kararı iki modda da SUNUCUDADIR (`POST /api/fs/sec`) — buradaki
+ * kontroller yalnız hızlı ve anlaşılır geri bildirim içindir.
+ */
+
+function nativeMi() {
+  /* pywebview köprüsü sayfaya SONRADAN enjekte edilir; her çağrıda bakılır. */
+  return typeof window.pywebview === "object" && window.pywebview !== null &&
+    typeof window.pywebview.api === "object" && window.pywebview.api !== null;
+}
+
+function dropNotu(metin, sinif) {
+  const not = el("dropzone-not");
+  not.textContent = metin || "";
+  not.className = "dropzone-not" + (metin ? " " + sinif : "");
+}
+
+function birakmaKabulEdilirMi() {
+  /* İş koşarken bırakma REDDEDİLİR: kuyruk tasarımı bu dalganın kapsamı
+     değil, ve sessizce ikinci bir iş başlatmak kullanıcıyı şaşırtırdı.
+     Ölçüt ekranın kendisidir — başlangıç ekranı görünür değilse koşu,
+     review ya da sonuç ekranındayız. */
+  return !el("ekran-baslangic").classList.contains("gizli");
+}
+
+function uzantiKabul(ad) {
+  const nokta = ad.lastIndexOf(".");
+  if (nokta < 0) return false;
+  return durum.uzantilar.includes(ad.slice(nokta).toLowerCase());
+}
+
+function klasorMu(aktarim) {
+  /* Klasör bırakıldığında `files` boş gelebilir ya da tek girdi klasör
+     olabilir; ikisini de yakalamak için DataTransferItem'a bakılır. */
+  const ogeler = aktarim.items;
+  if (!ogeler) return false;
+  for (const oge of ogeler) {
+    if (oge.kind !== "file" || !oge.webkitGetAsEntry) continue;
+    const girdi = oge.webkitGetAsEntry();
+    if (girdi && girdi.isDirectory) return true;
+  }
+  return false;
+}
+
+async function yoluSec(yol) {
+  /* Tek kapı: sürükle-bırak da native diyalog da buradan geçer. */
+  let cevap;
+  try {
+    cevap = await fetch("/api/fs/sec", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: yol }),
+    });
+  } catch (_) {
+    dropNotu("Sunucuya ulaşılamıyor — dosya doğrulanamadı.", "hata");
+    return;
+  }
+  if (!cevap.ok) {
+    dropNotu(await apiHatasi(cevap), "hata");
+    return;
+  }
+  const girdi = await cevap.json();
+  for (const li of el("gezgin-liste").children) li.classList.remove("secili");
+  durum.secili = girdi;
+  el("secim-ozet").textContent = girdi.ad + " · " + boyutMetni(girdi.boyut);
+  el("secim-ozet").classList.add("dolu");
+  el("btn-baslat").disabled = false;
+  dropNotu("Seçildi: " + girdi.ad, "bilgi");
+}
+
+/* pywebview (Python) bırakılan dosyanın TAM YOLUNU buraya teslim eder. */
+window.fillercutDosyaBirakildi = function (yol) {
+  if (!birakmaKabulEdilirMi()) {
+    dropNotu("Bir iş çalışıyor — bitmesini bekleyin.", "hata");
+    return;
+  }
+  yoluSec(yol);
+};
+
+function dropzoneKur() {
+  const alan = el("dropzone");
+
+  /* Sayfa genelinde varsayılan davranış engellenir: aksi hâlde pencere
+     bırakılan dosyaya GİDER ve arayüz kaybolur (native modda geri dönüş
+     düğmesi de yoktur). */
+  for (const olay of ["dragover", "drop"]) {
+    document.addEventListener(olay, (e) => e.preventDefault());
+  }
+
+  alan.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    if (birakmaKabulEdilirMi()) alan.classList.add("uzerinde");
+  });
+  for (const olay of ["dragleave", "drop"]) {
+    alan.addEventListener(olay, () => alan.classList.remove("uzerinde"));
+  }
+
+  alan.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const aktarim = e.dataTransfer;
+    if (!birakmaKabulEdilirMi()) {
+      dropNotu("Bir iş çalışıyor — bitmesini bekleyin.", "hata");
+      return;
+    }
+    if (klasorMu(aktarim)) {
+      dropNotu("Klasör bırakılamaz — tek bir video dosyası bırakın.", "hata");
+      return;
+    }
+    const dosyalar = aktarim.files;
+    if (!dosyalar || dosyalar.length === 0) {
+      dropNotu("Bırakılan öğe bir dosya değil.", "hata");
+      return;
+    }
+    if (dosyalar.length > 1) {
+      dropNotu("Tek seferde tek video bırakın.", "hata");
+      return;
+    }
+    if (!uzantiKabul(dosyalar[0].name)) {
+      dropNotu(
+        "Desteklenmeyen dosya türü: " + dosyalar[0].name +
+          " — kabul edilenler: " + durum.uzantilar.join(", "),
+        "hata"
+      );
+      return;
+    }
+    if (nativeMi()) {
+      /* Tam yol Python tarafından `fillercutDosyaBirakildi` ile gelir;
+         burada yalnız bekleme notu bırakılır. */
+      dropNotu("Dosya okunuyor…", "bilgi");
+      return;
+    }
+    dropNotu(
+      "Tarayıcı, güvenlik gereği dosyanın disk yolunu vermiyor — " +
+        dosyalar[0].name + " dosyasını aşağıdaki klasör listesinden seçin " +
+        "(ya da Filler-Cut'ı kendi penceresinde açın).",
+      "hata"
+    );
+  });
+
+  el("btn-dosya-sec").addEventListener("click", async () => {
+    if (!birakmaKabulEdilirMi()) return;
+    if (!nativeMi()) {
+      dropNotu(
+        "Tarayıcı modunda dosya seçici aşağıdaki klasör listesidir.",
+        "bilgi"
+      );
+      el("gezgin-liste").scrollIntoView({ block: "nearest" });
+      return;
+    }
+    let yol;
+    try {
+      yol = await window.pywebview.api.dosya_sec();
+    } catch (_) {
+      dropNotu("Dosya seçici açılamadı.", "hata");
+      return;
+    }
+    if (!yol) return;  // kullanıcı iptal etti
+    yoluSec(yol);
+  });
 }
 
 /* ── Ekran 2: aşama göstergesi + SSE ─────────────────────────────────── */
@@ -1299,5 +1476,6 @@ el("kurulum-model").addEventListener("change", () => {
   kurulumYokla();
 });
 
+dropzoneKur();     // sürükle-bırak + dosya seçici (native/tarayıcı)
 gezginYukle(null); // kök: sunucudaki ev dizini
 kurulumBaslat(); // kurulum eksikse sihirbaz ekranı; değilse hiç görünmez

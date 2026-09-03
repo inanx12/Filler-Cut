@@ -69,6 +69,11 @@ class GezginCevap(BaseModel):
     ``parcalar`` breadcrumb'dır: **ev dizininden** bulunulan dizine kadar,
     sırayla. Ev'in ÜSTÜ hiç görünmez — gösterilse tıklandığında 403 alırdı;
     hapsin sınırı arayüzde de görünür olur.
+
+    ``uzantilar`` (v1.2.1) kabul edilen video uzantılarıdır. İstemci sürükle-
+    bırakta hızlı geri bildirim için buna bakar; listeyi JS'e GÖMMEK ikinci
+    bir doğruluk kaynağı yaratırdı (kabul kararı zaten sunucudadır —
+    ``secimi_dogrula``).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -78,6 +83,7 @@ class GezginCevap(BaseModel):
     parcalar: list[YolParcasi]
     dizinler: list[DizinGirdisi]
     videolar: list[VideoGirdisi]
+    uzantilar: list[str]
 
 
 def guvenli_yol(istek: str | None, ev: Path) -> Path | None:
@@ -174,12 +180,80 @@ def dizini_listele(dizin: Path, ev: Path) -> GezginCevap:
         parcalar=yol_parcalari(dizin, ev_cozulmus),
         dizinler=dizinler,
         videolar=videolar,
+        uzantilar=sorted(VIDEO_UZANTILARI),
     )
 
 
 def ev_dizini(request: Request) -> Path:
     """Uygulamanın hapis kökü (``create_app(fs_home=...)`` ile enjekte edilir)."""
     return cast(Path, request.app.state.fs_home)
+
+
+def secimi_dogrula(istek_yolu: str, ev: Path) -> VideoGirdisi:
+    """Seçilen/bırakılan yolu doğrular; kabul edilirse dosya bilgisini döner.
+
+    **Tek kapı (v1.2.1):** gezginden tıklama, native dosya diyaloğu,
+    sürükle-bırak ve doğrudan ``POST /api/jobs`` — dördü de buradan geçer.
+    Kuralların iki ayrı kopyası zamanla ayrışırdı.
+
+    Sıra bilinçlidir: önce hapis (güvenlik), sonra klasör ayrımı, sonra
+    varlık, en sonda uzantı. Klasör kontrolü varlıktan ÖNCE gelir çünkü
+    tersi durumda kullanıcı bir klasör bıraktığında "dosya bulunamadı"
+    diye yanıltıcı bir mesaj alırdı.
+
+    Raises:
+        HTTPException: 403 (ev dışı), 400 (klasör / bulunamadı / uzantı).
+            Hepsi Türkçe ve eyleme dökülebilirdir; ``detail`` doğrudan
+            arayüzde gösterilir.
+    """
+    hedef = guvenli_yol(istek_yolu, ev)
+    if hedef is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Ev dizini dışındaki dosya işlenemez — yol reddedildi.",
+        )
+    if hedef.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Klasör seçilemez — tek bir video dosyası verin ({hedef.name or hedef})."
+            ),
+        )
+    if not hedef.is_file():
+        raise HTTPException(status_code=400, detail=f"Video dosyası bulunamadı: {hedef}")
+    if hedef.suffix.lower() not in VIDEO_UZANTILARI:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Desteklenmeyen dosya uzantısı: {hedef.suffix or '(yok)'} — "
+                "video dosyası seçin (örn. .mp4, .mkv)."
+            ),
+        )
+    try:
+        boyut = hedef.stat().st_size
+    except OSError:
+        boyut = 0
+    return VideoGirdisi(ad=hedef.name, yol=str(hedef), boyut=boyut)
+
+
+class SecimIstek(BaseModel):
+    """``POST /api/fs/sec`` gövdesi — doğrulanacak dosya yolu."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+
+
+@router.post("/api/fs/sec", response_model=VideoGirdisi)
+def sec(istek: SecimIstek, request: Request) -> VideoGirdisi:
+    """Sürükle-bırak / native diyalog / elle yol → seçim doğrulaması.
+
+    İş BAŞLATMAZ; yalnız "bu yol seçilebilir mi" sorusunu yanıtlar ve
+    arayüzün seçim özetini dolduracağı bilgiyi (ad, yol, boyut) döner.
+    Ayrı uç olmasının sebebi budur: kullanıcı dosyayı seçtiğinde henüz
+    mod/dışa aktarım tercihlerini yapmamıştır.
+    """
+    return secimi_dogrula(istek.path, ev_dizini(request))
 
 
 def reveal_komutu(hedef: Path, *, platform: str) -> list[str] | None:
