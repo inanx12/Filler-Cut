@@ -896,6 +896,60 @@ testidir, davranışın kendisi gerçek tarayıcıda ölçüldü.
   `pencere.events.loaded.__iadd__.called` yanlış nesneye bakar. Kayıt
   `mock_calls` izinden doğrulanır.
 
+**v1.2.1 DALGA B.2 (genişletilebilir ev hapsi) TAMAMLANDI (2026-09-03,
+sürüm bump YOK).** Yalnız `config` + `web/` katmanı; pipeline'a ve Dalga
+A/B sözleşmelerine dokunulmadı. Sorun: dosya gezgini/seçici ev dizinine
+hapsoluydu ve İnan'ın videoları D:/E:'de — native diyalog D:'den seçim
+yaptırıp doğrulama reddediyordu (UX tuzağı). Çözüm: hapis KALKMADI,
+`filler-cut.toml [ui].izinli_kokler` ile **ev ∪ izinli kökler**e genişledi.
+
+**GÜVENLİK İNVARIANT'I:** izinli kökleri değiştiren bir API ucu YOKTUR;
+kökler yalnızca config DOSYASINDAN okunur. `merge_config`'te override alanı
+yok, CLI bayrağı yok. **Env var da bilinçli DESTEKLENMEZ** — brief "liste
+env'de zorsa toml yeterli" dedi ve daha önemlisi, kolay enjekte edilen bir
+env var hapsin sınırını zayıflatırdı (bir liste env'de zaten hantal).
+
+**DOĞRULAMA İKİ KATMAN:** (a) ŞEKİL — `Config.__post_init__`, boş olmayan
+metin listesi (config dosya sistemine dokunmaz); (b) VARLIK —
+`web/fs.izinli_kokler_coz`, kökü çözer ve dizin olduğunu doğrular. Var
+olmayan kök SESSİZCE ATLANMAZ: `ConfigError` fırlar ve `cli.ui` onu
+**socket açılmadan** temiz Türkçe hataya çevirir (gerçek koşuda doğrulandı:
+`Hata: [ui].izinli_kokler içindeki kök yok ya da dizin değil: … `, kod 1).
+
+**HAPİS = ev ∪ izinli_kokler, HER YERDE AYNI KÖKLER.** `guvenli_yol`,
+`yol_parcalari`, `dizini_listele` artık `izinli_kokler` alır; boşken
+davranış v1.0 ile BİREBİR (regresyon kilitli). Bir yol köklerden herhangi
+birine düşüyorsa kabul; traversal her kökten `is_relative_to` ile reddedilir.
+`izinli_kokler_coz` ev'e eşit/altındaki kökü ELER (çift saymaz) — bu yüzden
+scratchpad (`C:\Users\inane\…` altında) kök olarak verilince elenir; gerçek
+test D:\ gibi ev DIŞI bir kök ister.
+
+**Kök seçici SUNUCUDAN beslenir:** browse cevabı `kokler` taşır (ad+yol);
+UI yalnız birden çok kök varsa çip satırı çizer (tek kökte hiç görünmez).
+Breadcrumb içeren KÖKTEN başlar (ev → "Ev", izinli kök → yolu) ve kökün
+üstüne çıkmaz; kökün kendisinde `ust=None`.
+
+**Native diyalog açılış klasörü = ilk izinli kök (yoksa ev).** Karar basit
+tutuldu: "son kullanılan" pencereler arası IPC + kalıcı durum ister, kazancı
+düşük. `create_file_dialog(directory=...)` imzası pywebview 6.2.1
+kaynağından (`window.py:519`).
+
+**Gerçek koşuda doğrulandı (D:\FC_Hapis_Test kökü, sonra silindi):** kök
+seçici Ev + D:\ gösterdi, D: içeriği listelendi, kökte `ust` kapalı,
+breadcrumb kök içinde kaldı, D:'den video 200, `.txt` 400, kök dışı 403
+(izinli konumları sayan mesaj), D:'den native sürükle-bırak **artık kabul
+edildi** (UX tuzağı kapandı), Ev↔D: geçişi çalıştı.
+
+**Tuzak (bir sonraki agent için):**
+- `web/fs.py` artık `fillercut.config`'i import ediyor (`ConfigError` +
+  şekil). Bu döngü YARATMAZ (config web'i import etmez) ama `cli.ui`
+  `fs`'i TEMBEL import etmeli — modül seviyesine çekersen fastapi düz CLI
+  yoluna girer (`TestIncelikSozlesmesi` yakalar).
+- `izinli_kokler_coz` ev'in ALTINDAKİ kökü eler ama ev'in ÜSTÜNDEKİ kökü
+  (örn. `C:\` iken ev `C:\Users\x`) TUTAR — kullanıcının açık config'i
+  hapsi genuine genişletir; "Ev" çipi o durumda C:\'nin bir alt ağacıdır,
+  garip ama kullanıcının kararı.
+
 ### v1.x MADDE 4 — DAĞITIM EPIC'İ KAPANDI (2026-09-02)
 
 Beş faz, tek cümlelik özetleri:
@@ -1141,14 +1195,25 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/native.py` — native dosya diyaloğu + pywebview sürükle-bırak köprüsü | `543d65f` |
 | `web/fs.py` + `web/static/` — `POST /api/fs/sec` (tek kapı) + dropzone arayüzü | `b136a5f` |
 
+**v1.2.1 Dalga B.2 (genişletilebilir ev hapsi)**
+
+| Modül | Commit |
+|---|---|
+| `config.py` — `[ui].izinli_kokler` (şekil doğrulama, env yok) | `4581857` |
+| `web/fs.py` + `app.py` + `jobs.py` — ev ∪ izinli_kokler hapsi + browse kökleri | `96ff6ce` |
+| `web/native.py` + `cli.py` — native diyalog başlangıç dizini + kök çözümü | `fadee3a` |
+| `web/static/` — kök seçici çip arayüzü | `58d90ba` |
+
 **Sıradaki:** dağıtım epic'i (v1.x madde 4) KAPANDI. Kalan v1.x maddeleri
 ayrı işlerdir — madde 5 (PyPI) bu epic'in parçası DEĞİLDİR.
 v1.2.1 Dalga A (FCP7 XML + SRT) ve Dalga B (sürükle-bırak + dosya seçici)
 bitti; **sürüm bump + CHANGELOG + tag YAPILMADI** (release ayrı iş).
-Bekleyen iki manuel doğrulama: (a) Dalga A — Resolve'da XML PASS, SRT'de
+Bekleyen manuel doğrulamalar: (a) Dalga A — Resolve'da XML PASS, SRT'de
 kusur çıkıp düzeltildi, düzeltilmiş `Test1.srt`'nin tüm blokları
 `00:00:20:12` içinde kalmalı; (b) Dalga B — native exe'de ve tarayıcı
-modunda dropzone + dosya seçici.
+modunda dropzone + dosya seçici; (c) Dalga B.2 — `filler-cut.toml`'a
+gerçek `D:\` ekleyip D:'den sürükleme/gezinme (sunucu tarafı bu ajanda
+D:\FC_Hapis_Test ile doğrulandı).
 
 Web katmanı bu taşınabilirlik kısıtıyla yazılmıştı — tek port, tek pencere
 varsayımı; tarayıcıya özgü API'lere bel bağlanmadı — ve Faz 1'de bu karşılığını

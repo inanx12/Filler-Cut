@@ -258,6 +258,21 @@ and watch the 6-stage pipeline progress live.
 
 For the native window: `pip install "fillercut[native]"`.
 
+**If your videos live on another drive** (D:\, E:\ …), the browser is
+confined to your home directory by default. Extend the jail by adding
+allowed roots in `filler-cut.toml`:
+
+```toml
+config_version = 1
+[ui]
+izinli_kokler = ['D:\', 'E:\Videolar']
+```
+
+These roots are read **only from the config file** — there is no UI control
+that changes them, so the security boundary can't be moved from inside the
+page. A nonexistent root makes `fillercut ui` stop with a clear error. With
+more than one root, a root switcher (Ev / D:\ …) appears above the browser.
+
 You can also **drag and drop** a video: in the desktop window, drop the file
 onto the page or press "Dosya seç…" to open the native Windows file dialog.
 Drag and drop does not work in browser mode — browsers do not hand the page a

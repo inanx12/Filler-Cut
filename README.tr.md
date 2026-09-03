@@ -261,6 +261,21 @@ seçicidir ve arayüz sizi oraya yönlendirir.
 
 Native pencere için: `pip install "fillercut[native]"`.
 
+**Videolarınız başka bir sürücüdeyse** (D:\, E:\ …) gezgin varsayılan
+olarak ev dizininizle sınırlıdır. `filler-cut.toml`'a izinli kök ekleyerek
+hapsi genişletebilirsiniz:
+
+```toml
+config_version = 1
+[ui]
+izinli_kokler = ['D:\', 'E:\Videolar']
+```
+
+Bu kökler **yalnızca config dosyasından** okunur (arayüzde onları değiştiren
+bir düğme yoktur — güvenlik sınırı config'in dışına taşmasın diye). Var
+olmayan bir kök yazarsanız `fillercut ui` açık bir hata verip durur. Birden
+çok kök varsa gezginin üstünde bir kök seçici (Ev / D:\ …) çıkar.
+
 ![Video seçme ekranı: sunucu taraflı dosya gezgini ve Normal/Agresif kesim modu seçimi](docs/images/ui-video-sec.png)
 
 ![İşleniyor ekranı: 6 aşamalı pipeline ve her aşamanın süresi](docs/images/ui-isleniyor.png)
