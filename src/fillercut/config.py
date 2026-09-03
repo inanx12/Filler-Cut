@@ -124,6 +124,28 @@ class EncoderConfig:
 
 
 @dataclass(frozen=True)
+class UiConfig:
+    """Web arayüzü ayarları (v1.2.1 B.2).
+
+    ``izinli_kokler`` dosya gezgini/seçici hapsini ev dizininin ÖTESİNE
+    genişletir: ev ∪ izinli_kokler. Kullanıcının videoları başka bir
+    sürücüdeyse (D:\\, E:\\) hapis onun iş akışını engellemesin diye vardır.
+
+    **GÜVENLİK:** bu liste YALNIZCA config dosyasından okunur — onu
+    değiştiren bir API ucu ya da CLI bayrağı YOKTUR (bu yüzden ``merge_config``
+    de bir override almaz). Env var da bilinçli olarak DESTEKLENMEZ (bkz.
+    CHANGELOG/rapor): bir liste env'de zaten hantaldır ve daha önemlisi, kolay
+    enjekte edilebilen ikinci bir kaynak hapsin sınırını zayıflatırdı.
+
+    Buradaki doğrulama ŞEKİLDİR (boş olmayan metin listesi). Kökün diskte VAR
+    olup olmadığı ayrı katmandadır (``web/fs.izinli_kokler_coz``) — config
+    yüklemesi dosya sistemine dokunmasın diye ayrık tutuldu.
+    """
+
+    izinli_kokler: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class RenderConfig:
     """Render (encode) parametreleri."""
 
@@ -157,19 +179,29 @@ class Config:
     padding: PaddingConfig = field(default_factory=PaddingConfig)
     encoder: EncoderConfig = field(default_factory=EncoderConfig)
     render: RenderConfig = field(default_factory=RenderConfig)
+    ui: UiConfig = field(default_factory=UiConfig)
 
     def __post_init__(self) -> None:
-        """``cikti``'yı TEK KAPIDA doğrular.
+        """``cikti`` ve ``ui.izinli_kokler``'i TEK KAPIDA doğrular.
 
-        Doğrulamanın burada olması bilinçlidir: değer hem TOML'dan hem CLI
-        bayrağından (``merge_config``) gelebilir; iki ayrı yerde kontrol
+        Doğrulamanın burada olması bilinçlidir: değerler hem TOML'dan hem
+        (``cikti`` için) CLI bayrağından gelebilir; iki ayrı yerde kontrol
         etmek, birinin unutulduğu bir yolun sessizce geçmesi demekti.
+        ``izinli_kokler`` için ŞEKİL doğrulanır; diskte varlık ``fs`` katmanının
+        işidir (config yüklemesi dosya sistemine dokunmaz).
         """
         if self.cikti not in CIKTI_SECENEKLERI:
             raise ConfigError(
                 f"geçersiz 'cikti' değeri: {self.cikti!r} — "
                 f"geçerli: {', '.join(CIKTI_SECENEKLERI)}"
             )
+        if not isinstance(self.ui.izinli_kokler, list):
+            raise ConfigError("[ui].izinli_kokler bir liste olmalı")
+        for kok in self.ui.izinli_kokler:
+            if not isinstance(kok, str) or not kok.strip():
+                raise ConfigError(
+                    f"[ui].izinli_kokler girişleri boş olmayan metin olmalı: {kok!r}"
+                )
 
 
 # ─── Tip doğrulama yardımcıları ───────────────────────────────────────────────
@@ -281,6 +313,22 @@ def _encoder_yap(data: dict[str, object]) -> EncoderConfig:
     return EncoderConfig(**kwargs)  # type: ignore[arg-type]
 
 
+def _ui_yap(data: dict[str, object]) -> UiConfig:
+    """[ui] bölümünden UiConfig üretir (v1.2.1 B.2)."""
+    gecerli = {"izinli_kokler"}
+    _bolum_anahtarlari(data, "ui", gecerli)
+    kwargs: dict[str, object] = {}
+    if "izinli_kokler" in data:
+        ham = data["izinli_kokler"]
+        if not isinstance(ham, list) or not all(isinstance(x, str) for x in ham):
+            raise ConfigError(
+                "'ui.izinli_kokler' string listesi olmalı, "
+                f"{type(ham).__name__} verildi: {ham!r}"
+            )
+        kwargs["izinli_kokler"] = ham
+    return UiConfig(**kwargs)  # type: ignore[arg-type]
+
+
 def _render_yap(data: dict[str, object]) -> RenderConfig:
     """[render] bölümünden RenderConfig üretir."""
     gecerli = {
@@ -359,7 +407,7 @@ def load_config(config_path: str | Path | None = None) -> Config:
     # Bilinmeyen top-level anahtarlar → uyarı (forward-compat)
     known_top = {
         "config_version", "aggressive", "yes", "cikti", "srt",
-        "asr", "detect", "padding", "encoder", "render",
+        "asr", "detect", "padding", "encoder", "render", "ui",
     }
     for key in data:
         if key not in known_top:
@@ -398,6 +446,7 @@ def load_config(config_path: str | Path | None = None) -> Config:
         padding=_padding_yap(_bolum_al(data, "padding")),
         encoder=_encoder_yap(_bolum_al(data, "encoder")),
         render=_render_yap(_bolum_al(data, "render")),
+        ui=_ui_yap(_bolum_al(data, "ui")),
     )
 
 

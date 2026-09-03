@@ -572,3 +572,67 @@ class TestCiktiVeSrt:
     def test_merge_gecersiz_cikti_configerror(self) -> None:
         with pytest.raises(ConfigError):
             merge_config(Config(), cikti="avi")
+
+
+class TestUiIzinliKokler:
+    """v1.2.1 B.2 — [ui].izinli_kokler: ev hapsini config'le genişletme.
+
+    GÜVENLİK: kökler YALNIZCA config dosyasından okunur (env yok, CLI bayrağı
+    yok — bkz. rapor). Bu yüzden `merge_config`'te de bir override alanı YOKTUR.
+    Doğrulama tek kapıda (`Config.__post_init__`) — ŞEKİL doğrulaması; kökün
+    diskte VAR olup olmadığı ayrı katmanda (`fs.izinli_kokler_coz`) sınanır.
+    """
+
+    def test_varsayilan_bos_liste(self) -> None:
+        assert Config().ui.izinli_kokler == []
+
+    def test_config_yoksa_ui_bolumu_bos(self, tmp_path: Path) -> None:
+        yol = tmp_path / "filler-cut.toml"
+        yol.write_text("config_version = 1\n", encoding="utf-8")
+        assert load_config(yol).ui.izinli_kokler == []
+
+    def test_tomldan_liste_okunur(self, tmp_path: Path) -> None:
+        # Liste okuması platformdan bağımsızdır; Windows yolu backslash kaçış
+        # gürültüsü getirir, TOML literal (tek tırnak) dize onu temizler.
+        yol = tmp_path / "filler-cut.toml"
+        yol.write_text(
+            "config_version = 1\n[ui]\nizinli_kokler = ['D:\\', 'E:\\Videolar']\n",
+            encoding="utf-8",
+        )
+        assert load_config(yol).ui.izinli_kokler == ["D:\\", "E:\\Videolar"]
+
+    def test_bilinmeyen_ui_anahtari_uyarir_ama_patlamaz(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        yol = tmp_path / "filler-cut.toml"
+        yol.write_text(
+            'config_version = 1\n[ui]\nizinli_kokler = []\nbilinmeyen = 1\n',
+            encoding="utf-8",
+        )
+        load_config(yol)
+        assert "bilinmeyen config anahtarı [ui].bilinmeyen" in capsys.readouterr().err
+
+    def test_liste_degilse_configerror(self, tmp_path: Path) -> None:
+        yol = tmp_path / "filler-cut.toml"
+        yol.write_text('config_version = 1\n[ui]\nizinli_kokler = "D:\\\\"\n', encoding="utf-8")
+        with pytest.raises(ConfigError):
+            load_config(yol)
+
+    def test_liste_ici_string_degilse_configerror(self, tmp_path: Path) -> None:
+        yol = tmp_path / "filler-cut.toml"
+        yol.write_text("config_version = 1\n[ui]\nizinli_kokler = [1, 2]\n", encoding="utf-8")
+        with pytest.raises(ConfigError):
+            load_config(yol)
+
+    def test_bos_string_giris_configerror(self) -> None:
+        """Tek kapı: doğrudan kurulan Config de boş kök girişini reddeder."""
+        from fillercut.config import UiConfig
+
+        with pytest.raises(ConfigError):
+            Config(ui=UiConfig(izinli_kokler=["  "]))
+
+    def test_merge_config_kok_override_almaz(self) -> None:
+        """Güvenlik invariant'ı: kökleri merge (CLI) ile geçirmenin yolu yok."""
+        import inspect
+
+        assert "izinli_kokler" not in inspect.signature(merge_config).parameters
