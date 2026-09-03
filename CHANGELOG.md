@@ -37,10 +37,13 @@ Konsollu `fillercut.exe` ve `pip install` ile gelen `fillercut` komutu
 
 ### Testler
 
-- `tests/test_gunluk.py` (10 test): kusurun kırmızı kanıtı, yönlendirme
+- `tests/test_gunluk.py` (11 test): kusurun kırmızı kanıtı, yönlendirme
   sözleşmesi ve **gerçek giriş noktasının** `sys.stdout is None` iken
   gerçek bir portta servis verdiği uçtan uca kilidi. Hepsi ayrı
   yorumlayıcıda koşar ve build artefaktı gerektirmez — CI'da da koşar.
+- Gerçek (konsolsuz) koşuda yakalanan ikinci kusur da kapandı: günlük
+  satırları düz metin olarak yazılıyor — typer'ın akış türü yoklaması
+  yanıltıldığı için mesajlar okunmaz `b'...'` biçiminde düşüyordu.
 - Kör nokta kapandı: mevcut `exe` marker'lı smoke testi `fillercut-ui.exe`'yi
   zaten koşturuyordu, ama `Popen` ile başlatılan çocuk geçerli bir stdout
   tanıtıcısı alıyor; Explorer'dan çift tıklama koşulu taklit edilmemişti.

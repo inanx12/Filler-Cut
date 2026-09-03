@@ -127,6 +127,68 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 
 ## Mevcut Durum (2026-09-02)
 
+**v1.2.2 HOTFIX TAMAMLANDI (2026-09-04) — kurulu masaüstü uygulaması
+açılmıyordu (KI-11).** Sürüm 1.2.1 → **1.2.2**. Push/tag/release YOK —
+İnan onaylar.
+
+**Kök neden:** `console=False` build'de (`fillercut-ui.exe`)
+`sys.stdout`/`sys.stderr` **None**'dur; `uvicorn.logging.DefaultFormatter`
+renk kararı için `sys.stdout.isatty()` çağırır → `AttributeError` →
+`dictConfig` bunu `ValueError: Unable to configure formatter 'default'`
+diye sarar ve `uvicorn.Config(...)` **daha kurulmadan** patlar. Konsol
+olmadığı için ekranda hata da yok: pencere sessizce hiç açılmıyor.
+`fillercut.exe` ve repo'dan `fillercut ui` etkilenmiyordu (konsol var).
+
+**KAPSAM: v1.2.0'dan beri açıktı.** `_sunucu_kur`'un uvicorn satırı ve
+`entry_ui.py` v1.2.0↔v1.2.1 arasında hiç değişmedi (`git show v1.2.0:...`),
+uvicorn pin'i (`>=0.30`) de aynı. Konsolsuz exe ilk kez v1.2.0'da (Faz 3)
+üretildi → **iki kurucu da etkilendi**; release notu bunu açıkça söylüyor.
+
+**Çözüm `fillercut/gunluk.py`** (yeni modül, `packaging/entry_ui.py`'den
+`main_entry`'den ÖNCE çağrılır): akışlar `None` ise
+`%LOCALAPPDATA%\fillercut\logs\ui.log`'a `RotatingFileHandler` ile
+(3 × 1 MB, yalnız stdlib). **devnull değil dosya** — konsolsuz koşuda çıkan
+her hata yoksa teşhis imkânsız; günlük iz bırakıyor. Dizin açılamazsa
+(MSIX/sanallaştırma `WinError 17` ailesi) devnull'a, o da olmazsa bellek
+tamponuna düşülür. Konsollu koşu **birebir değişmez** (stdout varsa
+fonksiyon hiçbir şey yapmaz). Günlük YEREL kalır; geri bildirim düğmesi log
+GÖNDERMEZ, mahremiyet invariant'ı değişmedi.
+
+**Tuzak (bir sonraki agent için) — bytes probu.** click/typer akışın ikili
+mi metin mi olduğunu `stream.write(b"")` **deneyerek** anlar
+(`click._compat._is_binary_writer`). Adaptörün ilk sürümü girdiyi `str()`
+ile zorluyordu; `b""` sessizce `"b''"` yazıldı, click akışı İKİLİ sandı ve
+mesajı bytes gönderdi — günlüğe `b'Filler-Cut penceresi a\xc3\xa7...'`
+düştü. Sahte bir metin akışı yazarken `write` metin dışı girdide
+**`TypeError` vermeli** ve `encoding`/`errors` ilan etmeli. (`encoding`
+property DEĞİL sınıf niteliği: mypy strict "Cannot override writeable
+attribute with read-only property" der.) Bu kusur **yalnızca gerçek
+doğrulamada** görüldü.
+
+**KÖR NOKTA KAPANDI.** `exe` marker'lı smoke `fillercut-ui.exe`'yi zaten
+koşturuyordu ama `Popen(..., stdout=DEVNULL)` çocuğa **geçerli bir
+tanıtıcı** verir — `sys.stdout` orada `None` OLMAZ. Yeni
+`tests/test_gunluk.py` (11 test, hepsi ayrı yorumlayıcıda; süreç içi
+`sys.stdout=None` pytest capture'ını ve global `logging` ağacını
+kirletirdi) koşulu doğrudan kurar ve build artefaktı istemez → CI'da koşar.
+
+**GERÇEK DOĞRULAMA (bu turda ZORUNLUYDU, yapıldı).** Yerel PyInstaller
+build (1.2.2) → `fillercut-ui.exe` **konsolsuz** başlatıldı
+(`Start-Process`, std tanıtıcı devri YOK — çift tıklama koşulu): süreç
+yaşıyor, `MainWindowTitle='Filler-Cut'` (native pencere açık),
+`/api/instance` 200 `{"surum":"1.2.2"}`, `/` 200 (11856 bayt), `/api/kurulum`
+200 (3 model). `ui.log` yazıldı → `sys.stdout` gerçekten `None`'dı, yani
+koşul taklit değil GERÇEKTİ. Kapanış `taskkill /T /F` ile (bootloader
+çocuğu `terminate()` ile ölmez).
+
+**Süreç kilidi:** AGENTS.md'ye **Release Kontrol Listesi** eklendi
+(madde 5: kurulu `fillercut-ui.exe`'nin açıldığı ve UI'ın servis verdiği
+MANUEL doğrulanmadan tag atılmaz).
+
+**dist_pypi/** artefaktları 1.2.2 olarak yeniden üretildi (twine check ×2
+PASSED, wheel 53 girdi — `gunluk.py` dahil, medya/ikili sızıntısı yok).
+PyPI 1.2.1'i hiç görmedi; oradan doğrudan 1.2.2 ile çıkılacak.
+
 **v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
 gerçek donanımda doğrulandı (15 sn'lik test klibi → %22.28 kazanım,
 `rapor.json`'da reason zincirleri).

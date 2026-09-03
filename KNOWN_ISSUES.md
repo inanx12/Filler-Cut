@@ -1316,6 +1316,24 @@ maliyeti ayrıca ölçülmeli, bu kayıtta ölçülmedi.
   `fillercut-ui.exe`'nin AÇILDIĞI ve UI'ın servis verdiği **manuel**
   doğrulanmadan tag atılmaz. Otomatik kilit tek başına yetmez: bu kusur tam
   olarak "test yeşil ama kurucu açılmıyor" sınıfındandı.
+- **Tuzak — bytes probu (yalnız gerçek doğrulamada görüldü):** click/typer
+  akışın ikili mi metin mi olduğunu `stream.write(b"")` **deneyerek** anlar
+  (`click._compat._is_binary_writer`). Yönlendirme adaptörünün ilk sürümü
+  girdiyi `str()` ile zorluyordu; `b""` sessizce `"b''"` olarak yazıldı,
+  click akışı İKİLİ sandı ve mesajı bytes gönderdi — günlüğe okunmaz bir
+  `b'Filler-Cut penceresi a\xc3\xa7...'` düştü (pencere yine de açılıyordu).
+  Sahte bir metin akışı yazarken `write` metin dışı girdide **`TypeError`
+  vermeli** ve akış `encoding`/`errors` ilan etmeli; `encoding` property
+  DEĞİL sınıf niteliği olmalı (mypy strict: "Cannot override writeable
+  attribute with read-only property"). Kilit
+  `tests/test_gunluk.py::test_typer_echo_metin_olarak_dusuyor`.
+- **Gerçek doğrulama (2026-09-04, yerel 1.2.2 build):** `fillercut-ui.exe`
+  konsolsuz başlatıldı (std tanıtıcı devri yok — çift tıklama koşulu):
+  native pencere açıldı (`MainWindowTitle='Filler-Cut'`), `/api/instance`
+  200 `{"surum":"1.2.2"}`, `/` 200, `/api/kurulum` 200 (3 model) ve `ui.log`
+  yazıldı — günlüğün varlığı `sys.stdout`'un gerçekten `None` olduğunun
+  kanıtıdır. Kapanış `taskkill /T /F` ile: PyInstaller bootloader çocuğu
+  `terminate()` ile ölmez.
 - **Referans:** `src/fillercut/gunluk.py`, `packaging/entry_ui.py`,
   `src/fillercut/cli.py::_sunucu_kur`; kilitler `tests/test_gunluk.py`
   (kırmızı kanıtı dahil: guard'sız gövde `Unable to configure formatter`
