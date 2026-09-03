@@ -1277,3 +1277,46 @@ maliyeti ayrıca ölçülmeli, bu kayıtta ölçülmedi.
 - **Referans:** `src/fillercut/web/native.py::NativeKopru`,
   `src/fillercut/web/fs.py::secimi_dogrula`; kilitler `tests/test_web_hapis.py`
   (403 yolu) + `tests/test_web_native.py` (diyalog başlangıç dizini).
+
+## KI-11 — Konsolsuz exe uvicorn log kurulumunda çöküyordu — **Çözüldü (v1.2.2)**
+
+- **Çözüm (2026-09-04):** `packaging/entry_ui.py` artık `main_entry`'den
+  ÖNCE `fillercut.gunluk.konsolu_dosyaya_yonlendir()` çağırıyor: akışlar
+  `None` ise `%LOCALAPPDATA%\fillercut\logs\ui.log`'a bağlanır
+  (`RotatingFileHandler`, 3 × 1 MB, yalnız stdlib). Konsollu koşu birebir
+  değişmedi — stdout varsa fonksiyon hiçbir şey yapmaz.
+
+- **Belirti:** Kurulu `fillercut-ui.exe`'ye (Başlat Menüsü kısayolu, masaüstü
+  ikonu) tıklandığında **pencere hiç açılmıyordu**. Ekranda hata da yoktu:
+  konsolsuz build'de hatayı basacak bir akış yok. Konsollu `fillercut.exe`
+  ve repo'dan `fillercut ui` **etkilenmiyordu**.
+- **Neden:** PyInstaller `console=False` build'inde süreç bir konsola bağlı
+  değildir ve Python `sys.stdout`/`sys.stderr`'i **None** bırakır.
+  `uvicorn.logging.DefaultFormatter.__init__` renk kararı için
+  `sys.stdout.isatty()` çağırır → `AttributeError`; `logging.config.dictConfig`
+  bunu `ValueError: Unable to configure formatter 'default'` diye sarar ve
+  `uvicorn.Config(...)` **daha kurulmadan** patlar. Zincir:
+  `entry_ui` → `cli.main_entry` → `cli.ui` → `cli._sunucu_kur` →
+  `uvicorn.Config.configure_logging`.
+- **Kapsam — v1.2.0'dan beri açıktı:** `_sunucu_kur`'un
+  `uvicorn.Config(web_app, log_level="warning")` satırı ve `entry_ui.py`
+  v1.2.0 ile v1.2.1 arasında **hiç değişmedi** (`git show v1.2.0:...` ile
+  doğrulandı), uvicorn pin'i (`>=0.30`) de aynı. Konsolsuz exe ilk kez
+  v1.2.0'da (Faz 3) üretildiği için kusur **v1.2.0 ve v1.2.1 kurucularının
+  ikisinde de** vardır. v1.1.0 ve öncesinde `entry_ui.py` yoktu.
+- **Neden testler yakalamadı (kör nokta):** `tests/test_paketleme.py`'nin
+  `exe` marker'lı smoke'u `fillercut-ui.exe`'yi zaten koşturuyordu — ama
+  `subprocess.Popen(..., stdout=subprocess.DEVNULL)` çocuğa **geçerli bir
+  tanıtıcı** verir; `sys.stdout` orada `None` OLMAZ. Explorer'dan çift
+  tıklama koşulu taklit edilmemişti. Yeni kilit
+  `tests/test_gunluk.py::TestEntryUiSozlesmesi` bu koşulu doğrudan kurar
+  (`sys.stdout = None` + `runpy` ile gerçek giriş noktası) ve `dist/` build'i
+  gerektirmediği için CI'da da koşar.
+- **Süreç kilidi:** AGENTS.md'ye "Release Kontrol Listesi" eklendi — kurulu
+  `fillercut-ui.exe`'nin AÇILDIĞI ve UI'ın servis verdiği **manuel**
+  doğrulanmadan tag atılmaz. Otomatik kilit tek başına yetmez: bu kusur tam
+  olarak "test yeşil ama kurucu açılmıyor" sınıfındandı.
+- **Referans:** `src/fillercut/gunluk.py`, `packaging/entry_ui.py`,
+  `src/fillercut/cli.py::_sunucu_kur`; kilitler `tests/test_gunluk.py`
+  (kırmızı kanıtı dahil: guard'sız gövde `Unable to configure formatter`
+  ile ölür).

@@ -94,6 +94,37 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
+## Release Kontrol Listesi — Tag Atmadan Önce
+
+Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
+çalışır" ile geçilmez.
+
+1. **Üçü yeşil** (`pytest` / `ruff check .` / `mypy .`, repo kökünden, tam
+   kapsam). Yerelde CI konvansiyonuyla:
+   `-m "not exe and not ffmpeg and not wcpp and not ag"`.
+2. **Sürüm tek kaynaktan tutarlı:** `pyproject.toml` == kurulu metadata ==
+   `CHANGELOG.md`'nin en üst sürüm başlığı (kilit
+   `tests/test_release.py::TestSurumTutarliligi`). `[Unreleased]` kalmamış.
+3. **Exe'ler yeniden derlenir** (`scripts/build_exe.ps1`) — bump sonrası
+   `dist/fillercut.exe` BAYAT'tır; `exe` marker'lı smoke bunu yakalar.
+4. **Kurucu üretilir** (`scripts/build_setup.ps1`) ve **kurulur**.
+5. **MANUEL — kurulu `fillercut-ui.exe` AÇILIYOR ve UI SERVİS VERİYOR.**
+   Başlat Menüsü kısayoluna (ya da masaüstü ikonuna) **çift tıkla**;
+   pencere açılmalı ve arayüz yüklenmeli. **Bu madde doğrulanmadan tag
+   ATILMAZ.** Neden ayrı bir madde: konsolsuz build'de hata basacak bir
+   akış yoktur — pencere sessizce hiç açılmaz ve testler yeşil kalır.
+   Bu tam olarak KI-11'dir (v1.2.0 + v1.2.1 kurucuları böyle çıktı).
+   Otomatik kilit (`tests/test_gunluk.py`) bu maddenin YERİNE geçmez:
+   `Popen`'la başlatılan bir çocuk geçerli bir stdout tanıtıcısı alır,
+   Explorer'dan çift tıklama almaz.
+6. **MANUEL — bir gerçek video uçtan uca işlenir** (kurulu exe ile, repo'dan
+   değil): dosya seçilir, 6 aşama koşar, review ekranı açılır, onaydan
+   sonra çıktı yazılır.
+7. Tag + push + Release (`release.yml` Release'i CHANGELOG'dan kendi açar).
+
+**Kural:** 5 ve 6 insan gözüyle yapılır ve sonucu ana sohbete yazılır.
+"Testler yeşildi" bir release doğrulaması DEĞİLDİR.
+
 ## Mevcut Durum (2026-09-02)
 
 **v0.1 TAMAMLANDI** — 6 katman uçtan uca çalışıyor: `fillercut video.mp4`
