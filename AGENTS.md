@@ -731,6 +731,73 @@ kaynak yaratırdı. rc, o sürümün *kanalı*dır, farklı bir kod değil.
   geçici olarak `Continue`ya çekilir — `Stop` altında "release yok" hâli
   terminating hata olurdu (aynı sınıf ISCC/PyInstaller tuzağı).
 
+**v1.2.1 DALGA A (FCP7 XML + SRT) TAMAMLANDI (2026-09-03, sürüm bump YOK).**
+Pipeline'ın altıncı adımı artık iki kollu: `cikti="mp4"` mevcut RENDER,
+`cikti="xml"` RENDER'a HİÇ girmeden FCP7 (xmeml v4) proje dosyası yazar —
+Premiere/Resolve köprüsü, encode yok, kalite kaybı yok. `srt=True` ise
+transkript ayrıca `<video_adı>.srt` olarak yazılır. 6 aşamanın adlarına,
+review işlevlerine, plan/detect mantığına ve `padding`/`min_keep`/KI-5
+davranışlarına DOKUNULMADI.
+
+**MP4 kolu bit-birebir aynı (ölçüldü):** Test1.mp4 → `Test1_temiz.mp4`
+SHA-256 `F5185E7E…9004` — parite referansıyla BİREBİR (wcpp/Vulkan +
+h264_amf, %21.67 kazanım). XML koşusu aynı planı üretti (yine %21.67).
+
+**YUVARLAMA YÖNÜ BİLİNÇLİ ASİMETRİKTİR** (brief'in kendi kararı, kilit
+testte): keep BAŞLANGICI `floor`, keep BİTİŞİ `ceil`. `round` simetrik
+olurdu ve her iki uçta konuşmadan yarım kareye kadar kırpardı; burada
+**konuşmadan tek kare eksilmez**, filler'a en fazla bir kare taşılır.
+Çevrimler tamsayı aritmetiğidir (float yuvarlama kesim sınırında kayma
+üretemez) ve `round()` YERİNE yarım-yukarı kullanılır — Python'unki bankacı
+yuvarlamasıdır ve süre toplamlarını girdiye bağlı oynatırdı.
+
+**BUNUN ÖLÇÜLEN SONUCU — brief'in Resolve pass kriteri "toplam süre ≤1 kare
+sapma" DEĞİL "≤ parça sayısı kare"dir.** Yön kuralı parça BAŞINA en fazla
+1 kare eklediği için toplam sapma parça sayısıyla ölçeklenir. Test1'de
+ölçüldü: rapor `remaining` 20113 ms → 1207 kare; XML `<duration>` **1212**
+kare (5 parça × 1 kare). İki gereksinim brief içinde çelişiyordu; açıkça
+belirtilmiş ve teste bağlanması istenen YÖN KURALI kazandı.
+
+**BİLİNÇLİ SAPMA — SRT kaynağı "segment" değil kelime listesi.** Brief
+"faster-whisper/wcpp segment'lerinden" diyordu; bu repoda öyle bir kaynak
+YOKTUR: `Transcriber` sözleşmesi iki backend'i de `list[Word]`'e indirir,
+wcpp zaten `--max-len 1 --split-on-word` ile koşar (segment == kelime), ve
+v0.4.0 re-anchor'ı kelime sınırlarını sessizlik haritasına çapalar — ham
+segment kullanılsaydı SRT, kaydedilen `<ad>_transkript.json` ile ve kesim
+planıyla AYRIŞIRDI. Bloklama saf ve backend-bağımsız bir politikadır
+(duraklama 700 ms, süre tavanı 6000 ms, karakter tavanı 84 = 2×42).
+
+**XML kolunda encoder probe'u HİÇ koşmaz** ve raporun `encoder` alanı `None`
+kalır: encode edilmeyen bir koşuda 4 ffmpeg probe'u ödemek boşadır ve alan
+"şununla encode edildi" diye yalan söylerdi (alan v0.1'den beri opsiyonel).
+
+**Doğrulama kapısı sunucudadır:** geçersiz `cikti` değeri hem
+`Config.__post_init__`te (TOML + CLI tek kapı) hem `POST /api/jobs`ta 400
+ile ölür — arayüzü atlayıp POST eden de aynı kapıya çarpar.
+
+**Tuzaklar (bir sonraki agent için):**
+- **ffprobe'da ses akışı da `r_frame_rate` taşır ve değeri `0/0`'dır**
+  (ölçüldü). Akış seçimi `codec_type`'a göre yapılmazsa kare hızı sessizce
+  çöp olur; `export/medya.parse_medya` bu yüzden akışı türle seçer.
+- **Korpus klipleri VFR'dir**: Test1'de `r_frame_rate=60/1` ama
+  `avg_frame_rate=132120000/2310907` (≈57.17). FCP7 `r_frame_rate` ister
+  (kare numaralandırmasının tabanı); `avg_frame_rate` okunsaydı timebase
+  saçmalardı.
+- **`pathurl` `.resolve()` ÇAĞIRMAZ** (saf kalsın diye) — çağıran mutlak yol
+  vermek zorundadır; göreli yol `ValueError`'dır çünkü NLE'de sessizce
+  "Media Offline" üretirdi. `pipeline.run` `src.resolve()` geçirir.
+- **XML/SRT `newline=""` ile yazılır**: Windows metin modu `
+`'i `
+`
+  yapar ve aynı plan iki makinede farklı bayt üretirdi (hash kıyası bu
+  projede bir doğrulama aracıdır).
+- `[Unreleased]` CHANGELOG bölümü EKLENMEDİ: `tests/test_release.py`
+  başlığın kalmamasını şart koşuyor ve sürüm bump'ı release işidir
+  (Faz 2-4 deseni). Bu dalga bir release DEĞİLDİR.
+- Yeni pytest marker'ı **`xml` bir SEÇİM marker'ıdır** (dış kaynak
+  gerektirmez, CI'da koşar) — `ag`/`ffmpeg`/`wcpp`/`exe` ailesinden farkı
+  budur. Gerçek dosya okuyan tek test ayrıca `ffmpeg` marker'lıdır.
+
 ### v1.x MADDE 4 — DAĞITIM EPIC'İ KAPANDI (2026-09-02)
 
 Beş faz, tek cümlelik özetleri:
@@ -958,8 +1025,21 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | araç script'lerinde UTF-8 savunması + workflow `PYTHONUTF8` (rc.1 hotfix) | `f16e2fd` |
 | `tests/test_konsol_kodlama.py` — dar konsol kodlaması kilitleri | `357b3d2` |
 
+**v1.2.1 Dalga A (FCP7 XML + SRT)**
+
+| Modül | Commit |
+|---|---|
+| `export/medya.py` + `export/fcp7.py` — ffprobe kare hızı, xmeml v4 üretici | `11e45d7` |
+| `export/srt.py` — kelime listesinden standart SRT | `3f92738` |
+| `pipeline.py`/`config.py`/`cli.py` — çıktı kolu (mp4\|xml) + `--srt` | `c147598` |
+| `web/` — dışa aktarım seçimi kartı + sonuç ekranı SRT satırı | `a0dbaf1` |
+
 **Sıradaki:** dağıtım epic'i (v1.x madde 4) KAPANDI. Kalan v1.x maddeleri
 ayrı işlerdir — madde 5 (PyPI) bu epic'in parçası DEĞİLDİR.
+v1.2.1 Dalga A (FCP7 XML + SRT) bitti; **sürüm bump + CHANGELOG + tag
+YAPILMADI** (release ayrı iş) ve **DaVinci Resolve içe aktarım doğrulaması
+İnan'da bekliyor** — artefakt `Desktop\Filler-Cut-Test\xml-test\Test1.xml`,
+beklenen zaman çizgisi 5 parça / 1212 kare (60 fps NDF → `00:00:20:12`).
 
 Web katmanı bu taşınabilirlik kısıtıyla yazılmıştı — tek port, tek pencere
 varsayımı; tarayıcıya özgü API'lere bel bağlanmadı — ve Faz 1'de bu karşılığını

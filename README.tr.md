@@ -152,6 +152,8 @@ Opsiyonlar (`fillercut --help` çıktısıyla birebir aynı):
 -o, --output YOL   Çıktı MP4 yolu (varsayılan: <ad>_temiz.mp4).
 --open             Review HTML'ini üretimden sonra varsayılan tarayıcıda aç.
 --interactive      Kesimleri tarayıcıda tek tek onayla (lokal sunucu, v0.3).
+--cikti mp4|xml    Çıktı kolu: hazır video (varsayılan) ya da NLE projesi.
+--srt              Transkripti ayrıca <video_adı>.srt olarak da yaz.
 --version          Sürümü basıp çık.
 ```
 
@@ -183,6 +185,25 @@ transkript: konusma_transkript.json
 ```
 
 > İlk çalıştırmada Whisper modeli iner (~1 GB); sonrakilerde önbellekten yüklenir.
+
+### NLE projesi (FCP7 XML) ve altyazı
+
+Kesimi Filler-Cut'a yaptırmak yerine **kendi kurgu programınızda** ince ayar
+yapmak isterseniz `--cikti xml` video üretmez; `video.xml` yazar:
+
+```bash
+fillercut video.mp4 --cikti xml --srt -y
+```
+
+- `video.xml` — FCP7 (xmeml) zaman çizgisi. Premiere ya da DaVinci Resolve'da
+  **Dosya → İçe Aktar** ile açılır; kaynak videoya bağlıdır, yeniden kodlama
+  yoktur, kesimleri sürükleyip düzeltebilirsiniz. Bu kolda RENDER hiç koşmaz.
+- `video.srt` — standart altyazı (`--srt`). İkisi de `--output` ile verilen
+  klasöre yazılır.
+
+> Kesim sınırları kareye yapıştırılırken **konuşma lehine** yuvarlanır: parça
+> başı aşağı, sonu yukarı. Yani hiçbir hece kırpılmaz; kesime en fazla bir
+> kare taşar.
 
 Örnek `video_temiz.json` (kısaltılmış):
 

@@ -155,6 +155,8 @@ Turkish-only; these are one-to-one translations):
 -o, --output PATH  Output MP4 path (default: <name>_temiz.mp4).
 --open             Open the review HTML in the default browser once written.
 --interactive      Approve cuts one by one in the browser (local server, v0.3).
+--cikti mp4|xml    Output branch: rendered video (default) or NLE project.
+--srt              Also write the transcript as <video name>.srt.
 --version          Print the version and exit.
 ```
 
@@ -186,6 +188,26 @@ transkript: konusma_transkript.json
 ```
 
 > The first run downloads the Whisper model (~1 GB); later runs use the cache.
+
+### NLE project (FCP7 XML) and subtitles
+
+If you would rather fine-tune the cuts **in your own editor**, `--cikti xml`
+renders nothing and writes `video.xml` instead:
+
+```bash
+fillercut video.mp4 --cikti xml --srt -y
+```
+
+- `video.xml` — an FCP7 (xmeml) timeline. Open it with **File > Import** in
+  Premiere or DaVinci Resolve; it references the source video, so there is no
+  re-encode and you can drag the cut boundaries around. RENDER never runs on
+  this branch.
+- `video.srt` — a standard subtitle file (`--srt`). Both land in the folder
+  given by `--output`.
+
+> Cut boundaries are snapped to frames **in favour of speech**: a segment's
+> start rounds down and its end rounds up. No syllable is ever clipped; at
+> most one frame spills into the cut.
 
 Example `video_temiz.json` (truncated):
 
