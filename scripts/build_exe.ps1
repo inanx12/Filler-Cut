@@ -63,9 +63,25 @@ $ErrorActionPreference = $eskiEAP
 if ($LASTEXITCODE -ne 0) {
     throw 'PyInstaller kurulu degil - pip install -e ".[dev]"'
 }
+# pywebview ON KONTROLU (KI-12) — DAGITIM ICIN ZORUNLU.
+# Kurulu degilse PyInstaller onu bundle'a koyamaz; spec'teki webview hidden
+# import'lari yalnizca "Hidden import not found!" WARNING'i uretir ve build
+# YESIL biter. Ortaya cikan exe calisma aninda "pywebview kurulu degil" deyip
+# tarayici fallback'ine duser: native pencere HIC acilmaz ve konsolsuz
+# exe'de bu satir kullaniciya gorunmez. v1.2.0-v1.2.2 kuruculari boyle cikti
+# (CI `pip install -e ".[dev]"` yapiyordu, `native` extra'si yoktu).
+# Sessiz bozuk artefakt uretmektense BURADA durmak yegdir.
+$ErrorActionPreference = 'Continue'
+& $Python -c "import webview"
+$ErrorActionPreference = $eskiEAP
+if ($LASTEXITCODE -ne 0) {
+    throw 'pywebview kurulu degil - native pencere bundle a GIRMEZ. Once: pip install -e ".[dev,native]"'
+}
+
 $PiSurum = (& $Python -m PyInstaller --version).Trim()
 $FcSurum = (& $Python -c "from fillercut import __version__; print(__version__)").Trim()
-Write-Host "Filler-Cut $FcSurum · PyInstaller $PiSurum" -ForegroundColor Cyan
+$PwSurum = (& $Python -c "import importlib.metadata as m; print(m.version('pywebview'))").Trim()
+Write-Host "Filler-Cut $FcSurum · PyInstaller $PiSurum · pywebview $PwSurum" -ForegroundColor Cyan
 
 if ($Onefile) {
     $env:FILLERCUT_ONEFILE = '1'

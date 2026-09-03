@@ -167,6 +167,17 @@ def native_hazir() -> tuple[bool, str]:
     if not webview2_var():
         return False, "WebView2 calisma zamani bulunamadi"
     if not _pywebview_var():
+        # Paketlenmiş koşuda "pip install" TAVSİYESİ YANLIŞTIR: kullanıcı bir
+        # exe'nin içine paket kuramaz. Orada eksiklik kullanıcının değil
+        # BUILD'in kusurudur (KI-12: CI `native` extra'sını kurmuyordu) ve
+        # mesaj bunu söylemeli — yoksa kullanıcı çözümü kendinde arar.
+        from fillercut.config import paketlenmis_mi
+
+        if paketlenmis_mi():
+            return False, (
+                "native pencere bileseni bu kuruluma girmemis (paketleme hatasi) "
+                "— lutfen surumu bildirin"
+            )
         return False, 'pywebview kurulu degil (pip install "fillercut[native]")'
     return True, ""
 

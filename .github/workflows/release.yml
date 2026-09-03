@@ -138,7 +138,13 @@ jobs:
         run: |
           python -m venv .venv
           .venv\Scripts\python.exe -m pip install --upgrade pip
-          .venv\Scripts\python.exe -m pip install -e ".[dev]"
+          # `native` extra'si ZORUNLUDUR (KI-12): pywebview kurulu degilse
+          # PyInstaller onu bundle'a koyamaz, exe calisma aninda
+          # "pywebview kurulu degil" deyip tarayici fallback'ine duser ve
+          # native pencere HIC acilmaz. Spec'teki webview hidden import'lari
+          # eksik pakette yalnizca WARNING uretir — build yesil kalir.
+          # v1.2.0-v1.2.2 kuruculari tam olarak bu yuzden tarayici aciyordu.
+          .venv\Scripts\python.exe -m pip install -e ".[dev,native]"
           # build_exe.ps1 / build_setup.ps1 .venv\Scripts\python.exe bekler.
 
       - name: Inno Setup kur (pin'li + hash doğrulamalı)

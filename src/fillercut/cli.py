@@ -607,6 +607,34 @@ def _native_kos(
         )
 
 
+def _tani_yazdir() -> None:
+    """`fillercut ui --tani` gövdesi — native yolun ön kontrol raporu.
+
+    **Neden var (KI-12):** konsolsuz `fillercut-ui.exe` "pywebview kurulu
+    degil" satırını hiçbir yere gösteremez; paketlemede eksik kalan native
+    bileşeni ancak kullanıcı "pencere açılmıyor" diye bildirdiğinde
+    anlaşılıyordu. Bu uç, KONSOLLU `fillercut.exe`'den aynı kararı
+    okunabilir hâlde sorar — hem kullanıcı hem release smoke testi
+    (`tests/test_paketleme.py`) frozen artefaktı sorgulayabilsin diye.
+
+    Sunucu, soket, config YOK: yalnız tespit. Çıkış kodu her zaman 0 —
+    "native yok" bir hata değil, bir cevaptır.
+    """
+    from fillercut import __version__ as _surum
+    from fillercut.config import paketlenmis_mi
+    from fillercut.gunluk import log_dizini
+    from fillercut.web import native as _native
+
+    hazir, neden = _native.native_hazir()
+    typer.echo(f"Filler-Cut {_surum}")
+    typer.echo(f"paketlenmis: {'evet' if paketlenmis_mi() else 'hayir'}")
+    typer.echo(f"platform: {sys.platform}")
+    typer.echo(f"WebView2: {'var' if _native.webview2_var() else 'yok'}")
+    typer.echo(f"pywebview: {'var' if _native._pywebview_var() else 'yok'}")
+    typer.echo(f"native pencere: {'hazir' if hazir else f'hazir degil - {neden}'}")
+    typer.echo(f"gunluk: {log_dizini() / 'ui.log'}")
+
+
 @ui_app.command()
 def ui(
     port: Annotated[
@@ -628,16 +656,27 @@ def ui(
             help="Native masaüstü penceresi (varsayılan: varsa native, yoksa tarayıcı).",
         ),
     ] = None,
+    tani: Annotated[
+        bool,
+        typer.Option(
+            "--tani",
+            help="Native pencere ön kontrolünü yazdır ve çık (sunucu açılmaz).",
+        ),
+    ] = False,
 ) -> None:
     """Arayüzü başlatır: native pencere (WebView2) ya da tarayıcı — yalnız localhost.
 
     Karar ağacı (hepsinin kilidi `tests/test_cli.py`'de):
 
+    * ``--tani`` → yalnız ön kontrol raporu, sunucu HİÇ açılmaz.
     * ``--no-browser`` → sunucu koşar, hiçbir şey açılmaz.
     * ``--no-native`` → tarayıcı modu (native hazır olsa bile).
     * ``--native`` + native yoksa → **hata**; açık istek sessizce düşürülmez.
     * varsayılan → native varsa native, yoksa tarayıcı + konsola tek satır neden.
     """
+    if tani:
+        _tani_yazdir()
+        return
     try:
         cfg = load_config(config)
         # İzinli kökleri BURADA çöz (socket açılmadan): var olmayan bir kök

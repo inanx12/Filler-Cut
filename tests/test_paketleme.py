@@ -252,3 +252,72 @@ class TestSmoke:
             timeout=120,
         )
         assert "Filler-Cut" in r.stdout
+
+
+class TestNativeBundleSozlesmesi:
+    """KI-12 — native pencere bileşeni **bundle'a girmek zorundadır**.
+
+    Ölçülen kusur (v1.2.0 → v1.2.2 kurucuları): CI `pip install -e ".[dev]"`
+    yapıyordu, yani `native` extra'sı (pywebview) runner'da HİÇ kurulu
+    değildi. Spec'teki `webview.platforms.*` hidden import'ları eksik pakette
+    yalnızca ``WARNING: Hidden import ... not found!`` üretir — **build yeşil
+    biter** ve ortaya çıkan exe çalışma anında "pywebview kurulu degil" deyip
+    tarayıcı fallback'ine düşer. Konsolsuz exe'de o satır kullanıcıya
+    görünmez; uygulama "native pencere hiç açılmıyor" diye yaşanır.
+
+    Claude'un yerel build'i pywebview kurulu bir venv'de üretildiği için
+    native pencere AÇILIYORDU — yerel/release ayrışması tam olarak buradaydı.
+    """
+
+    #: Release build'i koşturan workflow.
+    WORKFLOW = REPO_KOK / ".github" / "workflows" / "release.yml"
+    BUILD_SCRIPT = REPO_KOK / "scripts" / "build_exe.ps1"
+
+    def test_workflow_native_extrasini_kurar(self) -> None:
+        metin = self.WORKFLOW.read_text(encoding="utf-8")
+        assert '".[dev,native]"' in metin, (
+            "release workflow'u `native` extra'sını kurmuyor — üretilen exe "
+            "pywebview'siz çıkar ve native pencere hiç açılmaz (KI-12)"
+        )
+        assert '-e ".[dev]"' not in metin, (
+            "`.[dev]` kurulumu kalmış — `native` extra'sı olmadan bundle eksik"
+        )
+
+    def test_build_script_pywebview_on_kontrolu_yapar(self) -> None:
+        """Sessiz bozuk artefakt yerine build ZAMANINDA durulmalı."""
+        metin = self.BUILD_SCRIPT.read_text(encoding="utf-8")
+        assert 'import webview' in metin, (
+            "build_exe.ps1'de pywebview ön kontrolü yok — eksik paketle "
+            "sessizce tarayıcı-fallback'li bir exe üretilir"
+        )
+        assert "dev,native" in metin, "ön kontrolün hata mesajı doğru kurulumu söylemeli"
+
+    @exe_gerekli
+    @pytest.mark.exe
+    def test_bundle_webview_tasiyor(self) -> None:
+        """Artefaktın KENDİSİ ölçülür — niyet değil, sonuç.
+
+        `_internal/webview` yoksa exe tarayıcı moduna düşer. Bu testin
+        kırmızısı "yanlış venv'den build alındı" demektir.
+        """
+        assert (DIST / "_internal" / "webview").is_dir(), (
+            "bundle'da webview yok — build pywebview'siz bir venv'den alınmış"
+        )
+
+    @exe_gerekli
+    @pytest.mark.exe
+    def test_exe_icinde_webview_import_edilebiliyor(self) -> None:
+        """Dizinin var olması yetmez: bundle içinden gerçekten import olmalı.
+
+        `fillercut.exe` konsolludur, çıktısı okunabilir. `-c` gibi bir bayrak
+        yok; bunun yerine `setup --durum` gibi bir alt komut değil, doğrudan
+        native ön kontrolünün cevabı ölçülür (aşağıdaki `ui --help` yolu
+        pywebview'e dokunmaz, o yüzden ayrı bir uç gerekiyordu).
+        """
+        r = subprocess.run(
+            [str(_exe("fillercut.exe")), "ui", "--tani"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=120,
+        )
+        assert r.returncode == 0, r.stderr
+        assert "pywebview: var" in r.stdout, r.stdout
