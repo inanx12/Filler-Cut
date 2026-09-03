@@ -896,6 +896,52 @@ testidir, davranışın kendisi gerçek tarayıcıda ölçüldü.
   `pencere.events.loaded.__iadd__.called` yanlış nesneye bakar. Kayıt
   `mock_calls` izinden doğrulanır.
 
+**v1.2.1 MİKRO C.2 (izinli_kokler "*" otomatik sürücü modu) TAMAMLANDI
+(2026-09-03, bump 1.2.1'in İÇİNDE — tag hâlâ yok).** `[ui].izinli_kokler`
+içinde `"*"` → makinedeki tüm takılı sürücüler (`os.listdrives`, Py 3.12+
+Windows; dönüş biçimi `['C:\\', 'D:\\', 'E:\\']` kurulu 3.12.10'dan
+doğrulandı). Yalnız `web/` + `config` + `cli` kök çözüm ucu.
+
+**HER İSTEKTE DİNAMİK — mimari değişiklik.** İzinli kökler artık
+`app.state`te sabit `list[Path]` DEĞİL bir ÇÖZÜCÜ (`() -> list[Path]`)
+olarak durur; `fs.izinli_kokler_state` onu her çağrıda koşturur. `"*"`
+modunda kökler istek başına `os.listdrives()`ten gelir — USB sonradan
+takılırsa görünür, çıkınca düşer (startup'ta DONMAZ, gerçek koşuda
+`C:\+D:\+E:\` ölçüldü). **cli.ui artık çözülmüş listeyi create_app'e
+GEÇİRMEZ** (`izinli_kokler=` kaldırıldı); create_app config'ten kendi
+dinamik çözücüsünü kurar. cli'daki çözüm yalnız startup doğrulaması +
+native diyalog açılış klasörü için.
+
+**`dogrula` bayrağı (`izinli_kokler_coz`):** startup'ta `True` (eksik AÇIK
+yol → ConfigError, cli.ui socket'ten önce yakalar), istek başına `False`
+(bir yol koşu sırasında silinse route 500 değil temiz 403/404 verir). `"*"`
+diskten geldiği için "eksik kök" kavramı yoktur, hiç raise etmez.
+
+**`"*"` + başka değer → diğerleri YOK SAYILIR** (uyarı log'a, yalnız
+`dogrula=True` startup'ta — istek başına gürültü olmasın). Gerekçe: "hepsi"
+zaten en geniş küme; tekil yol ona bir şey katmaz. Taksız sürücü harfi (boş
+DVD) `is_dir` False → listeye girmez. `C:\` (ev `C:\Users\x` iken) B.2'nin
+"üst-kök tutulur" kararıyla KALIR — `"*"` "tüm diskler" demek.
+
+**KI-10 KAPANDI.** v1.3.0'a ertelenen "native diyaloğu hapisle kısıtla"
+tartışması gereksizleşti: doğru cevap diyaloğu kısıtlamak değil **hapsi
+genişletmek**. `"*"` kullanan kullanıcıda diyalog hangi sürücüden seçerse
+reddedilmez — UX tuzağı kalkar. Tek kapı (`fs.secimi_dogrula`) bölünmedi.
+
+**UI çip taşması:** `.kokler` zaten `flex-wrap: wrap` — çok sürücüde çipler
+alt satıra kayar, yatay taşma yok. CSS'e DOKUNULMADI (mevcut düzen yetti).
+
+**Güvenlik notu README'ye:** `"*"` localhost arayüzüne tüm diskleri listeler,
+paylaşımlı makinede önerilmez.
+
+**Tuzak (bir sonraki agent için):** `os.listdrives` yalnız Py 3.12+ Windows.
+`fs._surucu_kokleri` `getattr(os, "listdrives", None)` ile yokluğu ele alır
+(POSIX/eski Python → `[]`, çökmez) ve listeleme `OSError`'ını yutar. Testte
+"yok" senaryosu `patch.object(os, "listdrives", None)` ile kurulur —
+`side_effect=AttributeError` DEĞİL (o çağrıda patlar, `getattr` yakalamaz).
+`dist_pypi/` artefaktları C.2 sonrası yeniden üretildi (twine check PASSED,
+1.2.1, wheel temiz) — İnan güncel kodla upload eder.
+
 **v1.2.1 DALGA C (PyPI + geri bildirim + SmartScreen + BUMP) TAMAMLANDI
 (2026-09-03).** Bu, v1.2.1'i **kesen** dalgadır: sürüm 1.2.0 → **1.2.1**
 (Dalga A+B+C toplamı). Push/tag/release YOK — İnan onaylar.
@@ -1266,6 +1312,13 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/geri_bildirim.py` + `app.py` + `static/` — telemetrisiz geri bildirim düğmesi | `6934227` |
 | README ×2 — SmartScreen uyarısı normal + SignPath notu | `bf74afb` |
 | `pyproject.toml` + `test_paketleme_pypi.py` + CHANGELOG + KNOWN_ISSUES — PyPI metadata + **1.2.1 bump** | `9d12381` |
+
+**v1.2.1 Mikro C.2 (izinli_kokler "*" otomatik sürücü modu)**
+
+| Modül | Commit |
+|---|---|
+| `web/fs.py` + `app.py` + `cli.py` + `config.py` — `"*"` dinamik sürücü çözümü + `test_web_yildiz.py` | `4fa49fb` |
+| README ×2 + CHANGELOG + KNOWN_ISSUES (KI-10 kapandı) | `ab49353` |
 
 **Sıradaki:** dağıtım epic'i (v1.x madde 4) KAPANDI. Kalan v1.x maddeleri
 ayrı işlerdir — madde 5 (PyPI) bu epic'in parçası DEĞİLDİR.
