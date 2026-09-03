@@ -215,6 +215,33 @@ class TestKaldirmaDavranisi:
     def test_kaldirma_sonrasinda_calisir(self, iss: str) -> None:
         assert "if CurUninstallStep <> usPostUninstall then Exit;" in iss
 
+class TestYukseltmeTemizligi:
+    """KI-15 — yükseltme BAYAT bundle dosyası bırakmamalı.
+
+    ÖLÇÜLDÜ (1.2.2 → 1.2.3 provası, gerçek kurucu): Inno dosyaları ÜZERİNE
+    yazar ama artık olmayanları SİLMEZ. Yükseltmeden sonra `_internal`
+    altında hem `fillercut-1.2.2.dist-info` hem `fillercut-1.2.3.dist-info`
+    duruyordu; `importlib.metadata` ilk bulduğunu döndüğü için kurulu
+    uygulama KENDİ SÜRÜMÜNÜ **1.2.2** diye bildiriyordu (`--version`,
+    `/api/instance`, geri bildirim ortam bloğu). "Sürümün tek doğruluk
+    kaynağı" invariant'ı kurulu makinede sessizce kırılmıştı.
+
+    Aynı sınıf tehlike bayat `.pyd`/`.dll`de daha ağırdır: yanlış ikili
+    yüklenir ve hata build'de değil kullanıcıda çıkar.
+    """
+
+    def test_internal_yukseltmede_silinir(self, iss: str) -> None:
+        assert "[InstallDelete]" in iss, "yükseltme temizliği bölümü yok"
+        assert r'Type: filesandordirs; Name: "{app}\_internal"' in iss
+
+    def test_kullanici_verisi_silinmiyor(self, iss: str) -> None:
+        """Temizlik YALNIZ bundle'a dokunur — model/ayar dizinleri değil."""
+        bolum = iss[iss.index("[InstallDelete]") : iss.index("[Files]")]
+        assert "{localappdata}\fillercut" not in bolum
+        assert "{userappdata}\fillercut" not in bolum
+        # `{app}` altında da yalnız `_internal`: LICENSE/THIRD_PARTY üzerine yazılır.
+        assert bolum.count("Type:") == 1
+
 
 class TestFfmpegAkisi:
     def test_kurulumu_engellemez(self, iss: str) -> None:

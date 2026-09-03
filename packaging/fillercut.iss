@@ -78,6 +78,24 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 ; Isteyen kutuyu isaretler.
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[InstallDelete]
+; YUKSELTME TEMIZLIGI (KI-15) — OLCULDU (1.2.2 -> 1.2.3 provasi).
+; Inno dosyalari UZERINE yazar, ARTIK OLMAYANLARI SILMEZ. PyInstaller onedir
+; bundle'i ise birlestirilecek bir agac degildir: eski surumden kalan her
+; sey yeni bundle'in yaninda durmaya devam eder.
+;
+; Olculen sonuc: yukseltmeden sonra `_internal` altinda HEM
+; `fillercut-1.2.2.dist-info` HEM `fillercut-1.2.3.dist-info` duruyordu.
+; `importlib.metadata` ilk buldugunu doner, yani uygulama KENDI SURUMUNU
+; 1.2.2 diye bildiriyordu — `--version`, `/api/instance` ve geri bildirim
+; formundaki ortam blogu dahil. "Surumun tek dogruluk kaynagi" invariant'i
+; kurulu makinede sessizce kirilmisti. Ayni sinif tehlike bayat `.pyd`/
+; `.dll`lerde daha da kotudur (yanlis ikili yuklenir).
+;
+; KULLANICI VERISI ETKILENMEZ: modeller %LOCALAPPDATA%\fillercut, ayar
+; %APPDATA%\fillercut altindadir; burada silinen yalniz uygulama bundle'i.
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Files]
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
