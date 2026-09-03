@@ -896,6 +896,61 @@ testidir, davranışın kendisi gerçek tarayıcıda ölçüldü.
   `pencere.events.loaded.__iadd__.called` yanlış nesneye bakar. Kayıt
   `mock_calls` izinden doğrulanır.
 
+**v1.2.1 DALGA C (PyPI + geri bildirim + SmartScreen + BUMP) TAMAMLANDI
+(2026-09-03).** Bu, v1.2.1'i **kesen** dalgadır: sürüm 1.2.0 → **1.2.1**
+(Dalga A+B+C toplamı). Push/tag/release YOK — İnan onaylar.
+
+**PyPI HAZIR (upload İnan'ın işi).** Ad müsait (`pypi.org/pypi/fillercut/json`
+→ 404). Metadata PEP 621: `classifiers` (License MIT, OS Windows, Python
+3/3.11–3.13, Topic Multimedia Video+Speech, Natural Language Turkish),
+`[project.urls]` (Homepage/Repository/Issues/Changelog), `keywords`. **Alan
+adları ezberden değil** — kurulu hatchling'in `CoreMetadata` property'lerinden
+doğrulandı, sonra `python -m build` + `twine check` ile artefakt üzerinde
+teyit (ikisi de PASSED). **Wheel TERTEMİZ** (52 girdi: yalnız `fillercut` +
+dist-info, `web/static`+`assets/manifest.json` var; medya/test/docs YOK).
+sdist tests/ taşır (standart) ama `.mp4/.bin/.wav/.exe` sızmaz;
+`test_konusma.wav`/`dist_setup`/`build` sdist'e girmez (hatchling VCS'i
+dinler). Build çıktısı `dist_pypi/` (gitignore'lu).
+
+**GERİ BİLDİRİM DÜĞMESİ — TELEMETRİ YOK.** Sonuç + hata ekranlarında; sunucu
+ortam bloğunu (sürüm/OS/Python/backend/model adı/ffmpeg var-yok) doldurup
+`webbrowser.open` ile kullanıcının tarayıcısında GitHub issue formunu açar.
+Hiçbir veri hiçbir yere GİTMEZ. **MAHREMİYET İNVARIANT'I** (`web/geri_bildirim.py`,
+kilit `TestMahremiyet`): model yalnız ADIYLA (`PurePath.name` — dizin,
+dolayısıyla kullanıcı adı atılır), ffmpeg yalnız VAR/YOK (`which`'in YOLU
+değil), `platform.version()` yapı numarasıdır. Kilit hem alan adlarında hem
+değerlerde ev dizinini/kullanıcı adını/yol ayıracını arar.
+
+**Sunucu `webbrowser.open` yapar, istemci `window.open` DEĞİL** (bilinçli):
+native pywebview'de `window.open`'ın dış URL davranışı sürüme bağlıdır;
+sunucunun OS varsayılan tarayıcısını açması (`reveal` deseni) iki modda da
+güvenilir. Yol yine yanıtta döner — tarayıcı açılamazsa istemci bağlantıyı
+gösterir (gerçek tarayıcıda doğrulandı: hata ekranı düğmesi → not + fallback
+link). URL yüzde-kodlu (`quote_via=quote`, `+` değil — GitHub yüzde bekler).
+
+**SmartScreen notu (README ×2):** imzasız → uyarı BEKLENEN → "Ek bilgi →
+Yine de çalıştır"; SignPath başvurusu değerlendiriliyor; görsel
+`docs/assets/smartscreen.png` **İnan ekleyecek** (referans kondu).
+
+**ONAYLANMIŞ KARARLAR (bu dalgada uygulandı, yeniden tartışma yok):**
+floor/ceil yön kuralı · SRT midpoint+clamp · `plan` zorunlu · monotoniklik
+guard · tarayıcıda bırakma reddi (kolaylık yok) · env-desteksiz toml-only
+kökler · üst-kök tutulur · `web` marker'ı Dalga B'ye özel · 79 MB parite
+referansı release'e kadar kalır · **ev hapsi TÜM yollarda aynen** (native
+diyalog dahil — KI-10, v1.3.0'da tartışılacak).
+
+**Tuzak (bir sonraki agent için):**
+- **Sürüm bump'ta `dist/fillercut.exe` BAYAT kalır** — `test_paketleme.py`
+  `exe` marker'lı smoke testi çalışan exe'nin sürümünü `__version__`la
+  karşılaştırır; bump sonrası exe 1.2.0, `__version__` 1.2.1 → **kırmızı**.
+  Bu BEKLENEN: exe release'de yeniden derlenir (Faz 3). Yerel üçlü kontrol
+  CI konvansiyonuyla koşulur: `-m "not exe and not ffmpeg and not wcpp and
+  not ag"`. Bump eden agent bunu bilmeli — "test kırıldı" sanıp exe'yi
+  gereksiz yeniden derlemesin.
+- **`[project.urls]` `[project]` tablosundan SONRA gelmeli** — TOML'da
+  `[project.urls]` açıldıktan sonra `[project]`'i yeniden açmak duplicate-
+  table hatasıdır. Alt tablo `[project.scripts]`'in ardına konur.
+
 **v1.2.1 DALGA B.2 (genişletilebilir ev hapsi) TAMAMLANDI (2026-09-03,
 sürüm bump YOK).** Yalnız `config` + `web/` katmanı; pipeline'a ve Dalga
 A/B sözleşmelerine dokunulmadı. Sorun: dosya gezgini/seçici ev dizinine
@@ -1204,16 +1259,26 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/native.py` + `cli.py` — native diyalog başlangıç dizini + kök çözümü | `fadee3a` |
 | `web/static/` — kök seçici çip arayüzü | `58d90ba` |
 
+**v1.2.1 Dalga C (PyPI + geri bildirim + SmartScreen + bump)**
+
+| Modül | Commit |
+|---|---|
+| `web/geri_bildirim.py` + `app.py` + `static/` — telemetrisiz geri bildirim düğmesi | `6934227` |
+| README ×2 — SmartScreen uyarısı normal + SignPath notu | `bf74afb` |
+| `pyproject.toml` + `test_paketleme_pypi.py` + CHANGELOG + KNOWN_ISSUES — PyPI metadata + **1.2.1 bump** | `9d12381` |
+
 **Sıradaki:** dağıtım epic'i (v1.x madde 4) KAPANDI. Kalan v1.x maddeleri
 ayrı işlerdir — madde 5 (PyPI) bu epic'in parçası DEĞİLDİR.
 v1.2.1 Dalga A (FCP7 XML + SRT) ve Dalga B (sürükle-bırak + dosya seçici)
 bitti; **sürüm bump + CHANGELOG + tag YAPILMADI** (release ayrı iş).
-Bekleyen manuel doğrulamalar: (a) Dalga A — Resolve'da XML PASS, SRT'de
-kusur çıkıp düzeltildi, düzeltilmiş `Test1.srt`'nin tüm blokları
-`00:00:20:12` içinde kalmalı; (b) Dalga B — native exe'de ve tarayıcı
-modunda dropzone + dosya seçici; (c) Dalga B.2 — `filler-cut.toml`'a
-gerçek `D:\` ekleyip D:'den sürükleme/gezinme (sunucu tarafı bu ajanda
-D:\FC_Hapis_Test ile doğrulandı).
+**SÜRÜM 1.2.1 KESİLDİ** (pyproject + CHANGELOG); push/tag/release ve **PyPI
+upload İnan'da**. Bekleyen manuel doğrulamalar: (a) Dalga A — Resolve'da XML
+PASS, SRT düzeltildi, `Test1.srt` blokları `00:00:20:12` içinde; (b) Dalga B
+— native exe + tarayıcıda dropzone/seçici; (c) Dalga B.2 — gerçek `D:\`
+ekleyip D:'den gezinme (sunucu tarafı doğrulandı); (d) Dalga C — geri
+bildirim düğmesinin native pencerede tarayıcı açması + `docs/assets/
+smartscreen.png` eklenmesi + TestPyPI→PyPI upload. **`dist/fillercut.exe`
+bump'la bayatladı** — release'de yeniden derlenecek (Faz 3).
 
 Web katmanı bu taşınabilirlik kısıtıyla yazılmıştı — tek port, tek pencere
 varsayımı; tarayıcıya özgü API'lere bel bağlanmadı — ve Faz 1'de bu karşılığını
