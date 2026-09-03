@@ -21,7 +21,7 @@ malware): choose **More info → Run anyway**. If Smart App Control is enabled
 it can refuse outright — turning it off is a system-wide decision, so the
 alternative is running from source (see Install).
 
-![SmartScreen "More info → Run anyway" step](docs/assets/smartscreen.png)
+![SmartScreen "More info → Run anyway" step](https://raw.githubusercontent.com/inanx12/Filler-Cut/main/docs/assets/smartscreen.png)
 
 > The lack of a signature is an accepted trade-off; an application to
 > **SignPath** (free code signing for open-source projects) is under review.

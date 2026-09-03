@@ -21,7 +21,7 @@ kod imzası eksikliği): **Ek bilgi → Yine de çalıştır** deyin. Smart App
 Control açıksa büsbütün reddedebilir — onu kapatmak sistem geneli bir karar
 olduğundan, alternatif kaynaktan çalıştırmaktır (bkz. Kurulum).
 
-![SmartScreen "Ek bilgi → Yine de çalıştır" adımı](docs/assets/smartscreen.png)
+![SmartScreen "Ek bilgi → Yine de çalıştır" adımı](https://raw.githubusercontent.com/inanx12/Filler-Cut/main/docs/assets/smartscreen.png)
 
 > İmzasızlık kabul edilmiş bir karardır; açık kaynak projelere ücretsiz kod
 > imzası veren **SignPath** başvurusu değerlendiriliyor. İmza geldiğinde bu
