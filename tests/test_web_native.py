@@ -12,8 +12,10 @@ düş" yaklaşımı hem bozuk bir pencere hem de sessiz bir registry mutasyonu
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -247,3 +249,214 @@ class TestPywebviewUyumKilidi:
         assert pywebview_cevabi == native.webview2_var()
         # Aynı kararın pywebview tarafındaki görünür sonucu:
         assert winforms.renderer == "edgechromium"
+
+
+class TestDosyaTurleri:
+    """Native diyaloğun filtre dizeleri — pywebview'in KENDİ ayrıştırıcısıyla.
+
+    Filtre biçimi (``'Açıklama (*.mp4;*.mkv)'``) pywebview'in
+    ``create_file_dialog``'unda ``parse_file_type`` ile doğrulanır ve
+    uymayan dize ``ValueError`` fırlatır — yani hatalı bir filtre diyaloğu
+    açmadan koşuyu öldürürdü. Ezberden biçim yazmamak için doğrulamayı
+    kurulu pywebview'in kendisine yaptırıyoruz.
+    """
+
+    def test_pywebview_ayristiricisindan_gecer(self) -> None:
+        from webview.util import parse_file_type
+
+        for filtre in native.dosya_turleri():
+            parse_file_type(filtre)  # ValueError → test düşer
+
+    def test_uzantilar_fs_listesinden_gelir(self) -> None:
+        """Tek doğruluk kaynağı ``fs.VIDEO_UZANTILARI`` — ikinci liste yok."""
+        from fillercut.web.fs import VIDEO_UZANTILARI
+
+        birlesik = " ".join(native.dosya_turleri())
+        for uzanti in VIDEO_UZANTILARI:
+            assert f"*{uzanti}" in birlesik, uzanti
+
+    def test_tum_dosyalar_secenegi_de_var(self) -> None:
+        """Listede olmayan bir kapsayıcıyı seçmek isteyen kilitlenmesin."""
+        assert any("*.*" in f for f in native.dosya_turleri())
+
+
+class TestNativeKopru:
+    """``window.pywebview.api`` yüzeyi — sayfadan çağrılan Python uçları."""
+
+    def test_dosya_sec_diyalogu_dogru_argumanlarla_acar(self) -> None:
+        pencere = MagicMock()
+        pencere.create_file_dialog.return_value = (r"C:\v\a b.mp4",)
+        kopru = native.NativeKopru()
+        kopru.pencereyi_bagla(pencere)
+
+        assert kopru.dosya_sec() == r"C:\v\a b.mp4"
+        _, kwargs = pencere.create_file_dialog.call_args
+        args, _ = pencere.create_file_dialog.call_args
+        # Diyalog türü pywebview'in KENDİ sabitinden gelir (ezberden 10 değil).
+        import webview
+
+        assert args[0] == webview.FileDialog.OPEN
+        assert kwargs["allow_multiple"] is False
+        assert kwargs["file_types"] == native.dosya_turleri()
+
+    def test_iptal_none_doner(self) -> None:
+        pencere = MagicMock()
+        pencere.create_file_dialog.return_value = None
+        kopru = native.NativeKopru()
+        kopru.pencereyi_bagla(pencere)
+        assert kopru.dosya_sec() is None
+
+    def test_bos_secim_none_doner(self) -> None:
+        pencere = MagicMock()
+        pencere.create_file_dialog.return_value = ()
+        kopru = native.NativeKopru()
+        kopru.pencereyi_bagla(pencere)
+        assert kopru.dosya_sec() is None
+
+    def test_pencere_baglanmadan_none(self) -> None:
+        """Sayfa pencereden önce hazırsa çağrı çökmemeli."""
+        assert native.NativeKopru().dosya_sec() is None
+
+    def test_diyalog_patlarsa_none(self) -> None:
+        """Diyalog hatası pencereyi öldürmemeli — kullanıcı gezgine döner."""
+        pencere = MagicMock()
+        pencere.create_file_dialog.side_effect = RuntimeError("COM hatası")
+        kopru = native.NativeKopru()
+        kopru.pencereyi_bagla(pencere)
+        assert kopru.dosya_sec() is None
+
+
+class TestBirakilanYol:
+    """pywebview'in drop olayından tam dosya yolunu çıkarma (saf fonksiyon).
+
+    WebView2'de tam yol tarayıcı API'siyle GELMEZ; pywebview onu
+    ``postMessageWithAdditionalObjects`` ile ayrıca taşır ve olay
+    sözlüğündeki dosyaya ``pywebviewFullPath`` olarak ekler
+    (``webview/util.py``, ``webview/platforms/edgechromium.py``).
+    """
+
+    @staticmethod
+    def _olay(*dosyalar: dict[str, str]) -> dict[str, object]:
+        return {"type": "drop", "dataTransfer": {"files": list(dosyalar)}}
+
+    def test_tam_yolu_cikarir(self) -> None:
+        olay = self._olay({"name": "a b.mp4", "pywebviewFullPath": r"C:\v\a b.mp4"})
+        assert native.birakilan_yol(olay) == r"C:\v\a b.mp4"
+
+    def test_turkce_yol_bozulmadan_gelir(self) -> None:
+        yol = "C:\\Kayıt Örnekleri\\deneme ı.mp4"
+        assert native.birakilan_yol(self._olay({"pywebviewFullPath": yol})) == yol
+
+    def test_dosya_yoksa_none(self) -> None:
+        assert native.birakilan_yol(self._olay()) is None
+
+    def test_tam_yol_alani_yoksa_none(self) -> None:
+        """Ad eşleşmezse pywebview alanı hiç eklemez — tahmin yürütmeyiz."""
+        assert native.birakilan_yol(self._olay({"name": "a.mp4"})) is None
+
+    def test_birden_cok_dosya_reddedilir(self) -> None:
+        """Tek dosya sözleşmesi: iki dosya bırakıldığında hangisi seçilsin?"""
+        olay = self._olay(
+            {"pywebviewFullPath": r"C:\v\a.mp4"}, {"pywebviewFullPath": r"C:\v\b.mp4"}
+        )
+        assert native.birakilan_yol(olay) is None
+
+    def test_bozuk_olay_none(self) -> None:
+        bozuklar: list[dict[str, Any]] = [
+            {},
+            {"dataTransfer": None},
+            {"dataTransfer": {"files": None}},
+        ]
+        for olay in bozuklar:
+            assert native.birakilan_yol(olay) is None
+
+
+class TestPencereAcKopru:
+    """Pencere kurulumu: js_api köprüsü + sürükle-bırak kaydı."""
+
+    def test_js_api_gecirilir_ve_pencereye_baglanir(self) -> None:
+        sahte = MagicMock()
+        pencere = MagicMock()
+        sahte.create_window.return_value = pencere
+        with patch.dict(sys.modules, {"webview": sahte}):
+            native.pencere_ac("http://x/")
+        _, kwargs = sahte.create_window.call_args
+        kopru = kwargs["js_api"]
+        assert isinstance(kopru, native.NativeKopru)
+        # Köprü pencereyi tanımalı, yoksa `dosya_sec` sessizce None dönerdi.
+        kopru.dosya_sec()
+        pencere.create_file_dialog.assert_called_once()
+
+    def test_surukle_birak_yuklendiginde_kurulur(self) -> None:
+        sahte = MagicMock()
+        pencere = MagicMock()
+        sahte.create_window.return_value = pencere
+        with patch.dict(sys.modules, {"webview": sahte}):
+            native.pencere_ac("http://x/")
+        # `loaded` olayına bir kanca eklendi mi? (DOM ancak yüklendikten
+        # sonra sorgulanabilir — erken kayıt `get_element` None döndürürdü.)
+        # `+=` attribute'u YENİDEN BAĞLAR, bu yüzden mock_calls izine bakılır.
+        assert any("loaded.__iadd__" in str(c) for c in pencere.mock_calls), (
+            pencere.mock_calls
+        )
+
+    def test_drop_kaydi_dropzone_elemanina_baglanir(self) -> None:
+        pencere = MagicMock()
+        native.surukle_birak_kur(pencere)
+        pencere.dom.get_element.assert_called_once_with(native.DROPZONE_SECICI)
+
+    def test_dropzone_yoksa_sessizce_gecilir(self) -> None:
+        """Eleman yoksa (eski sayfa/hata) pencere ÖLMEMELİ."""
+        pencere = MagicMock()
+        pencere.dom.get_element.return_value = None
+        native.surukle_birak_kur(pencere)  # exception yok
+
+    def test_drop_kaydi_patlarsa_pencere_olmez(self) -> None:
+        pencere = MagicMock()
+        pencere.dom.get_element.side_effect = RuntimeError("DOM hazır değil")
+        native.surukle_birak_kur(pencere)  # exception yok
+
+
+class TestIncelikSozlesmesi:
+    """`web/native.py` DÜZ CLI koşusunda da import edilir — ince kalmalı.
+
+    `cli.py` bu modülü MODÜL SEVİYESİNDE import eder (`ui` kararı testlerde
+    bu adla mock'lanır). Modül `fastapi`/`starlette`/`webview` çekerse video
+    işleyen kullanıcı hiç açmayacağı web yığınının maliyetini öder.
+
+    v1.2.1 Dalga B'de bu sözleşme BİR KEZ KIRILDI: `dosya_turleri()`
+    uzantı listesini `web.fs`ten alıyor ve import modül seviyesindeydi —
+    `fs` fastapi+pydantic çekiyor. Ölçüldü ve dal içine alındı; bu test o
+    regresyonun kilididir.
+    """
+
+    #: Düz CLI yolunun ödememesi gereken modüller.
+    AGIR = ("fastapi", "starlette", "uvicorn", "webview")
+
+    def test_cli_import_i_web_yiginini_cekmez(self) -> None:
+        """Ayrı yorumlayıcı: bu süreçte modüller zaten yüklü olabilir."""
+        kod = (
+            "import sys, fillercut.cli;"
+            f"print([m for m in {self.AGIR!r} if m in sys.modules])"
+        )
+        sonuc = subprocess.run(
+            [sys.executable, "-c", kod],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=Path(__file__).resolve().parents[1],
+        )
+        assert sonuc.returncode == 0, sonuc.stderr
+        assert sonuc.stdout.strip() == "[]", sonuc.stdout
+
+    def test_native_modul_kaynaginda_fs_import_i_dal_icinde(self) -> None:
+        """Kaynak düzeyinde de kilitli: modül seviyesinde `web.fs` import'u yok."""
+        kaynak = (
+            Path(native.__file__).read_text(encoding="utf-8").splitlines()
+        )
+        for no, satir in enumerate(kaynak, start=1):
+            if satir.startswith(("import ", "from ")) and "web.fs" in satir:
+                raise AssertionError(
+                    f"native.py {no}. satırda modül seviyesinde web.fs import'u: {satir!r}"
+                )

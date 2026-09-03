@@ -27,8 +27,10 @@ yoksa `webview.platforms.winforms` **hiç import edilmez**. Kilidi
 
 from __future__ import annotations
 
+import json
 import sys
 from collections.abc import Callable
+from typing import Any
 
 #: Pencere başlığı — dağıtımda görev çubuğunda görünen ad.
 PENCERE_BASLIK = "Filler-Cut"
@@ -169,6 +171,152 @@ def native_hazir() -> tuple[bool, str]:
     return True, ""
 
 
+#: Sürükle-bırak alanının CSS seçicisi — `web/static/index.html` ile AYNI
+#: olmalı. pywebview'in DOM API'si elemanı bu seçiciyle bulur; ad değişirse
+#: native sürükle-bırak sessizce ölür (kilidi `TestPencereAcKopru`de).
+DROPZONE_SECICI = "#dropzone"
+
+#: Bırakılan dosyanın tam yolunu sayfaya teslim eden global JS fonksiyonu
+#: (`web/static/app.js` tanımlar).
+JS_BIRAKMA_KANCASI = "window.fillercutDosyaBirakildi"
+
+
+def dosya_turleri() -> tuple[str, ...]:
+    """Native dosya diyaloğunun filtreleri — pywebview biçiminde, saf fonksiyon.
+
+    Biçim pywebview'in ``parse_file_type``'ının şart koştuğu
+    ``'Açıklama (*.mp4;*.mkv)'`` kalıbıdır ve uymayan bir dize
+    ``create_file_dialog``ı ValueError ile öldürür — bu yüzden kilit testi
+    doğrulamayı **kurulu pywebview'in kendisine** yaptırır.
+
+    Uzantılar ``fs.VIDEO_UZANTILARI``dan gelir: gezginin listelediği ile
+    diyaloğun kabul ettiği ayrışamaz. "Tüm dosyalar" ikinci seçenek olarak
+    durur — listede olmayan bir kapsayıcıyı denemek isteyen kullanıcı
+    diyalogda kilitlenmesin (kabul kararı zaten sunucuda verilir).
+
+    ``fs`` import'u DAL İÇİNDE TEMBELDİR (modül seviyesinde DEĞİL): `cli.py`
+    bu modülü düz CLI koşusunda da import eder ve `fs` fastapi+pydantic
+    çeker — video işleyen kullanıcı web yığınının maliyetini ödememeli.
+    Kilidi ``tests/test_web_native.py::TestIncelikSozlesmesi``de.
+    """
+    from fillercut.web.fs import VIDEO_UZANTILARI
+
+    kaliplar = ";".join(f"*{u}" for u in sorted(VIDEO_UZANTILARI))
+    return (f"Video dosyalari ({kaliplar})", "Tum dosyalar (*.*)")
+
+
+class NativeKopru:
+    """``window.pywebview.api`` yüzeyi — sayfadan çağrılabilen Python uçları.
+
+    Yalnız native modda vardır; tarayıcı modunda ``window.pywebview``
+    tanımsızdır ve arayüz gezgin fallback'ine düşer (``app.js``).
+
+    Yüzey KASITLI OLARAK dardır: tek uç, tek iş. Sayfaya Python çağırma
+    yeteneği vermek bir güven sınırıdır; sayfa bizim olsa da uç sayısını
+    minimumda tutmak o sınırı dar tutar.
+    """
+
+    def __init__(self) -> None:
+        self._pencere: Any = None
+
+    def pencereyi_bagla(self, pencere: Any) -> None:
+        """`create_window` sonrası pencereyi köprüye tanıtır.
+
+        `js_api` nesnesi pencereden ÖNCE kurulmak zorunda (kurucu parametresi),
+        bu yüzden bağlama ayrı adımdır.
+        """
+        self._pencere = pencere
+
+    def dosya_sec(self) -> str | None:
+        """Native dosya diyaloğunu açar; seçilen tek yolu ya da ``None`` döner.
+
+        ``None`` üç durumda döner ve üçü de sayfada AYNI şekilde ele alınır
+        ("seçim yapılmadı"): kullanıcı iptal etti, pencere henüz bağlanmadı,
+        ya da diyalog hata verdi. Diyalog hatası pencereyi öldürmez —
+        kullanıcı gezginden seçmeye devam edebilir.
+        """
+        pencere = self._pencere
+        if pencere is None:
+            return None
+        import webview
+
+        try:
+            sonuc = pencere.create_file_dialog(
+                webview.FileDialog.OPEN,
+                allow_multiple=False,
+                file_types=dosya_turleri(),
+            )
+        except Exception:  # noqa: BLE001 - diyalog hatası pencereyi öldürmemeli
+            return None
+        if not sonuc:
+            return None
+        return str(sonuc[0])
+
+
+def birakilan_yol(olay: dict[str, Any]) -> str | None:
+    """pywebview drop olayından TEK dosyanın tam yolunu çıkarır — saf fonksiyon.
+
+    Tam yol tarayıcı API'siyle GELMEZ (güvenlik sınırı): WebView2'de
+    pywebview onu ``postMessageWithAdditionalObjects`` ile ayrıca taşır ve
+    olay sözlüğündeki dosyaya ``pywebviewFullPath`` alanı olarak ekler
+    (``webview/util.py`` + ``webview/platforms/edgechromium.py``).
+
+    ``None`` döner: dosya yoksa, alan yoksa (pywebview ad eşleştirmesi
+    tutmadıysa — tahmin yürütmeyiz), ya da BİRDEN ÇOK dosya bırakıldıysa.
+    Sonuncusu tek dosya sözleşmesidir: iki videodan hangisinin seçileceğine
+    araç karar veremez, kullanıcı karar vermeli.
+    """
+    try:
+        aktarim = olay.get("dataTransfer") or {}
+        dosyalar = aktarim.get("files") or []
+    except AttributeError:
+        return None
+    if not isinstance(dosyalar, list) or len(dosyalar) != 1:
+        return None
+    dosya = dosyalar[0]
+    if not isinstance(dosya, dict):
+        return None
+    yol = dosya.get("pywebviewFullPath")
+    return str(yol) if yol else None
+
+
+def surukle_birak_kur(pencere: Any) -> None:
+    """Dropzone'a pywebview drop kancasını takar (sayfa YÜKLENDİKTEN sonra).
+
+    İki katman birlikte çalışır: sayfadaki JS görsel vurguyu ve
+    ``preventDefault``ı yapar, buradaki Python kancası ise tarayıcının
+    vermediği TAM YOLU üretip sayfaya geri verir
+    (``JS_BIRAKMA_KANCASI``). Kancanın kaydı ayrıca pywebview'in
+    ``_dnd_state['num_listeners']`` sayacını artırır — o sayaç 0 iken
+    WebView2 tarafı yolları hiç toplamaz (kurulu sürümün kaynağından
+    ölçüldü).
+
+    Hiçbir hata pencereyi öldürmez: dropzone bulunamazsa ya da DOM henüz
+    hazır değilse native sürükle-bırak sessizce devre dışı kalır, arayüzün
+    geri kalanı (gezgin, dosya diyaloğu) çalışmaya devam eder.
+    """
+    try:
+        eleman = pencere.dom.get_element(DROPZONE_SECICI)
+    except Exception:  # noqa: BLE001 - DOM hazır değilse pencere ölmemeli
+        return
+    if eleman is None:
+        return
+
+    def _birakildi(olay: dict[str, Any]) -> None:
+        yol = birakilan_yol(olay)
+        if yol is None:
+            return
+        try:
+            pencere.evaluate_js(f"{JS_BIRAKMA_KANCASI}({json.dumps(yol)})")
+        except Exception:  # noqa: BLE001 - sayfa kapanmış olabilir
+            return
+
+    try:
+        eleman.events.drop += _birakildi
+    except Exception:  # noqa: BLE001 - kayıt başarısızsa native D&D yok, o kadar
+        return
+
+
 def pencere_ac(url: str, *, kapanista: Callable[[], None] | None = None) -> None:
     """Native pencereyi açar ve kullanıcı kapatana kadar BLOKLAR.
 
@@ -184,13 +332,21 @@ def pencere_ac(url: str, *, kapanista: Callable[[], None] | None = None) -> None
     """
     import webview
 
-    webview.create_window(
+    kopru = NativeKopru()
+    pencere = webview.create_window(
         PENCERE_BASLIK,
         url,
+        js_api=kopru,
         width=PENCERE_GENISLIK,
         height=PENCERE_YUKSEKLIK,
         min_size=PENCERE_MIN_BOYUT,
     )
+    kopru.pencereyi_bagla(pencere)
+    if pencere is not None:  # `create_window` tip olarak Window | None döner
+        # Sürükle-bırak kancası SAYFA YÜKLENDİKTEN sonra takılır:
+        # `dom.get_element` DOM'u sorgular, erken kayıt None döner ve native
+        # sürükle-bırak sessizce ölürdü.
+        pencere.events.loaded += lambda: surukle_birak_kur(pencere)
     try:
         webview.start()
     finally:
