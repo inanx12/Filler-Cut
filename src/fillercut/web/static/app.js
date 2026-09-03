@@ -94,6 +94,36 @@ function videoSec(girdi, satir) {
   el("btn-baslat").disabled = false;
 }
 
+function koklderiYaz(kokler, tamYol) {
+  /* Kök seçici — YALNIZ birden çok kök varsa görünür (config'le izinli
+     kökler eklendiğinde). Tek kökte (config yok) hiç çizilmez: davranış
+     eskiyle birebir. Aktif kök, bulunulan yolu ÖNEK olarak içeren köktür. */
+  const kap = el("gezgin-kokler");
+  kap.textContent = "";
+  if (!kokler || kokler.length < 2) {
+    kap.classList.add("gizli");
+    return;
+  }
+  kap.classList.remove("gizli");
+  // En uzun eşleşen kök aktiftir (iç içe kökte en özgül olan kazanır).
+  let aktif = "";
+  for (const k of kokler) {
+    if ((tamYol === k.yol || tamYol.startsWith(k.yol)) && k.yol.length > aktif.length) {
+      aktif = k.yol;
+    }
+  }
+  for (const k of kokler) {
+    const dugme = document.createElement("button");
+    dugme.className = "kok" + (k.yol === aktif ? " aktif" : "");
+    dugme.textContent = k.ad;
+    dugme.title = k.yol;
+    dugme.setAttribute("role", "tab");
+    dugme.setAttribute("aria-selected", k.yol === aktif ? "true" : "false");
+    dugme.addEventListener("click", () => gezginYukle(k.yol));
+    kap.appendChild(dugme);
+  }
+}
+
 function yolYaz(parcalar, tamYol) {
   /* Breadcrumb sunucudan gelir (hapsin kaynağı orası): ev dizininin ÜSTÜ
      hiç listelenmez, yani tıklanabilir her parça gerçekten açılabilir.
@@ -153,6 +183,7 @@ async function gezginYukle(yol) {
      kabul kararı her hâlükârda /api/fs/sec'te verilir. */
   durum.uzantilar = veri.uzantilar || [];
   secimiTemizle();
+  koklderiYaz(veri.kokler || [], veri.yol);
   yolYaz(veri.parcalar, veri.yol);
   el("btn-ust").disabled = veri.ust === null;
 

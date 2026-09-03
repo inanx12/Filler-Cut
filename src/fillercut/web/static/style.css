@@ -114,6 +114,40 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   background: var(--kart-ust);
 }
 
+/* Kök seçici — yalnız birden çok izinli kök varsa görünür. */
+.kokler {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cizgi);
+  background: var(--kart-ust);
+}
+
+.kok {
+  font: inherit;
+  font-size: 13px;
+  background: var(--kart);
+  border: 1px solid var(--cizgi);
+  color: var(--soluk);
+  cursor: pointer;
+  padding: 4px 12px;
+  border-radius: 999px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kok:hover { color: var(--metin); }
+
+.kok.aktif {
+  border-color: rgba(56, 139, 253, .55);
+  background: rgba(56, 139, 253, .10);
+  color: var(--metin);
+  font-weight: 600;
+}
+
 /* Breadcrumb: ev dizininden bulunulan klasöre kadar tıklanabilir parçalar.
    Uzun yolda soldan taşar; kuyruk (bulunulan klasör) görünür kalır. */
 .yol {
