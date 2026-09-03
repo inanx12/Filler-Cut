@@ -182,6 +182,102 @@ def native_hazir() -> tuple[bool, str]:
     return True, ""
 
 
+#: `ShowWindow` komutu — simge durumundaki pencereyi eski boyutuna döndürür.
+_SW_RESTORE = 9
+
+#: `GetWindow` sabiti — pencerenin SAHİBİ (owner) varsa üst-düzey değildir.
+_GW_OWNER = 4
+
+
+def _pencere_adaylari(pid: int) -> list[int]:
+    """`pid`'e ait GÖRÜNÜR, başlıklı, sahipsiz üst-düzey pencerelerin handle'ları.
+
+    Üç süzgeç birden gerekli:
+
+    * **görünür** — pywebview/WinForms süreç başına birkaç gizli mesaj
+      penceresi tutar; onları öne getirmek hiçbir şey göstermez.
+    * **sahipsiz** (`GetWindow(GW_OWNER) == 0`) — diyalog ve araç
+      pencereleri sahiplidir, ana pencere değildir.
+    * **başlıklı** — başlıksız katman pencereleri kullanıcının gördüğü şey
+      değildir.
+
+    Windows dışında (ya da `user32` yoksa) boş liste döner; çağıran bunu
+    "pencere bulunamadı" diye okur ve tarayıcıya düşer.
+    """
+    if sys.platform != "win32":
+        return []
+    import ctypes
+    from ctypes import wintypes
+
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+    except OSError:  # pragma: no cover - Windows'ta user32 hep vardır
+        return []
+
+    bulunan: list[int] = []
+    geri_cagri_turu = ctypes.WINFUNCTYPE(
+        wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
+    )
+
+    def _geri_cagri(hwnd: int, _: int) -> bool:
+        sahip = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(sahip))
+        if sahip.value != pid:
+            return True
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        if user32.GetWindow(hwnd, _GW_OWNER):
+            return True
+        uzunluk = user32.GetWindowTextLengthW(hwnd)
+        if uzunluk <= 0:
+            return True
+        bulunan.append(int(hwnd))
+        return True
+
+    try:
+        user32.EnumWindows(geri_cagri_turu(_geri_cagri), 0)
+    except OSError:  # pragma: no cover - enumerasyon pratikte patlamaz
+        return []
+    return bulunan
+
+
+def pencereyi_one_getir(pid: int) -> bool:
+    """`pid`'in native penceresini geri yükleyip öne getirir; bulamazsa ``False``.
+
+    **Neden ÇAĞIRAN süreç yapıyor (koşan örnek değil):** Windows'un
+    foreground kilidi bir sürecin başka bir sürecin penceresini öne
+    getirmesine yalnız belirli koşullarda izin verir — ve bu koşullardan
+    biri "çağıran süreç kullanıcının son girdisiyle başlatılmış olmak"tır.
+    Kısayola çift tıklayan kullanıcının başlattığı İKİNCİ süreç bu hakka
+    sahiptir; koşan birinci süreç (arka planda, girdisiz) sahip değildir.
+    Bu yüzden pencereyi ikinci süreç kaldırır ve sonra çıkar.
+
+    pywebview'in kendi API'siyle (``window.restore()`` /
+    ``window.on_top``) yapmak da mümkün DEĞİLDİ: ikisi de koşan sürecin
+    içinden çağrılır, üstelik ``set_on_top`` WinForms ``TopMost``ini
+    ``Invoke`` olmadan doğrudan set eder (kurulu 6.2.1 kaynağı,
+    ``winforms.py``) — uvicorn worker thread'inden çapraz-thread çağrı
+    olurdu.
+
+    ``False`` "hata" değildir: koşan örnek tarayıcı modunda olabilir, o
+    zaman öne getirilecek pencere yoktur ve çağıran sekme açar.
+    """
+    adaylar = _pencere_adaylari(pid)
+    if not adaylar:
+        return False
+    import ctypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    hwnd = adaylar[0]
+    try:
+        if user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, _SW_RESTORE)
+        user32.SetForegroundWindow(hwnd)
+    except OSError:  # pragma: no cover - çağrılar hata KODU döner, atmazlar
+        return False
+    return True
+
+
 #: Sürükle-bırak alanının CSS seçicisi — `web/static/index.html` ile AYNI
 #: olmalı. pywebview'in DOM API'si elemanı bu seçiciyle bulur; ad değişirse
 #: native sürükle-bırak sessizce ölür (kilidi `TestPencereAcKopru`de).
@@ -337,6 +433,7 @@ def pencere_ac(
     *,
     kapanista: Callable[[], None] | None = None,
     baslangic_dizini: str | None = None,
+    kapatici_kaydet: Callable[[Callable[[], None]], None] | None = None,
 ) -> None:
     """Native pencereyi açar ve kullanıcı kapatana kadar BLOKLAR.
 
@@ -351,6 +448,14 @@ def pencere_ac(
             sonlansa bile sunucu ARDA KALMAZ.
         baslangic_dizini: Native dosya diyaloğunun açılış klasörü (v1.2.1
             B.2) — ``cli.ui`` ilk izinli kökü (yoksa ev dizinini) geçirir.
+        kapatici_kaydet: Pencere yaratıldıktan SONRA, onu yok eden çağrılabilir
+            ile bir kez çağrılır (v1.2.3, KI-14). Arayüzdeki "Kapat" düğmesi
+            (``POST /api/kapat``) bu kancayı kullanır. Pencere nesnesi burada
+            doğduğu için dışarı ancak böyle verilebilir — modül seviyesinde
+            global bir referans tutmak testleri birbirine bağlardı.
+            ``window.destroy()`` thread-güvenlidir: pywebview onu WinForms
+            ``Invoke``uyla UI thread'ine taşır (kurulu 6.2.1 kaynağı), yani
+            uvicorn worker thread'inden çağrılabilir.
     """
     import webview
 
@@ -369,6 +474,8 @@ def pencere_ac(
         # `dom.get_element` DOM'u sorgular, erken kayıt None döner ve native
         # sürükle-bırak sessizce ölürdü.
         pencere.events.loaded += lambda: surukle_birak_kur(pencere)
+        if kapatici_kaydet is not None:
+            kapatici_kaydet(pencere.destroy)
     try:
         webview.start()
     finally:

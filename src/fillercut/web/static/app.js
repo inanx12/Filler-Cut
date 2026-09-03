@@ -1521,11 +1521,47 @@ function kurulumBaslat() {
   kurulum.zamanlayici = setInterval(kurulumYokla, 700);
 }
 
+/* ── kapatma (KI-14) ─────────────────────────────────────────────────── */
+
+async function kapat() {
+  /* Konsolsuz koşuda TEK çıkış yolu. Sekmeyi kapatmak sunucuyu durdurmaz:
+   * v1.2.2'ye kadar süreç görünmez biçimde dinlemeye devam ediyordu
+   * ("headless zombi") ve konsol olmadığı için Ctrl+C de yoktu.
+   *
+   * Onay soruluyor: yanlışlıkla basmak koşan bir işi bekletir. */
+  const kosuyor = !el("ekran-kosu").classList.contains("gizli");
+  const soru = kosuyor
+    ? "Bir iş koşuyor. Filler-Cut kapatılsın mı? (koşan iş yarıda kesilmez, " +
+      "bitince süreç kapanır)"
+    : "Filler-Cut kapatılsın mı?";
+  if (!window.confirm(soru)) return;
+
+  el("btn-kapat").disabled = true;
+  if (durum.es) { durum.es.close(); durum.es = null; }
+  kurulumYoklamaDurdur();
+  try {
+    const cevap = await fetch("/api/kapat", { method: "POST" });
+    if (!cevap.ok) {
+      el("btn-kapat").disabled = false;
+      window.alert(await apiHatasi(cevap));
+      return;
+    }
+  } catch (_) {
+    /* Bağlantı kopması BAŞARIDIR: sunucu cevabı gönderdikten sonra kapanır,
+     * bazı tarayıcılar bunu ağ hatası olarak raporlar. */
+  }
+  el("kapandi-not").textContent = kosuyor
+    ? "Koşan iş bitince süreç tamamen kapanacak. Bu sekmeyi kapatabilirsiniz."
+    : "Bu sekmeyi kapatabilirsiniz.";
+  el("kapandi-perde").classList.remove("gizli");
+}
+
 /* ── bağlama ─────────────────────────────────────────────────────────── */
 
 el("btn-ust").addEventListener("click", () => {
   if (durum.ust !== null) gezginYukle(durum.ust);
 });
+el("btn-kapat").addEventListener("click", kapat);
 el("btn-baslat").addEventListener("click", baslat);
 el("btn-yeni").addEventListener("click", yeniIs);
 el("btn-hata-yeni").addEventListener("click", yeniIs);

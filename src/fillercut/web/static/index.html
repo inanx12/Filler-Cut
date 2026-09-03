@@ -11,7 +11,20 @@
 <header class="ust">
   <div class="marka"><span class="marka-isaret"></span>Filler-Cut</div>
   <div class="marka-alt">filler + sessizlik temizliği · localhost</div>
+  <!-- Kapat: konsolsuz koşuda TEK çıkış yolu (KI-14). Sekmeyi kapatmak
+       sunucuyu durdurmaz; "Ctrl+C" de konsolsuz exe'de imkânsızdır. -->
+  <button id="btn-kapat" class="dugme ikincil dar kapat-dugme" title="Filler-Cut'ı kapat">
+    Kapat
+  </button>
 </header>
+
+<!-- Kapanış sonrası yüzeyi: sunucu artık yok, buradan hiçbir istek atılamaz. -->
+<div id="kapandi-perde" class="perde gizli">
+  <div class="perde-kutu">
+    <h2>Filler-Cut kapatıldı</h2>
+    <p id="kapandi-not">Bu sekmeyi kapatabilirsiniz.</p>
+  </div>
+</div>
 
 <main>
   <!-- Ekran 0 — Sihirbaz: whisper.cpp ikilisi + model indirme (ilk çalıştırma) -->

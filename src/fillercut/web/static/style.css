@@ -791,3 +791,40 @@ h2.ust-bosluk { margin-top: 20px; }
   border: 1px solid var(--kirmizi); white-space: pre-wrap;
 }
 .kurulum-dugmeler { display: flex; gap: 10px; margin-top: 1rem; }
+
+/* ── kapat düğmesi + kapanış perdesi (KI-14) ─────────────────────────── */
+
+/* Sağa itilir: marka ve alt başlık soldadır, düğme onlarla yarışmasın.
+   `.ust` zaten flex; `align-self` baseline hizasından kurtarır. */
+.kapat-dugme { margin-left: auto; align-self: center; }
+
+/* Perde SEKMEYİ kilitler: sunucu kapandıktan sonra hiçbir düğme anlamlı
+   değil, tıklanabilir bırakmak sessizce başarısız isteklere yol açardı. */
+.perde {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 17, 23, .92);
+  z-index: 50;
+}
+
+.perde-kutu {
+  background: var(--kart);
+  border: 1px solid var(--cizgi);
+  border-radius: 12px;
+  padding: 28px 34px;
+  text-align: center;
+  max-width: 420px;
+}
+
+.perde-kutu h2 {
+  color: var(--metin);
+  font-size: 18px;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: 8px;
+}
+
+.perde-kutu p { color: var(--soluk); margin: 0; }

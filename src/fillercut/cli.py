@@ -54,6 +54,7 @@ from fillercut.pipeline import run
 # DEĞİL) — düz CLI koşusunun maliyetine dokunmaz. Modül seviyesinde olması
 # şart: `ui` kararı testlerde bu adla mock'lanır.
 from fillercut.web.native import native_hazir
+from fillercut.web.native import pencereyi_one_getir as native_pencereyi_one_getir
 
 if TYPE_CHECKING:  # uvicorn/fastapi tembel kalır — yalnız tip olarak anılır
     import uvicorn
@@ -564,6 +565,7 @@ def _native_kos(
     port: int,
     *,
     baslangic_dizini: str | None = None,
+    kapatici_kaydet: "Callable[[Callable[[], None]], None] | None" = None,
 ) -> None:
     """Sunucuyu ayrı thread'de koşturur, hazır olunca native pencereyi açar.
 
@@ -597,7 +599,12 @@ def _native_kos(
     def _kapat() -> None:
         server.should_exit = True
 
-    native.pencere_ac(url, kapanista=_kapat, baslangic_dizini=baslangic_dizini)
+    native.pencere_ac(
+        url,
+        kapanista=_kapat,
+        baslangic_dizini=baslangic_dizini,
+        kapatici_kaydet=kapatici_kaydet,
+    )
 
     thread.join(timeout=UI_KAPANIS_TIMEOUT_SN)
     if thread.is_alive():
@@ -605,6 +612,62 @@ def _native_kos(
             "Not: koşan bir iş bitmeyi bekliyor — yarıda kesilmiyor, "
             "bitince süreç kapanacak."
         )
+
+
+class _Kapanis:
+    """"Kapat" düğmesinin geç bağlanan tutamağı (KI-14).
+
+    ``create_app`` kapanış kancasını sunucu ve pencere DOĞMADAN ÖNCE ister;
+    gerçek eylem ise moda göre değişir ve ancak sonra bilinir (native modda
+    pencere `pencere_ac` içinde yaratılır). Bu tutamak o boşluğu kapatır:
+    uygulamaya hemen verilir, eylemi sonra takılır.
+
+    Eylem takılmadan çağrılırsa sessizce hiçbir şey yapmaz — kapanış yolu
+    kapanamamaktan dolayı ÇÖKMEMELİ (düzeltmeye çalıştığımız sınıfın
+    aynısı). Pratikte bu yalnız pencere açılmadan basılan bir "Kapat"tır.
+    """
+
+    def __init__(self) -> None:
+        self._eylem: Callable[[], None] | None = None
+
+    def ayarla(self, eylem: Callable[[], None]) -> None:
+        self._eylem = eylem
+
+    def __call__(self) -> None:
+        if self._eylem is not None:
+            self._eylem()
+
+
+def _var_olan_ornegi_goster(
+    port: int, kimlik: dict[str, object], *, sessiz: bool
+) -> None:
+    """İkinci başlatma: koşan örneği KULLANICIYA GÖSTERİR (KI-13).
+
+    v1.2.2'ye kadar burada yalnız bir `echo` vardı ve süreç çıkıyordu.
+    Konsolsuz `fillercut-ui.exe`'de o satırı kimse görmez: kullanıcı
+    kısayola basıyor, hiçbir şey olmuyor, uygulama ÖLÜ görünüyor. Oysa
+    çalışan bir örnek vardı.
+
+    Sıra: önce native pencereyi öne getirmeyi dene (koşan örnek native
+    modda ise kullanıcının istediği tam olarak odur), olmazsa tarayıcı
+    sekmesi aç. ``False`` dönüşü hata değildir — koşan örnek tarayıcı
+    modunda olabilir, o zaman öne getirilecek pencere yoktur.
+
+    ``sessiz`` (``--no-browser``) her ikisini de bastırır: headless/test
+    koşusu ekrana bir şey açmamalı.
+    """
+    url = f"http://127.0.0.1:{port}/"
+    pid = kimlik.get("pid")
+    if sessiz:
+        typer.echo(f"Filler-Cut zaten çalışıyor (port {port}, pid {pid}): {url}")
+        return
+    if isinstance(pid, int) and native_pencereyi_one_getir(pid):
+        typer.echo(f"Filler-Cut zaten çalışıyor — penceresi öne getirildi ({url})")
+        return
+    import webbrowser
+
+    webbrowser.open(url)
+    typer.echo(f"Filler-Cut zaten çalışıyor (pid {pid}) — {url} tarayıcıda açıldı")
 
 
 def _tani_yazdir() -> None:
@@ -695,15 +758,12 @@ def ui(
     # (basit ve tahmin edilebilir — "son kullanılan" durumu tutmak IPC ister).
     baslangic_dizini = str(izinli_kokler[0]) if izinli_kokler else str(Path.home())
 
-    # 1) Port zaten dolu ve oradaki BİZSEK: ikinci sunucu başlatma, adresi söyle.
+    # 1) Port zaten dolu ve oradaki BİZSEK: ikinci sunucu başlatma, VAR OLANI GÖSTER.
     sock = _dinleyici_ac(port)
     if sock is None:
         kimlik = _instance_sorgula(port)
         if kimlik is not None:
-            typer.echo(
-                f"Filler-Cut zaten çalışıyor (port {port}, pid {kimlik.get('pid')}): "
-                f"http://127.0.0.1:{port}/"
-            )
+            _var_olan_ornegi_goster(port, kimlik, sessiz=no_browser)
             return
         # 2) Port dolu ama başka bir uygulamada: ephemeral porta düş.
         sock = _dinleyici_ac(0)
@@ -750,15 +810,33 @@ def ui(
     # ÇÖZÜCÜsünü kurar (``"*"`` modu istek başına dinamik olmalı — mikro C.2).
     # Buradaki çözüm yalnız startup doğrulaması (socket'ten önce temiz hata)
     # ve native diyaloğun açılış klasörü içindir.
-    web_app = create_app(cfg, on_ready=on_ready)
+    # "Kapat" düğmesinin ucu (KI-14). Eylem MODA GÖRE değişir ve pencere
+    # nesnesi henüz yok, o yüzden geç bağlanan bir tutamak kullanılır.
+    kapanis = _Kapanis()
+    web_app = create_app(cfg, on_ready=on_ready, kapanis=kapanis)
     server = _sunucu_kur(web_app)
 
     if mod == "native":
         typer.echo(f"Filler-Cut penceresi açılıyor ({url})")
-        _native_kos(server, sock, url, gercek_port, baslangic_dizini=baslangic_dizini)
+        # Native modda düğme PENCEREYİ yok eder; sunucuyu doğrudan durdurmak
+        # pencereyi ayakta bırakır ve kullanıcı ölü bir kabuğa bakar. Pencere
+        # kapanınca zaten `kapanista` → `should_exit` zinciri işler.
+        _native_kos(
+            server,
+            sock,
+            url,
+            gercek_port,
+            baslangic_dizini=baslangic_dizini,
+            kapatici_kaydet=kapanis.ayarla,
+        )
         return
 
-    typer.echo(f"Filler-Cut UI: {url}  (kapatmak için Ctrl+C)")
+    # Tarayıcı/headless modda pencere yok: sunucuyu graceful durdurmak yeter.
+    def _sunucuyu_durdur() -> None:
+        server.should_exit = True
+
+    kapanis.ayarla(_sunucuyu_durdur)
+    typer.echo(f"Filler-Cut UI: {url}  (arayüzdeki \"Kapat\" düğmesi ya da Ctrl+C)")
     _sunucuyu_kos(server, sock)
 
 

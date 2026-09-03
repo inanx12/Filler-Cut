@@ -21,10 +21,11 @@ from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
+from starlette.background import BackgroundTask
 
 from fillercut import __version__
 from fillercut.config import Config
@@ -106,6 +107,7 @@ def create_app(
     config: Config | None = None,
     *,
     on_ready: Callable[[], None] | None = None,
+    kapanis: Callable[[], None] | None = None,
     fs_home: Path | None = None,
     izinli_kokler: list[Path] | None = None,
     kayit: JobKayit | None = None,
@@ -121,6 +123,12 @@ def create_app(
             startup) BİR KEZ çağrılır — ``cli.ui`` tarayıcıyı bununla açar.
             starlette 1.x'te ``add_event_handler`` kaldırıldığı için kanal
             lifespan üzerinden kurulur; testler doğrudan enjekte eder.
+        kapanis: Arayüzdeki "Kapat" düğmesinin sunucu tarafı ucu
+            (``POST /api/kapat``). ``cli.ui`` buraya moda göre farklı bir
+            eylem verir: native modda pencereyi yok eder, tarayıcı modunda
+            uvicorn'a ``should_exit`` der. Verilmezse uç 501 döner —
+            ``create_app``ı doğrudan kullanan (testler, gömen kod)
+            kapatılamaz bir sunucuyu yanlışlıkla kapatmasın.
         fs_home: Dosya gezgini hapsinin EV kökü (``web/fs.py``). Default
             ``Path.home()`` — üretimde HEP odur; parametre test enjeksiyonu
             içindir (tmp_path hapsi). Job başlatma da AYNI hapisten geçer.
@@ -213,6 +221,32 @@ def create_app(
         der, bu uç "uygulama katmanı cevap veriyor" der.
         """
         return InstanceBilgisi(uygulama=INSTANCE_ADI, surum=__version__, pid=os.getpid())
+
+    @app.post("/api/kapat")
+    def kapat() -> Response:
+        """Uygulamayı kapatır — arayüzdeki "Kapat" düğmesinin ucu (KI-14).
+
+        **Neden var:** konsolsuz `fillercut-ui.exe` tarayıcı moduna
+        düştüğünde (KI-12) çıkış yolu KALMIYORDU. Sekmeyi kapatmak sunucuyu
+        durdurmaz — süreç görünmez biçimde dinlemeye devam eder ("headless
+        zombi", `netstat`le ölçüldü) ve konsol olmadığı için "Ctrl+C"
+        talimatı da imkânsızdır. Tek kurtuluş Görev Yöneticisi'ydi.
+
+        **Cevap ÖNCE gider, kapanış SONRA olur.** Kapatma işi bir
+        `BackgroundTask`tır: starlette onu cevap gövdesi gönderildikten
+        sonra çalıştırır. Doğrudan çağırsaydık istemci kapanan sunucudan
+        yanıt alamaz, arayüz "bağlantı koptu" hatası gösterirdi — kullanıcı
+        başarılı bir kapanışı hata sanardı.
+
+        Yetki notu: sunucu yalnız ``127.0.0.1``e bağlıdır ve tek
+        kullanıcılıktır; bu uç "kendi açtığın pencereyi kapat" demektir.
+        """
+        if kapanis is None:
+            raise HTTPException(
+                status_code=501,
+                detail="Bu sunucu arayüzden kapatılamıyor (kapanış kancası yok).",
+            )
+        return JSONResponse({"ok": True}, background=BackgroundTask(kapanis))
 
     app.mount("/static", StaticFiles(directory=_STATIK), name="static")
     return app
