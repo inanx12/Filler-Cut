@@ -707,7 +707,11 @@ def ui(
 
         on_ready = _tarayici_ac
 
-    web_app = create_app(cfg, izinli_kokler=izinli_kokler, on_ready=on_ready)
+    # `izinli_kokler` create_app'e GEÇİRİLMEZ: create_app config'ten kendi
+    # ÇÖZÜCÜsünü kurar (``"*"`` modu istek başına dinamik olmalı — mikro C.2).
+    # Buradaki çözüm yalnız startup doğrulaması (socket'ten önce temiz hata)
+    # ve native diyaloğun açılış klasörü içindir.
+    web_app = create_app(cfg, on_ready=on_ready)
     server = _sunucu_kur(web_app)
 
     if mod == "native":

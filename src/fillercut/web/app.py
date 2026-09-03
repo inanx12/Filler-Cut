@@ -142,13 +142,23 @@ def create_app(
     """
     cfg = config if config is not None else Config()
     ev = (fs_home if fs_home is not None else Path.home()).resolve()
-    # İzinli kökler: enjekte edilmişse (test) olduğu gibi; değilse config'ten
-    # ÇÖZÜLÜR ve varlığı doğrulanır (var olmayan kök → ConfigError; cli.ui
-    # onu socket açılmadan yakalar).
+    # İzinli kökler bir ÇÖZÜCÜ olarak saklanır ki her istekte yeniden
+    # değerlendirilebilsin (``"*"`` modu dinamiktir — mikro C.2). Enjekte
+    # edilmişse (test) sabit liste; değilse config'ten çözülür. Var olmayan
+    # AÇIK kök startup'ta ConfigError verir (cli.ui socket'ten önce yakalar;
+    # doğrudan create_app çağıranlar için de burada bir kez doğrulanır),
+    # istek başına çözümde ise sessizce atlanır (mid-koşu 500 olmasın).
     if izinli_kokler is not None:
-        fs_izinli_kokler = [Path(k).resolve() for k in izinli_kokler]
+        sabit_kokler = [Path(k).resolve() for k in izinli_kokler]
+
+        def fs_kok_cozucu() -> list[Path]:
+            return sabit_kokler
     else:
-        fs_izinli_kokler = fs.izinli_kokler_coz(cfg.ui.izinli_kokler, ev)
+        fs.izinli_kokler_coz(cfg.ui.izinli_kokler, ev, dogrula=True)  # startup doğrulaması
+
+        def fs_kok_cozucu() -> list[Path]:
+            return fs.izinli_kokler_coz(cfg.ui.izinli_kokler, ev, dogrula=False)
+
     job_kayit = kayit if kayit is not None else JobKayit(kosucu=_pipeline_kosucu(cfg))
     kurulum_yoneticisi = (
         kurulum if kurulum is not None else kurulum_mod.KurulumYoneticisi(cfg)
@@ -174,7 +184,7 @@ def create_app(
     )
     app.state.config = cfg
     app.state.fs_home = ev
-    app.state.fs_izinli_kokler = fs_izinli_kokler
+    app.state.fs_izinli_kokler_cozucu = fs_kok_cozucu
     app.state.kayit = job_kayit
     app.state.kurulum = kurulum_yoneticisi
 

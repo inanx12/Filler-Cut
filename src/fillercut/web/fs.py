@@ -17,6 +17,8 @@ attribute) atlanır.
 
 from __future__ import annotations
 
+import logging
+import os
 import stat as stat_mod
 import subprocess
 import sys
@@ -29,8 +31,15 @@ from pydantic import BaseModel, ConfigDict
 
 from fillercut.config import ConfigError
 
+_log = logging.getLogger(__name__)
+
 #: Gezginin listelediği video uzantıları (karşılaştırma küçük harfle).
 VIDEO_UZANTILARI = frozenset({".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v"})
+
+#: ``[ui].izinli_kokler`` içinde makinedeki TÜM takılı sürücüleri isteyen
+#: değer (v1.2.1 mikro C.2). Diğer değerlerle birlikteyse diğerleri yok
+#: sayılır — "hepsi" zaten en geniş kümedir.
+TUM_SURUCULER = "*"
 
 router = APIRouter()
 
@@ -115,34 +124,95 @@ def _kok_bul(aday: Path, kokler: Sequence[Path]) -> Path | None:
     return None
 
 
-def izinli_kokler_coz(ham_kokler: Sequence[str | Path], ev: Path) -> list[Path]:
-    """Config'ten gelen ham kökleri çözer, VARLIĞINI doğrular, tekrarları eler.
+def _surucu_kokleri(ev_c: Path) -> list[Path]:
+    """Makinedeki tüm takılı sürücüler — ``"*"`` modu (dinamik, saf fonksiyon).
 
-    Ev bu listeye DAHİL DEĞİLDİR (çağıran onu ayrı, ilk kök olarak tutar);
-    ev'e eşit ya da ev'in altındaki bir kök elenir (çift saymamak için).
+    ``os.listdrives()`` Python 3.12+ ve Windows'a özgüdür (``['C:\\\\', 'D:\\\\',
+    …]`` döndürür — kurulu 3.12.10'dan doğrulandı). Yoksa (eski Python / POSIX)
+    ya da OS hatası verirse BOŞ döner: ``"*"`` o platformda yalnız ev'e düşer,
+    çökmez.
 
-    Bu fonksiyon dosya sistemine dokunan tek yerdir — ``Config`` şekli
-    doğrular, varlık burada sınanır. Var olmayan / dizin olmayan kök SESSİZCE
-    ATLANMAZ: ``ConfigError`` fırlatılır ve ``cli.ui`` onu temiz Türkçe hataya
-    çevirir (güvenlik kararı gizlenmez).
+    Ev'in altındaki/eşiti sürücü (yani ev'in kendi sürücüsünün ev'e eşit
+    olması durumu) çift saymamak için elenir; ev'in ÜST sürücüsü (``C:\\``,
+    ev ``C:\\Users\\x`` iken) B.2'nin "üst-kök tutulur" kararıyla KALIR —
+    ``"*"`` zaten "tüm diskler" demek, sistem diski de dahil.
+
+    Taksız sürücü harfi (boş DVD/kart okuyucu) ``is_dir()`` False verir ve
+    listeye girmez.
+    """
+    listele = getattr(os, "listdrives", None)
+    if listele is None:
+        return []
+    try:
+        dizeler = listele()
+    except OSError:
+        return []
+    kokler: list[Path] = []
+    for dize in dizeler:
+        try:
+            k = Path(dize).resolve()
+        except OSError:
+            continue
+        if not k.is_dir():
+            continue
+        if k.is_relative_to(ev_c):
+            continue  # ev zaten hapiste
+        if k not in kokler:
+            kokler.append(k)
+    return kokler
+
+
+def izinli_kokler_coz(
+    ham_kokler: Sequence[str | Path], ev: Path, *, dogrula: bool = True
+) -> list[Path]:
+    """Config'ten gelen ham kökleri çözer; ev DAHİL DEĞİL (çağıran ilk kök tutar).
+
+    İki mod:
+
+    * ``"*"`` (``TUM_SURUCULER``) listede varsa → makinedeki tüm takılı
+      sürücüler, **her çağrıda dinamik** (``_surucu_kokleri``). Diğer girdiler
+      YOK SAYILIR ("hepsi" en geniş kümedir); ``dogrula`` iken bu durum log'a
+      uyarı düşer. ``"*"`` diskten geldiği için "eksik kök" kavramı yoktur,
+      hiç ``ConfigError`` atmaz.
+    * Aksi hâlde → açık yollar çözülür ve ev'e eşit/altındaki elenir (B.2).
+
+    ``dogrula`` (default ``True``): açık bir yol çözülemiyor ya da dizin
+    değilse ``ConfigError`` atılır — ``cli.ui``/``create_app`` bunu **startup'ta**
+    (socket'ten önce) yakalar, güvenlik kararı gizlenmez. ``dogrula=False``
+    ise (istek başına çözüm) eksik yol sessizce atlanır: bir yol koşu
+    sırasında silinse de route 500 değil temiz 403/404 verir.
 
     Raises:
-        ConfigError: Bir kök çözülemiyor ya da bir dizin değil.
+        ConfigError: ``dogrula`` iken açık bir kök çözülemez ya da dizin değil.
     """
     ev_c = ev.resolve()
+    if TUM_SURUCULER in ham_kokler:
+        digerleri = [k for k in ham_kokler if k != TUM_SURUCULER]
+        if digerleri and dogrula:
+            _log.warning(
+                "[ui].izinli_kokler: '*' (tüm sürücüler) varken diğer girdiler "
+                "yok sayıldı: %s",
+                digerleri,
+            )
+        return _surucu_kokleri(ev_c)
+
     sonuc: list[Path] = []
     for ham in ham_kokler:
         try:
             k = Path(ham).expanduser().resolve()
         except OSError as exc:
-            raise ConfigError(
-                f"[ui].izinli_kokler çözülemedi: {ham!r} ({exc})"
-            ) from exc
+            if dogrula:
+                raise ConfigError(
+                    f"[ui].izinli_kokler çözülemedi: {ham!r} ({exc})"
+                ) from exc
+            continue
         if not k.is_dir():
-            raise ConfigError(
-                f"[ui].izinli_kokler içindeki kök yok ya da dizin değil: {ham!r} "
-                "(yolu düzeltin ya da satırı silin)"
-            )
+            if dogrula:
+                raise ConfigError(
+                    f"[ui].izinli_kokler içindeki kök yok ya da dizin değil: {ham!r} "
+                    "(yolu düzeltin ya da satırı silin)"
+                )
+            continue
         if k.is_relative_to(ev_c):
             continue  # ev zaten hapiste; ev'e eşit/altındaki kök çift saymaz
         if k not in sonuc:
@@ -279,12 +349,20 @@ def ev_dizini(request: Request) -> Path:
 
 
 def izinli_kokler_state(request: Request) -> list[Path]:
-    """Config'ten çözülmüş izinli kökler (``create_app`` state'e koyar).
+    """İzinli kökleri HER İSTEKTE çözer (``create_app`` bir çözücü koyar).
 
-    ``getattr`` varsayılanı boş: eski/enjekte edilmiş app state'lerde alan
-    yoksa davranış tek köke (ev) düşer — regresyon güvenliği.
+    Değer bir ``list[Path]`` değil bir ÇÖZÜCÜ (``() -> list[Path]``) olarak
+    saklanır — ``"*"`` modunda kökler istek başına ``os.listdrives()``ten
+    gelir, startup'ta DONMAZ (USB sonradan takılırsa görünür, çıkınca düşer).
+    Klasik yolda çözücü aynı listeyi döndürür, maliyeti ihmal edilebilir.
+
+    ``getattr`` varsayılanı boş çözücü: eski/enjekte edilmiş app state'lerde
+    alan yoksa davranış tek köke (ev) düşer — regresyon güvenliği.
     """
-    return cast(list[Path], getattr(request.app.state, "fs_izinli_kokler", []))
+    cozucu = getattr(request.app.state, "fs_izinli_kokler_cozucu", None)
+    if cozucu is None:
+        return []
+    return cast("list[Path]", cozucu())
 
 
 def _izinli_konumlar_metni(ev: Path, izinli_kokler: Sequence[Path]) -> str:

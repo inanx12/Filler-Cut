@@ -131,6 +131,12 @@ class UiConfig:
     genişletir: ev ∪ izinli_kokler. Kullanıcının videoları başka bir
     sürücüdeyse (D:\\, E:\\) hapis onun iş akışını engellemesin diye vardır.
 
+    Özel değer ``"*"`` (mikro C.2) → makinedeki TÜM takılı sürücüler, her
+    istekte dinamik (``web/fs._surucu_kokleri``, ``os.listdrives``). ``"*"``
+    başka girdilerle birlikteyse diğerleri yok sayılır. Şekil doğrulaması
+    ``"*"``'ı sıradan bir metin girdisi gibi kabul eder; anlamı ``fs``
+    katmanında çözülür.
+
     **GÜVENLİK:** bu liste YALNIZCA config dosyasından okunur — onu
     değiştiren bir API ucu ya da CLI bayrağı YOKTUR (bu yüzden ``merge_config``
     de bir override almaz). Env var da bilinçli olarak DESTEKLENMEZ (bkz.
