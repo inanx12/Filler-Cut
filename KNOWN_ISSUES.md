@@ -1244,7 +1244,17 @@ maliyeti ayrıca ölçülmeli, bu kayıtta ölçülmedi.
   (README, `olcum.py`, `sonuclar/ham_log.txt`, `sonuclar/kosular.json`).
   Politika kilitleri: `tests/test_wcpp.py`.
 
-## KI-10 — Native dosya diyaloğu hapisle sınırlandırılmadı — AÇIK
+## KI-10 — Native dosya diyaloğu hapisle sınırlandırılmadı — **Çözüldü (mikro C.2)**
+
+- **Çözüm (2026-09-03):** Erteleme kalktı — v1.3.0'a bırakılan "diyaloğu
+  izinli köklere göre kısıtla" tartışması, **hapsi genişletmenin** doğru
+  cevap olduğu anlaşılınca kapandı. Kullanıcının derdi (başka sürücüdeki
+  videoya erişmek) diyaloğu kısıtlayarak değil, hapsi genişleterek çözülür:
+  açık kökler (`[ui].izinli_kokler = ["D:\\"]`) ya da tüm sürücüler
+  (`["*"]`, mikro C.2). `"*"` kullanan bir kullanıcıda diyalog hangi
+  sürücüden seçim yaparsa yapsın doğrulama artık **reddetmez** — UX tuzağı
+  ortadan kalkar. Diyaloğu OS düzeyinde kısıtlamak (tek kapıyı ikiye bölmek)
+  gereksizleşti; **madde kapandı**. Aşağıdaki kayıt tarihsel bağlam içindir.
 
 - **Belirti:** v1.2.1 (Dalga B.2) native pencerede bir dosya SEÇTİRME
   diyaloğu açıyor (`web/native.NativeKopru.dosya_sec`) ve açılış klasörünü

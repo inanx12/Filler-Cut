@@ -278,6 +278,14 @@ config_version = 1
 izinli_kokler = ['D:\', 'E:\Videolar']
 ```
 
+Sürücüleri tek tek yazmak istemezseniz `izinli_kokler = ["*"]` **makinedeki
+tüm takılı sürücüleri** izinli yapar; liste her açılışta değil **her istekte**
+tazelenir, yani sonradan taktığınız bir USB disk de kendiliğinden görünür.
+
+> ⚠️ **Güvenlik:** `"*"` localhost arayüzüne tüm disklerinizi listeler;
+> paylaşımlı ya da güvenmediğiniz bir makinede önerilmez — orada sürücüleri
+> tek tek yazın.
+
 Bu kökler **yalnızca config dosyasından** okunur (arayüzde onları değiştiren
 bir düğme yoktur — güvenlik sınırı config'in dışına taşmasın diye). Var
 olmayan bir kök yazarsanız `fillercut ui` açık bir hata verip durur. Birden

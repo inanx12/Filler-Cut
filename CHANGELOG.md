@@ -44,6 +44,10 @@ Paket ayrıca **PyPI'ye hazır**.
   dizininin ötesine genişletir (`D:\`, `E:\Videolar`). Kökler **yalnızca
   config dosyasından** okunur — onları değiştiren bir API ucu yoktur.
   Birden çok kök varsa gezginde bir kök seçici görünür.
+- `izinli_kokler = ["*"]`: makinedeki **tüm takılı sürücüleri** izinli yapar,
+  **her istekte dinamik** (`os.listdrives`) — sonradan takılan USB disk de
+  görünür, çıkınca düşer. `"*"` başka değerlerle birlikteyse diğerleri yok
+  sayılır. Paylaşımlı makinede önerilmez (README güvenlik notu).
 
 ### Eklendi — Geri bildirim düğmesi ve PyPI hazırlığı (Dalga C)
 
@@ -62,8 +66,9 @@ Paket ayrıca **PyPI'ye hazır**.
 
 - **Ev hapsi tüm yollarda aynen korunur** — native dosya diyaloğu da hapsin
   dışına çıkamaz; kullanıcı D:'den seçse bile doğrulama izinli kök değilse
-  reddeder. Diyaloğu izinli köklere göre kısıtlama seçeneği v1.3.0'da
-  değerlendirilecektir (bkz. KNOWN_ISSUES.md KI-10).
+  reddeder. Bunun **çözümü hapsi genişletmektir** (açık kök ya da `["*"]`):
+  `"*"` kullanan kullanıcıda diyalog hangi sürücüden seçerse seçsin reddedilmez,
+  UX tuzağı kalkar (KI-10 kapandı).
 
 ## [1.2.0] — 2026-09-02
 

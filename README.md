@@ -275,6 +275,13 @@ config_version = 1
 izinli_kokler = ['D:\', 'E:\Videolar']
 ```
 
+If you'd rather not list drives one by one, `izinli_kokler = ["*"]` allows
+**every mounted drive** on the machine; the list is refreshed **per request**
+(not frozen at startup), so a USB disk plugged in later shows up on its own.
+
+> ⚠️ **Security:** `"*"` lists all your drives to the localhost UI; it is not
+> recommended on a shared or untrusted machine — list drives individually there.
+
 These roots are read **only from the config file** — there is no UI control
 that changes them, so the security boundary can't be moved from inside the
 page. A nonexistent root makes `fillercut ui` stop with a clear error. With
