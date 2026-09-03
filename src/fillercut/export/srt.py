@@ -4,6 +4,21 @@ BİÇİM (kilitli): sıra numarası 1'den, zaman damgası ``HH:MM:SS,mmm``
 (**virgül** — nokta WebVTT'dir ve oynatıcıların çoğu virgülsüz SRT'yi hiç
 yüklemez), bloklar arası boş satır, dosya **UTF-8 BOM'suz** ve LF satır sonlu.
 
+ZAMAN ÇİZGİSİ **KESİLMİŞ** ÇİZGİDİR (v1.2.1 düzeltmesi). SRT, üretilen
+videonun / NLE zaman çizgisinin altyazısıdır: kelime zamanları PLAN'ın keep
+segmentleri üzerinden remap edilir (``remap_words``)::
+
+    t_yeni = (t - keep.start_ms) + bu keep'ten ÖNCE tutulan toplam süre
+
+İlk sürüm bunu yapmıyordu ve kusur gerçek DaVinci Resolve içe aktarımında
+yakalandı: Test1'de XML zaman çizgisi 20,2 sn iken son altyazı ~24. saniyeye
+taşıyordu. Kaynak-zamanlı kayıt zaten ``<ad>_transkript.json``'dadır — bu
+yüzden ``plan`` **zorunlu keyword**'dür: opsiyonel olsaydı aynı kusur tek bir
+unutulmuş argüman kadar uzakta kalırdı.
+
+Remap ``cikti`` kolundan BAĞIMSIZDIR: hazır MP4 da FCP7 zaman çizgisi de aynı
+kesilmiş çizgidir.
+
 **KAYNAK: kelime listesi, "segment" değil — bilinçli sapma.** Brief
 "faster-whisper/wcpp segment'lerinden" diyor; bu repoda öyle bir kaynak
 YOKTUR:
@@ -26,7 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from fillercut.models import Word
+from fillercut.models import CutPlan, Word
 
 #: Bu kadar (veya daha uzun) duraklama yeni bloğa geçirir. Konuşmada cümle
 #: sınırı çoğu zaman burada olur; ``detect``in ``silence_min_ms`` (400 ms)
@@ -64,6 +79,69 @@ def zaman_damgasi(ms: int) -> str:
     dakika, kalan = divmod(kalan, 60_000)
     saniye, milisaniye = divmod(kalan, 1_000)
     return f"{saat:02d}:{dakika:02d}:{saniye:02d},{milisaniye:03d}"
+
+
+def remap_words(words: list[Word], plan: CutPlan) -> list[Word]:
+    """Kelime zamanlarını kaynak çizgiden KESİLMİŞ çizgiye taşır — saf fonksiyon.
+
+    ``t_yeni = (t - keep.start_ms) + bu keep'ten ÖNCE tutulan toplam süre``.
+
+    Kesilen bölgeye TAM düşen kelime SRT'den düşer. Kesim sınırına BİNEN
+    kelime **midpoint kuralıyla** karara bağlanır: ortası bir keep'in içine
+    düşüyorsa kelime KALIR ve zamanı o keep'in sınırlarına clamp'lenir,
+    düşmüyorsa DÜŞER.
+
+    Midpoint'in gerekçesi: sınıra binen kelimenin çoğunluğu hangi taraftaysa
+    o taraf kazanır. Alternatifler daha kötüydü — "herhangi bir kesişme
+    yeter" desek kesilen filler'ın kuyruğu altyazıda kalırdı ("eee" görünür,
+    sesi yok); "tamamen içinde olsun" desek padding'in ucundan traşladığı her
+    kelime altyazıdan silinirdi (ölçülen padding 80/120 ms, tipik kelime
+    ~300 ms). **Bilinçli sapma:** clamp edilen kelime altyazıda gerçek
+    süresinden kısa görünür; kesim zaten o sesi kaldırdığı için bu doğrudur.
+
+    Sıralama girdiden bağımsızdır (keep'ler ve kelimeler zamana göre
+    sıralanır) ve çıktı **monotoniktir**: bir kelime kendinden öncekinin
+    bitişinden geriye başlayamaz — ASR üst üste binen kelime verirse
+    (nadir) sonraki tamamen yutulmuşsa düşer. Bu garanti olmadan iki
+    altyazı bloğu çakışabilirdi.
+    """
+    keepler = sorted(plan.keep, key=lambda s: (s.start_ms, s.end_ms))
+    ofsetler: list[int] = []
+    toplam = 0
+    for k in keepler:
+        ofsetler.append(toplam)
+        toplam += k.duration_ms
+
+    tasinan: list[Word] = []
+    for w in sorted(words, key=lambda w: (w.start_ms, w.end_ms)):
+        orta = (w.start_ms + w.end_ms) // 2
+        indeks = next(
+            (i for i, k in enumerate(keepler) if k.start_ms <= orta < k.end_ms), None
+        )
+        if indeks is None:
+            continue  # kesilen bölgeye düşüyor
+        k = keepler[indeks]
+        bas = max(w.start_ms, k.start_ms) - k.start_ms + ofsetler[indeks]
+        bit = min(w.end_ms, k.end_ms) - k.start_ms + ofsetler[indeks]
+        tasinan.append(
+            Word(text=w.text, start_ms=bas, end_ms=bit, confidence=w.confidence)
+        )
+
+    sonuc: list[Word] = []
+    onceki_bitis = 0
+    for w in sorted(tasinan, key=lambda w: (w.start_ms, w.end_ms)):
+        bas = max(w.start_ms, onceki_bitis)
+        if bas >= w.end_ms:
+            continue  # önceki kelime tamamen yuttu (üst üste binen ASR çıktısı)
+        onceki_bitis = w.end_ms
+        sonuc.append(
+            w
+            if bas == w.start_ms
+            else Word(
+                text=w.text, start_ms=bas, end_ms=w.end_ms, confidence=w.confidence
+            )
+        )
+    return sonuc
 
 
 def _satirla(metin: str) -> str:
@@ -129,21 +207,27 @@ def blokla(words: list[Word]) -> list[Altyazi]:
     return bloklar
 
 
-def build_srt(words: list[Word]) -> str:
+def build_srt(words: list[Word], *, plan: CutPlan) -> str:
     """Kelime listesinden tam SRT metni üretir — saf fonksiyon.
 
-    Konuşma yoksa boş dize döner (blok yoksa SRT de boştur).
+    ``plan`` ZORUNLUDUR: kelime zamanları önce kesilmiş zaman çizgisine
+    remap edilir (``remap_words``), bloklama ONDAN SONRA çalışır. Sıra
+    böyle olmak zorunda — kesim sınırında duraklama remap'ten sonra çöker
+    ve iki yaka doğal olarak tek blokta birleşir; bloklama parametreleri
+    (``BOSLUK_MS``/``MAKS_SURE_MS``/``MAKS_KARAKTER``) değişmedi.
+
+    Konuşma yoksa (ya da her kelime kesime düştüyse) boş dize döner.
     """
     parcalar = [
         f"{sira}\n"
         f"{zaman_damgasi(b.start_ms)} --> {zaman_damgasi(b.end_ms)}\n"
         f"{b.metin}\n"
-        for sira, b in enumerate(blokla(words), start=1)
+        for sira, b in enumerate(blokla(remap_words(words, plan)), start=1)
     ]
     return "\n".join(parcalar)
 
 
-def write_srt(words: list[Word], hedef: str | Path) -> Path:
+def write_srt(words: list[Word], hedef: str | Path, *, plan: CutPlan) -> Path:
     """SRT'yi diske yazar — **UTF-8, BOM'suz, LF satır sonlu**.
 
     ``newline=""`` bilinçlidir: Windows'ta metin modu ``\\n``'i ``\\r\\n``
@@ -157,5 +241,5 @@ def write_srt(words: list[Word], hedef: str | Path) -> Path:
     """
     yol = Path(hedef)
     with yol.open("w", encoding="utf-8", newline="") as f:
-        f.write(build_srt(words))
+        f.write(build_srt(words, plan=plan))
     return yol
