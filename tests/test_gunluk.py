@@ -189,6 +189,36 @@ class TestYonlendirme:
             monkeypatch.setattr(sys, "stdout", onceki_out)
             monkeypatch.setattr(sys, "stderr", onceki_err)
 
+    def test_typer_echo_metin_olarak_dusuyor(self, tmp_path: Path) -> None:
+        """**Ölçülmüş regresyon** (yerel windowed build, 2026-09-04).
+
+        click/typer akışın ikili mi metin mi olduğunu `stream.write(b"")`
+        **deneyerek** anlar. Akış bytes'ı `str()` ile yutarsa click onu İKİLİ
+        sanar ve mesajı bytes gönderir; günlüğe okunmaz bir
+        ``b'Filler-Cut penceresi a\\xc3\\xa7...'`` düşer. Kilit hem probun
+        doğru cevabını hem sonucunu ölçer.
+        """
+        kod = (
+            "import sys, typer\n"
+            "sys.stdout = None\n"
+            "sys.stderr = None\n"
+            f"{_GUARD}\n"
+            "try:\n"
+            "    sys.stdout.write(b'')\n"
+            "except TypeError:\n"
+            "    pass\n"
+            "else:\n"
+            "    raise SystemExit(4)\n"  # bytes yutuldu — click yanılır
+            "typer.echo('pencere açılıyor')\n"
+        )
+        sonuc = _kos(kod, tmp_path)
+        assert sonuc.returncode == 0, sonuc.stderr
+        icerik = (
+            tmp_path / "localappdata" / "fillercut" / "logs" / gunluk.LOG_ADI
+        ).read_text(encoding="utf-8")
+        assert "pencere açılıyor" in icerik
+        assert "\\x" not in icerik and "b'" not in icerik, f"bytes repr'i sizdi: {icerik!r}"
+
     def test_rotasyon_sinirlari(self) -> None:
         """3 × 1 MB — sınırsız büyüyen bir günlük dosyası bırakılmaz."""
         assert gunluk.MAKS_BAYT == 1024 * 1024

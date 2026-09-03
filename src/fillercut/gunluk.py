@@ -77,6 +77,14 @@ class _DosyaAkisi(io.TextIOBase):
         self._tampon = ""
         self._icerde = False
 
+    #: Handler dosyayı UTF-8 yazar; akış da aynısını ilan eder. `io.TextIOBase`
+    #: varsayılanı `None`'dır ve click bu alana bakarak akışı "uyumsuz metin
+    #: akışı" sayıp sarmalamaya çalışır. Sınıf niteliği (property DEĞİL):
+    #: taban sınıfta yazılabilir bir nitelik, salt-okunur property ile
+    #: örtülemez.
+    encoding = "utf-8"
+    errors = "replace"
+
     def writable(self) -> bool:
         return True
 
@@ -85,12 +93,23 @@ class _DosyaAkisi(io.TextIOBase):
         return False
 
     def write(self, s: str, /) -> int:
-        metin = str(s)
-        self._tampon += metin
+        """**Metin dışı girdi `TypeError` verir** — gerçek metin akışı gibi.
+
+        ÖLÇÜLMÜŞ TUZAK (yerel windowed build, 2026-09-04): click/typer
+        akışın ikili mi metin mi olduğunu `stream.write(b"")` **deneyerek**
+        anlar (`click._compat._is_binary_writer`). İlk sürümde `write`
+        girdiyi `str()` ile zorluyordu; `b""` sessizce `"b''"` olarak yazıldı,
+        click akışı İKİLİ sandı ve mesajı bytes olarak gönderdi — günlüğe
+        `b'Filler-Cut penceresi a\\xc3\\xa7...'` düştü. Kısıtı geri koymak
+        probu doğru cevaplıyor ve metin yolu işliyor.
+        """
+        if not isinstance(s, str):
+            raise TypeError(f"write() argument must be str, not {type(s).__name__}")
+        self._tampon += s
         while "\n" in self._tampon:
             satir, self._tampon = self._tampon.split("\n", 1)
             self._yaz(satir)
-        return len(metin)
+        return len(s)
 
     def flush(self) -> None:
         if self._tampon:
