@@ -212,6 +212,20 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 .mod-ad { font-weight: 600; }
 .mod-acik { color: var(--soluk); font-size: 13px; }
 
+/* Tek satırlık ek tercih (SRT) — mod kartlarının altında, onlarla aynı dilde. */
+.secenek {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  cursor: pointer;
+  color: var(--soluk);
+  font-size: 13px;
+}
+
+.secenek input { accent-color: var(--vurgu); }
+.secenek:has(input:checked) { color: var(--metin); }
+
 /* ── alt çubuk + düğmeler ─────────────────────────────────────────────── */
 
 .alt-cubuk {

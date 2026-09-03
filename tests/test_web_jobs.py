@@ -425,3 +425,80 @@ class TestVarsayilanKosucu:
         job = uygulama.state.kayit.al(job_id)
         assert job is not None and job.rapor is rapor  # bellekteki AYNI nesne
         assert list(ev.rglob("plan.json")) == []  # diskte plan.json YOK
+
+
+class TestCiktiSecimi:
+    """v1.2.1 — dışa aktarım seçimi (hazır MP4 / NLE projesi) + SRT.
+
+    UI ince kabuktur: seçim istemciden gelir, karar pipeline'ındır. Bu
+    testler seçimin job'a ve oradan koşu config'ine BOZULMADAN geçtiğini,
+    ve geçersiz değerin route'ta öldüğünü kilitler.
+    """
+
+    def test_varsayilan_mp4_ve_srt_kapali(self, ev: Path) -> None:
+        client = _client(ev, _basarili_kosucu)
+        r = client.post("/api/jobs", json={"path": str(ev / "video.mp4")})
+        assert r.status_code == 200, r.text
+        assert r.json()["cikti"] == "mp4"
+        assert r.json()["srt"] is False
+
+    def test_secim_snapshot_a_gecer(self, ev: Path) -> None:
+        client = _client(ev, _basarili_kosucu)
+        r = client.post(
+            "/api/jobs",
+            json={"path": str(ev / "video.mp4"), "cikti": "xml", "srt": True},
+        )
+        assert r.status_code == 200, r.text
+        veri = r.json()
+        assert veri["cikti"] == "xml"
+        assert veri["srt"] is True
+
+    def test_gecersiz_cikti_400(self, ev: Path) -> None:
+        """İstemciyi atlayıp POST eden de aynı kapıya çarpar."""
+        client = _client(ev, _basarili_kosucu)
+        r = client.post(
+            "/api/jobs", json={"path": str(ev / "video.mp4"), "cikti": "mov"}
+        )
+        assert r.status_code == 400
+        assert "mp4" in r.json()["detail"] and "xml" in r.json()["detail"]
+
+    def test_kosucuya_job_uzerinden_ulasir(self, ev: Path) -> None:
+        gorulen: dict[str, object] = {}
+
+        def kosucu(job: Job, ilerleme: Callable[[str], None]) -> JobOzet:
+            gorulen["cikti"] = job.cikti
+            gorulen["srt"] = job.srt
+            return OZET
+
+        client = _client(ev, kosucu)
+        job_id = _job_baslat(client, ev)
+        client.post(
+            "/api/jobs", json={"path": str(ev / "video.mp4"), "cikti": "xml", "srt": True}
+        )
+        _bitene_kadar_bekle(client, job_id)
+        # İkinci iş kuyruktan geçtiğinde seçim korunmuş olmalı.
+        son = time.monotonic() + 5.0
+        while time.monotonic() < son and gorulen.get("cikti") != "xml":
+            time.sleep(0.02)
+        assert gorulen == {"cikti": "xml", "srt": True}
+
+
+class TestOzetCiktiAlanlari:
+    """Sonuç ekranı XML kolunu ve SRT'yi RAPORDAN/sonuçtan öğrenir."""
+
+    def test_ozet_srt_ve_cikti_tasir(self, ev: Path) -> None:
+        ozet = OZET.model_copy(update={"cikti": "xml", "srt_path": "video.srt"})
+
+        def kosucu(job: Job, ilerleme: Callable[[str], None]) -> JobOzet:
+            return ozet
+
+        client = _client(ev, kosucu)
+        job_id = _job_baslat(client, ev)
+        veri = _bitene_kadar_bekle(client, job_id)
+        assert veri["ozet"]["cikti"] == "xml"
+        assert veri["ozet"]["srt_path"] == "video.srt"
+
+    def test_varsayilan_alanlar_geriye_uyumlu(self) -> None:
+        """Eski çağrı biçimi (alanlar verilmeden) hâlâ geçerli."""
+        assert OZET.cikti == "mp4"
+        assert OZET.srt_path is None

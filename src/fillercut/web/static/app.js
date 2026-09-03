@@ -206,12 +206,16 @@ async function baslat() {
   el("btn-baslat").disabled = true;
   const aggressive =
     document.querySelector('input[name="mod"]:checked').value === "aggressive";
+  // Dışa aktarım kolu: "xml" seçildiğinde RENDER hiç koşmaz (karar sunucuda;
+  // geçersiz bir değer route'ta 400 ile ölür).
+  const cikti = document.querySelector('input[name="cikti"]:checked').value;
+  const srt = el("srt-iste").checked;
   let cevap;
   try {
     cevap = await fetch("/api/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: durum.secili.yol, aggressive }),
+      body: JSON.stringify({ path: durum.secili.yol, aggressive, cikti, srt }),
     });
   } catch (_) {
     hata.textContent = "Sunucuya ulaşılamıyor — iş başlatılamadı.";
@@ -986,8 +990,19 @@ function sonucGoster(ozet) {
   el("sonuc-kesim").textContent =
     ozet.cut_count + " kesim · " + mmss(ozet.cut_total_ms) + " kısaldı";
   el("sonuc-cikti").textContent = ozet.output_path;
+  // Etiket kolu söyler: "Çıktı" ikisinde de doğru ama kullanıcı MP4 beklerken
+  // XML görürse tereddüt eder — hangi kolun koştuğu ekranda yazsın.
+  el("sonuc-cikti-etiket").textContent =
+    ozet.cikti === "xml" ? "NLE projesi" : "Video";
   el("sonuc-rapor").textContent = ozet.report_path;
   el("sonuc-transkript").textContent = ozet.transcript_path;
+  const srtSatir = el("sonuc-srt-satir");
+  if (ozet.srt_path) {
+    el("sonuc-srt").textContent = ozet.srt_path;
+    srtSatir.classList.remove("gizli");
+  } else {
+    srtSatir.classList.add("gizli");
+  }
   el("goster-hata").classList.add("gizli");
   istatistikCiz(ozet);
   ekranGoster("ekran-sonuc");

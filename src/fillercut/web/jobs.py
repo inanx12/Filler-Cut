@@ -42,7 +42,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
-from fillercut.config import Config
+from fillercut.config import CIKTI_SECENEKLERI, Config
 from fillercut.models import CutPlan, Segment
 from fillercut.pipeline import (
     PipelineError,
@@ -110,6 +110,11 @@ class JobOzet(BaseModel):
     duzenleme: EditOzeti | None = None
     #: ``[["eee", 3], ["şey", 1]]`` — çoktan aza, eşitlikte alfabetik.
     filler_dagilimi: list[tuple[str, int]] = []
+    #: v1.2.1: hangi kol koştu — ``"mp4"`` (hazır video) ya da ``"xml"``
+    #: (FCP7 projesi). Sonuç ekranı çıktı satırının etiketini buna göre yazar.
+    cikti: str = "mp4"
+    #: v1.2.1: yazılan SRT'nin yolu; seçilmediyse ``None``.
+    srt_path: str | None = None
 
     @classmethod
     def from_result(cls, sonuc: PipelineResult) -> JobOzet:
@@ -119,6 +124,8 @@ class JobOzet(BaseModel):
             output_path=str(sonuc.output_path),
             report_path=str(sonuc.report_path),
             transcript_path=str(sonuc.transcript_path),
+            cikti=sonuc.cikti,
+            srt_path=str(sonuc.srt_path) if sonuc.srt_path is not None else None,
             original_ms=r.original.ms,
             remaining_ms=r.remaining.ms,
             cut_total_ms=r.cut_total.ms,
@@ -156,10 +163,22 @@ class Job:
     çalışır (``Last-Event-ID``).
     """
 
-    def __init__(self, job_id: str, video_yolu: str, aggressive: bool) -> None:
+    def __init__(
+        self,
+        job_id: str,
+        video_yolu: str,
+        aggressive: bool,
+        *,
+        cikti: str = "mp4",
+        srt: bool = False,
+    ) -> None:
         self.id = job_id
         self.video_yolu = video_yolu
         self.aggressive = aggressive
+        #: v1.2.1 koşu parametreleri — pipeline'a `app._pipeline_kosucu`
+        #: üzerinden config alanı olarak geçer (UI ince kabuk).
+        self.cikti = cikti
+        self.srt = srt
         self._lock = threading.Lock()
         self._durum: str = "queued"
         self._asama: str | None = None
@@ -297,6 +316,8 @@ class Job:
                 "id": self.id,
                 "video": self.video_yolu,
                 "aggressive": self.aggressive,
+                "cikti": self.cikti,
+                "srt": self.srt,
                 "durum": self._durum,
                 "asama": self._asama,
                 "hata": self._hata,
@@ -327,8 +348,15 @@ class JobKayit:
             max_workers=1, thread_name_prefix="fillercut-job"
         )
 
-    def baslat(self, video_yolu: Path, aggressive: bool) -> Job:
-        job = Job(uuid4().hex, str(video_yolu), aggressive)
+    def baslat(
+        self,
+        video_yolu: Path,
+        aggressive: bool,
+        *,
+        cikti: str = "mp4",
+        srt: bool = False,
+    ) -> Job:
+        job = Job(uuid4().hex, str(video_yolu), aggressive, cikti=cikti, srt=srt)
         with self._lock:
             self._jobs[job.id] = job
         self._executor.submit(self._kos, job)
@@ -395,6 +423,11 @@ class JobBaslatIstek(BaseModel):
 
     path: str
     aggressive: bool = False
+    #: v1.2.1 dışa aktarım kolu: ``"mp4"`` (hazır video) | ``"xml"`` (FCP7
+    #: projesi — RENDER çalışmaz). Geçerlilik route'ta sınanır.
+    cikti: str = "mp4"
+    #: Transkripti ayrıca ``<video_adı>.srt`` olarak da yaz.
+    srt: bool = False
 
 
 def _kayit(request: Request) -> JobKayit:
@@ -427,6 +460,18 @@ def job_baslat(istek: JobBaslatIstek, request: Request) -> dict[str, object]:
                 "video dosyası seçin (örn. .mp4, .mkv)."
             ),
         )
+    # v1.2.1: geçersiz çıktı kolu istemcide değil BURADA ölür — arayüzü
+    # atlayıp POST eden de aynı kapıya çarpar (kurulum kilidiyle aynı ilke).
+    # Tek doğruluk kaynağı `config.CIKTI_SECENEKLERI`; pipeline'a ulaşan
+    # değer zaten `Config.__post_init__`ten de geçer.
+    if istek.cikti not in CIKTI_SECENEKLERI:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Geçersiz çıktı türü: {istek.cikti!r} — "
+                f"geçerli: {', '.join(CIKTI_SECENEKLERI)}."
+            ),
+        )
     # v1.2 Faz 2: kurulum eksikken iş BAŞLATILAMAZ — arayüzün "sihirbaz
     # bitene kadar kilitli" sözü istemci tarafında değil BURADA tutulur;
     # istemciyi atlayıp POST eden de aynı kilide çarpar. Eksik yoksa
@@ -443,7 +488,9 @@ def job_baslat(istek: JobBaslatIstek, request: Request) -> dict[str, object]:
                     "ya da `fillercut setup` çalıştırın."
                 ),
             )
-    job = _kayit(request).baslat(hedef, istek.aggressive)
+    job = _kayit(request).baslat(
+        hedef, istek.aggressive, cikti=istek.cikti, srt=istek.srt
+    )
     return job.snapshot()
 
 

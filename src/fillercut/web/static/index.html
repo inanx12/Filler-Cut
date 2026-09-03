@@ -87,6 +87,30 @@
       </div>
     </div>
 
+    <div class="kart">
+      <h2>Dışa aktarım</h2>
+      <div class="modlar">
+        <label class="mod">
+          <input type="radio" name="cikti" value="mp4" checked>
+          <span class="mod-govde">
+            <span class="mod-ad">Hazır MP4</span>
+            <span class="mod-acik">Kesilmiş video doğrudan üretilir (yeniden kodlanır).</span>
+          </span>
+        </label>
+        <label class="mod">
+          <input type="radio" name="cikti" value="xml">
+          <span class="mod-govde">
+            <span class="mod-ad">NLE projesi (FCP7 XML)</span>
+            <span class="mod-acik">Premiere / DaVinci Resolve'a aktarılacak kesim listesi; video üretilmez.</span>
+          </span>
+        </label>
+      </div>
+      <label class="secenek">
+        <input type="checkbox" id="srt-iste">
+        <span>Altyazı dosyası (.srt) da üret</span>
+      </label>
+    </div>
+
     <div id="baslangic-hata" class="hata-kutu gizli" role="alert"></div>
 
     <div class="alt-cubuk">
@@ -209,9 +233,14 @@
 
     <div class="kart">
       <div class="cikti-satir">
-        <span class="etiket">Çıktı</span>
+        <span class="etiket" id="sonuc-cikti-etiket">Çıktı</span>
         <span id="sonuc-cikti" class="mono"></span>
         <button class="dugme ikincil dar goster" data-hedef="sonuc-cikti">Klasörde göster</button>
+      </div>
+      <div class="cikti-satir gizli" id="sonuc-srt-satir">
+        <span class="etiket">Altyazı</span>
+        <span id="sonuc-srt" class="mono"></span>
+        <button class="dugme ikincil dar goster" data-hedef="sonuc-srt">Klasörde göster</button>
       </div>
       <div class="cikti-satir">
         <span class="etiket">Rapor</span>

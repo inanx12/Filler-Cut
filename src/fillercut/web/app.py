@@ -74,7 +74,11 @@ def _pipeline_kosucu(cfg: Config) -> Kosucu:
     """
 
     def kosucu(job: Job, ilerleme: Callable[[str], None]) -> JobOzet:
-        kosu_cfg = replace(cfg, aggressive=job.aggressive, yes=False)
+        # v1.2.1: dışa aktarım seçimi de UI'dan gelir (mod ile aynı desen) —
+        # config ŞEMASI değişmedi, alanlar zaten koşu parametresidir.
+        kosu_cfg = replace(
+            cfg, aggressive=job.aggressive, yes=False, cikti=job.cikti, srt=job.srt
+        )
 
         def analiz_cb(wav: Path) -> None:
             # Waveform yan bir görselleştirmedir: üretilemezse koşu SÜRER,

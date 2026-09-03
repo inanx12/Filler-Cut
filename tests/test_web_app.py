@@ -9,12 +9,16 @@ kanala bağlandı (`cli.ui`), davranış burada kilitlenir.
 from __future__ import annotations
 
 import os
+from typing import cast
+from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from fillercut import __version__
 from fillercut.config import Config
 from fillercut.web.app import INSTANCE_ADI, create_app
+from fillercut.web.jobs import Job
 
 
 class TestIskelet:
@@ -192,3 +196,80 @@ class TestSihirbazYuzeyi:
         assert "/api/kurulum" in js
         assert "/api/kurulum/indir" in js
         assert "/api/kurulum/iptal" in js
+
+
+class TestPipelineKosucuCiktiKolu:
+    """v1.2.1 — job'ın çıktı seçimi koşu config'ine biner (UI ince kabuk).
+
+    Kilit "UI seçimi pipeline'a ULAŞIYOR mu" sorusudur; kolun kendi
+    davranışı ``tests/test_pipeline.py::TestCiktiModu``'da.
+    """
+
+    def _job(self, cikti: str, srt: bool) -> Job:
+        return Job("j1", "video.mp4", False, cikti=cikti, srt=srt)
+
+    def _kosulan_config(self, cikti: str, srt: bool) -> Config:
+        from fillercut.web.app import _pipeline_kosucu
+
+        gorulen: dict[str, Config] = {}
+
+        def sahte_run(video: str, **kw: object) -> object:
+            gorulen["cfg"] = cast(Config, kw["config"])
+            raise _Dur()
+
+        with patch("fillercut.web.app.pipeline_run", side_effect=sahte_run):
+            with pytest.raises(_Dur):
+                _pipeline_kosucu(Config())(self._job(cikti, srt), lambda _a: None)
+        return gorulen["cfg"]
+
+    def test_xml_secimi_config_e_biner(self) -> None:
+        cfg = self._kosulan_config("xml", True)
+        assert cfg.cikti == "xml"
+        assert cfg.srt is True
+
+    def test_varsayilan_kol_degismedi(self) -> None:
+        cfg = self._kosulan_config("mp4", False)
+        assert cfg.cikti == "mp4"
+        assert cfg.srt is False
+        assert cfg.yes is False  # review kancası için sabit (Dilim 2)
+
+
+class _Dur(Exception):
+    """Koşuyu config yakalandıktan hemen sonra durduran işaret istisnası."""
+
+
+class TestDisaAktarimYuzeyi:
+    """Dışa aktarım seçiminin statik yüzeyi (v1.2.1) — sihirbaz deseni.
+
+    JS test altyapısı yok (Dilim 2 kararı); ağır mantık sunucuda ve
+    ``tests/test_web_jobs.py::TestCiktiSecimi``'de kilitli. Burada yalnız
+    istemcinin ihtiyaç duyduğu seçicilerin BULUNDUĞU doğrulanır — biri
+    yeniden adlandırılırsa `app.js` sessizce `null`a çarpardı.
+    """
+
+    def test_cikti_secenekleri_var(self) -> None:
+        html = TestClient(create_app()).get("/").text
+        assert 'name="cikti" value="mp4"' in html
+        assert 'name="cikti" value="xml"' in html
+        assert 'id="srt-iste"' in html
+
+    def test_mp4_varsayilan_secili(self) -> None:
+        html = TestClient(create_app()).get("/").text
+        i = html.index('name="cikti" value="mp4"')
+        assert "checked" in html[i : i + 40]
+
+    def test_sonuc_ekrani_srt_satiri_ve_etiketi_var(self) -> None:
+        html = TestClient(create_app()).get("/").text
+        for oge in ('id="sonuc-cikti-etiket"', 'id="sonuc-srt-satir"', 'id="sonuc-srt"'):
+            assert oge in html, f"sonuç ekranında eksik: {oge}"
+
+    def test_srt_satiri_baslangicta_gizli(self) -> None:
+        html = TestClient(create_app()).get("/").text
+        i = html.index('id="sonuc-srt-satir"')
+        assert "gizli" in html[max(0, i - 60) : i + 60]
+
+    def test_js_secimi_gonderir(self) -> None:
+        js = TestClient(create_app()).get("/static/app.js").text
+        assert 'input[name="cikti"]:checked' in js
+        assert "srt-iste" in js
+        assert "srt_path" in js
