@@ -4,11 +4,31 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fillercut"
-version = "1.2.0"
+version = "1.2.1"
 description = "Konuşma analiziyle tamamlayıcı sözcükleri ve gereksiz sessizlikleri videodan kesen CLI aracı"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+# Trove classifier'ları (PEP 621 `classifiers`; hatchling CoreMetadata'nın
+# tanıdığı alan). PyPI sol sütun filtreleri bunlardan üretilir. Windows-odaklı
+# ve Py 3.11+ (requires-python ile tutarlı). Türkçe bir araç ama classifier
+# değerleri PyPI'nin sabit trove listesindendir — çevrilmez.
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Natural Language :: Turkish",
+]
+keywords = ["video", "filler", "whisper", "ffmpeg", "subtitle", "srt", "fcp7"]
 dependencies = [
     "typer>=0.12",
     "pydantic>=2",
@@ -58,6 +78,15 @@ cuda = [
 
 [project.scripts]
 fillercut = "fillercut.cli:main_entry"
+
+# PyPI proje sayfasının kenar bağlantıları (PEP 621 `urls` alt tablosu).
+# Anahtarlar serbest metindir; PyPI bilinen adları (Homepage, Repository,
+# Issues) ikona eşler.
+[project.urls]
+Homepage = "https://github.com/inanx12/Filler-Cut"
+Repository = "https://github.com/inanx12/Filler-Cut"
+Issues = "https://github.com/inanx12/Filler-Cut/issues"
+Changelog = "https://github.com/inanx12/Filler-Cut/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fillercut"]

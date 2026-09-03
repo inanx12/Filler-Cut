@@ -7,6 +7,64 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [1.2.1] — 2026-09-03
+
+**NLE köprüsü, altyazı, sürükle-bırak ve PyPI: masaüstünün çevresini tamamlayan sürüm.**
+
+Bu sürüm kesim motoruna dokunmaz; onu kullanmanın yollarını genişletir.
+Artık kesimi Filler-Cut'a yaptırmak yerine **kendi kurgu programınıza**
+aktarabilir (FCP7 XML), yanında **altyazı** alabilir, videoyu pencereye
+**sürükleyip bırakabilir**, başka bir sürücüdeki videolara **izinli kök**
+ekleyerek erişebilir ve bir sorunu tek düğmeyle **bildirebilirsiniz**.
+Paket ayrıca **PyPI'ye hazır**.
+
+### Eklendi — NLE projesi (FCP7 XML) ve altyazı (Dalga A)
+
+- `--cikti xml`: PLAN çıktısından FCP7 (xmeml v4) proje dosyası üretir —
+  Premiere / DaVinci Resolve'a **İçe Aktar → Zaman Çizgisi** ile açılır.
+  RENDER hiç koşmaz; encode yok, kalite kaybı yok, kesimleri kendi
+  programınızda ince ayarlarsınız. `fps` ffprobe'dan frame-tam okunur
+  (NTSC oranları `<ntsc>TRUE</ntsc>` + tam sayı timebase'e eşlenir).
+- Kesim sınırları kareye **konuşma lehine** yuvarlanır: parça başı `floor`,
+  sonu `ceil` — hiçbir hece kırpılmaz, kesime en fazla bir kare taşar
+  (bilinçli asimetri).
+- `--srt`: transkripti `<video_adı>.srt` olarak da yazar. Altyazı **kesilmiş
+  zaman çizgisindedir**: kesilen bölgedeki kelimeler düşer, kalanlar öne
+  kayar; sınıra binen kelime midpoint kuralıyla tutulur/düşer. Kaynak-zamanlı
+  kayıt `<video_adı>_transkript.json`'da durmaya devam eder.
+- Web arayüzünde "Hazır MP4 / NLE projesi (FCP7 XML)" seçimi + altyazı kutusu.
+
+### Eklendi — Sürükle-bırak, dosya seçici ve genişletilebilir hapis (Dalga B)
+
+- Başlangıç ekranına **sürükle-bırak** alanı ve **"Dosya seç…"** düğmesi.
+  Native pencerede dosyayı bırakmak ya da Windows'un kendi dosya diyaloğunu
+  açmak yeter. Tarayıcı modunda bırakma açıkça reddedilir (tarayıcı disk
+  yolunu vermez) ve kullanıcı gezgine yönlendirilir.
+- `[ui].izinli_kokler` (`filler-cut.toml`): dosya gezgini/seçici hapsini ev
+  dizininin ötesine genişletir (`D:\`, `E:\Videolar`). Kökler **yalnızca
+  config dosyasından** okunur — onları değiştiren bir API ucu yoktur.
+  Birden çok kök varsa gezginde bir kök seçici görünür.
+
+### Eklendi — Geri bildirim düğmesi ve PyPI hazırlığı (Dalga C)
+
+- Sonuç ve hata ekranlarına **"Geri bildirim gönder"**: ortam bloğunu
+  (sürüm, OS, Python, backend, model adı, ffmpeg varlığı) önceden doldurup
+  GitHub issue formunu tarayıcıda açar. **Telemetri yoktur** — hiçbir veri
+  hiçbir yere gönderilmez; dosya yolu / kullanıcı adı / log **ortama girmez**.
+- PyPI metadata'sı tamamlandı (classifiers, `project.urls`, keywords);
+  `pip install fillercut` için hazır.
+
+### Değişti
+
+- Paketlenen ağaç (`src/fillercut`) test/örnek/binary sızdırmaz (kilit testi).
+
+### Not
+
+- **Ev hapsi tüm yollarda aynen korunur** — native dosya diyaloğu da hapsin
+  dışına çıkamaz; kullanıcı D:'den seçse bile doğrulama izinli kök değilse
+  reddeder. Diyaloğu izinli köklere göre kısıtlama seçeneği v1.3.0'da
+  değerlendirilecektir (bkz. KNOWN_ISSUES.md KI-10).
+
 ## [1.2.0] — 2026-09-02
 
 **Kurulan bir Windows uygulaması: kurucusu var, kendi penceresinde açılıyor, motorunu kendisi indiriyor.**
@@ -286,6 +344,7 @@ sınırlar: `experiments/pywebview_spike/README.md`.
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
 
+[1.2.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.1
 [1.2.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.0
 
 ## [1.1.0] — 2026-09-01

@@ -1243,3 +1243,27 @@ maliyeti ayrıca ölçülmeli, bu kayıtta ölçülmedi.
   docstring'i ("Ölçülmemiş sınır" paragrafı) + `experiments/wcpp_threads/`
   (README, `olcum.py`, `sonuclar/ham_log.txt`, `sonuclar/kosular.json`).
   Politika kilitleri: `tests/test_wcpp.py`.
+
+## KI-10 — Native dosya diyaloğu hapisle sınırlandırılmadı — AÇIK
+
+- **Belirti:** v1.2.1 (Dalga B.2) native pencerede bir dosya SEÇTİRME
+  diyaloğu açıyor (`web/native.NativeKopru.dosya_sec`) ve açılış klasörünü
+  ilk izinli köke ayarlıyor; ama diyaloğun kendisi işletim sisteminin diyaloğu
+  olduğu için kullanıcı oradan **hapis dışına** gezebilir ve hapis dışı bir
+  dosya seçebilir. O seçim sunucuda (`fs.secimi_dogrula`) **reddedilir** (403)
+  — yani güvenlik sağlam — ama kullanıcı "seçtim, neden olmadı?" diye
+  şaşırabilir (UX tuzağı, güvenlik açığı DEĞİL).
+- **Neden:** OS dosya diyaloğu bir hapis kavramı tanımaz; `create_file_dialog`
+  yalnız BAŞLANGIÇ dizini alır, bir "buranın dışına çıkma" kısıtı almaz.
+  Doğrulama bilinçli olarak TEK KAPIDA (`fs.secimi_dogrula`) tutuluyor:
+  gezgin, sürükle-bırak ve diyalog aynı kararı verir; diyaloğa ayrı bir
+  istemci-tarafı kısıt eklemek o tek kapıyı ikiye bölerdi.
+- **Etki:** Yalnız UX. Hapis TÜM yollarda (diyalog dahil) aynen korunur;
+  hapis dışı seçim işlenmez, temiz Türkçe 403 döner.
+- **Bilinçli karar (v1.2.1):** Ev hapsi tüm yollarda aynen kalır. Diyaloğu
+  izinli köklere göre görsel olarak kısıtlamak (ör. her kök için ayrı diyalog,
+  ya da seçim sonrası "bu konum izinli değil" uyarısını diyalog düzeyine
+  taşımak) **v1.3.0'da** değerlendirilecektir.
+- **Referans:** `src/fillercut/web/native.py::NativeKopru`,
+  `src/fillercut/web/fs.py::secimi_dogrula`; kilitler `tests/test_web_hapis.py`
+  (403 yolu) + `tests/test_web_native.py` (diyalog başlangıç dizini).

@@ -39,3 +39,6 @@ build_onefile/
 
 # Inno Setup kurucusu ciktisi
 dist_setup/
+
+# PyPI build ciktisi (python -m build --outdir dist_pypi)
+dist_pypi/
