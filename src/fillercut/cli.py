@@ -622,20 +622,32 @@ class _Kapanis:
     pencere `pencere_ac` içinde yaratılır). Bu tutamak o boşluğu kapatır:
     uygulamaya hemen verilir, eylemi sonra takılır.
 
-    Eylem takılmadan çağrılırsa sessizce hiçbir şey yapmaz — kapanış yolu
-    kapanamamaktan dolayı ÇÖKMEMELİ (düzeltmeye çalıştığımız sınıfın
-    aynısı). Pratikte bu yalnız pencere açılmadan basılan bir "Kapat"tır.
+    **ÖLÇÜLEN TUZAK — sessiz no-op (aç/kapat döngü provası, 2026-09-04).**
+    İlk sürüm, eylem takılmadan çağrılınca hiçbir şey YAPMIYORDU. Native
+    modda sunucu pencereden birkaç yüz ms önce cevap vermeye başlar; o
+    aralıkta basılan "Kapat" sessizce yutuluyor ve uygulama KAPANMIYORDU —
+    düzeltmeye çalıştığımız kusurun tam olarak aynısı.
+
+    İki katmanlı çözüm:
+
+    * ``ilk_eylem`` her zaman kuruludur (sunucuyu durdurur), yani bir
+      kapanış isteği asla boşa düşmez.
+    * ``ayarla`` daha ÖNCE kapanış istendiyse yeni eylemi HEMEN çalıştırır;
+      yoksa pencere ölü bir sunucunun üstüne açılırdı.
     """
 
-    def __init__(self) -> None:
-        self._eylem: Callable[[], None] | None = None
+    def __init__(self, ilk_eylem: Callable[[], None]) -> None:
+        self._eylem = ilk_eylem
+        self._istendi = False
 
     def ayarla(self, eylem: Callable[[], None]) -> None:
         self._eylem = eylem
+        if self._istendi:
+            eylem()
 
     def __call__(self) -> None:
-        if self._eylem is not None:
-            self._eylem()
+        self._istendi = True
+        self._eylem()
 
 
 def _var_olan_ornegi_goster(
@@ -812,9 +824,15 @@ def ui(
     # ve native diyaloğun açılış klasörü içindir.
     # "Kapat" düğmesinin ucu (KI-14). Eylem MODA GÖRE değişir ve pencere
     # nesnesi henüz yok, o yüzden geç bağlanan bir tutamak kullanılır.
-    kapanis = _Kapanis()
-    web_app = create_app(cfg, on_ready=on_ready, kapanis=kapanis)
+    # İLK eylem her modda sunucuyu durdurmaktır: native modda pencere
+    # açılmadan basılan "Kapat" boşa düşmesin (ölçülen tuzak).
+    web_app = create_app(cfg, on_ready=on_ready, kapanis=lambda: kapanis())
     server = _sunucu_kur(web_app)
+
+    def _sunucuyu_durdur() -> None:
+        server.should_exit = True
+
+    kapanis = _Kapanis(_sunucuyu_durdur)
 
     if mod == "native":
         typer.echo(f"Filler-Cut penceresi açılıyor ({url})")
@@ -831,11 +849,8 @@ def ui(
         )
         return
 
-    # Tarayıcı/headless modda pencere yok: sunucuyu graceful durdurmak yeter.
-    def _sunucuyu_durdur() -> None:
-        server.should_exit = True
-
-    kapanis.ayarla(_sunucuyu_durdur)
+    # Tarayıcı/headless modda pencere yok: ilk eylem (sunucuyu durdur) zaten
+    # doğru olandır, değiştirilmez.
     typer.echo(f"Filler-Cut UI: {url}  (arayüzdeki \"Kapat\" düğmesi ya da Ctrl+C)")
     _sunucuyu_kos(server, sock)
 

@@ -32,6 +32,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from fillercut.cli import _Kapanis
 from fillercut.web import native
 from fillercut.web.app import create_app
 
@@ -347,6 +348,42 @@ class TestKapatUctanUca:
                 assert p.wait(timeout=30) == 0, f"{tur}. turda süreç temiz çıkmadı"
             finally:
                 _agaci_oldur(p)
+
+class TestKapanisTutamagi:
+    """`_Kapanis` sıralaması — ÖLÇÜLEN kusur (aç/kapat döngü provası).
+
+    Native modda sunucu, pencereden birkaç yüz ms ÖNCE cevap vermeye başlar.
+    İlk sürümde tutamağın eylemi henüz takılmamış oluyordu ve "Kapat"
+    sessizce yutuluyordu — uygulama kapanmıyordu. Gerçek exe ile üç turluk
+    aç/kapat provasında yakalandı: 1. turda pencere başlığı henüz boşken
+    basılan kapat hiçbir şey yapmadı, süreç ve port ayakta kaldı.
+    """
+
+    def test_eylem_takilmadan_once_de_kapatir(self) -> None:
+        izler: list[str] = []
+        k = _Kapanis(lambda: izler.append("sunucu"))
+        k()
+        assert izler == ["sunucu"], "kapanış isteği boşa düştü"
+
+    def test_gec_takilan_eylem_hemen_calisir(self) -> None:
+        """Kapat pencereden ÖNCE gelirse, pencere doğar doğmaz yok edilmeli.
+
+        Yoksa pencere ölü bir sunucunun üstüne açılır (boş/hata sayfası).
+        """
+        izler: list[str] = []
+        k = _Kapanis(lambda: izler.append("sunucu"))
+        k()
+        k.ayarla(lambda: izler.append("pencere"))
+        assert izler == ["sunucu", "pencere"]
+
+    def test_normal_sirada_yalniz_pencere_kapanir(self) -> None:
+        """Pencere önce doğduysa ilk eylem ÇALIŞMAMALI — sunucuyu doğrudan
+        durdurmak kullanıcıyı ölü bir pencereyle baş başa bırakırdı."""
+        izler: list[str] = []
+        k = _Kapanis(lambda: izler.append("sunucu"))
+        k.ayarla(lambda: izler.append("pencere"))
+        k()
+        assert izler == ["pencere"]
 
 
 class TestArayuzYuzeyi:
