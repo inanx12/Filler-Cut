@@ -258,6 +258,11 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 
 .baglanti-dugme:disabled { color: var(--soluk); cursor: default; }
 
+/* Geri bildirim düğmesinin altındaki durum satırı (boşken yer kaplamaz). */
+.geri-bildirim-not { font-size: 13px; color: var(--soluk); margin-top: 8px; }
+.geri-bildirim-not:empty { display: none; }
+.geri-bildirim-not a { color: var(--vurgu); }
+
 /* ── mod seçimi ───────────────────────────────────────────────────────── */
 
 .modlar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

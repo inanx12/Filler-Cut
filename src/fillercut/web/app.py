@@ -29,7 +29,7 @@ from pydantic import BaseModel, ConfigDict
 from fillercut import __version__
 from fillercut.config import Config
 from fillercut.pipeline import run as pipeline_run
-from fillercut.web import fs, jobs
+from fillercut.web import fs, geri_bildirim, jobs
 from fillercut.web import kurulum as kurulum_mod
 from fillercut.web.jobs import Job, JobKayit, JobOzet, Kosucu
 from fillercut.web.waveform import peaks_from_wav
@@ -186,6 +186,7 @@ def create_app(
     app.include_router(fs.router)
     app.include_router(jobs.router)
     app.include_router(kurulum_mod.router)
+    app.include_router(geri_bildirim.router)
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:

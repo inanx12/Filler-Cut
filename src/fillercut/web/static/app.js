@@ -1334,6 +1334,36 @@ function yeniIs() {
   gezginYukle(durum.yol); // listeyi tazele (yeni _temiz.mp4 görünsün)
 }
 
+/* ── Geri bildirim (v1.2.1 Dalga C) ──────────────────────────────────────
+ * TELEMETRİ YOK: sunucu yalnız ortam bloğunu (sürüm/OS/backend…) doldurup
+ * kullanıcının tarayıcısında GitHub issue formunu açar. Hiçbir veri hiçbir
+ * yere gönderilmez; kişisel veri (yol/kullanıcı adı/log) ortama girmez.
+ */
+async function geriBildirim(notId) {
+  const not = el(notId);
+  not.textContent = "GitHub açılıyor…";
+  let veri;
+  try {
+    const cevap = await fetch("/api/geri-bildirim", { method: "POST" });
+    if (!cevap.ok) throw new Error(await apiHatasi(cevap));
+    veri = await cevap.json();
+  } catch (_) {
+    not.textContent = "Geri bildirim formu açılamadı.";
+    return;
+  }
+  // Sunucu OS varsayılan tarayıcısında açtı; açılamadıysa (popup engeli,
+  // başsız) kullanıcıya doğrudan bağlantıyı ver — metni innerHTML DEĞİL,
+  // element kurarak yaz (XSS'e kapalı; url zaten sabit depoya gidiyor).
+  not.textContent = "Tarayıcıda GitHub açıldı. Açılmadıysa ";
+  const a = document.createElement("a");
+  a.href = veri.url;
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.textContent = "buraya tıklayın";
+  not.appendChild(a);
+  not.appendChild(document.createTextNode("."));
+}
+
 
 /* ── Kurulum sihirbazı (v1.2 Faz 2) ───────────────────────────────────
  *
@@ -1499,6 +1529,10 @@ el("btn-ust").addEventListener("click", () => {
 el("btn-baslat").addEventListener("click", baslat);
 el("btn-yeni").addEventListener("click", yeniIs);
 el("btn-hata-yeni").addEventListener("click", yeniIs);
+el("btn-geri-bildirim").addEventListener("click", () => geriBildirim("geri-bildirim-not"));
+el("btn-geri-bildirim-hata").addEventListener(
+  "click", () => geriBildirim("geri-bildirim-not-hata")
+);
 
 el("btn-kurulum-basla").addEventListener("click", kurulumBasla);
 el("btn-kurulum-iptal").addEventListener("click", kurulumIptal);

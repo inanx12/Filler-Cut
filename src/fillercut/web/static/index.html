@@ -144,7 +144,11 @@
         <summary>Log detayı</summary>
         <pre id="hata-detay" class="mono"></pre>
       </details>
-      <div class="hata-eylem"><button id="btn-hata-yeni" class="dugme ikincil">Yeni iş</button></div>
+      <div class="hata-eylem">
+        <button id="btn-hata-yeni" class="dugme ikincil">Yeni iş</button>
+        <button id="btn-geri-bildirim-hata" class="dugme ikincil">Geri bildirim gönder</button>
+      </div>
+      <div id="geri-bildirim-not-hata" class="geri-bildirim-not" role="status"></div>
     </div>
   </section>
 
@@ -264,9 +268,11 @@
       </div>
       <div id="goster-hata" class="hata-kutu gizli" role="alert"></div>
     </div>
-    <div class="alt-cubuk tek">
+    <div class="alt-cubuk">
+      <button id="btn-geri-bildirim" class="dugme ikincil">Geri bildirim gönder</button>
       <button id="btn-yeni" class="dugme birincil">Yeni iş</button>
     </div>
+    <div id="geri-bildirim-not" class="geri-bildirim-not" role="status"></div>
   </section>
 </main>
 
