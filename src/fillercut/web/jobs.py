@@ -443,8 +443,16 @@ def job_baslat(istek: JobBaslatIstek, request: Request) -> dict[str, object]:
     """
     # v1.2.1: hapis + klasör/varlık/uzantı kuralları `fs.secimi_dogrula`da
     # ORTAK gövdededir — `POST /api/fs/sec` (sürükle-bırak, native diyalog)
-    # ile bu uç aynı kararı verir. Kod/mesaj sözleşmesi değişmedi.
-    hedef = Path(fs.secimi_dogrula(istek.path, fs.ev_dizini(request)).yol)
+    # ile bu uç aynı kararı verir. Kod/mesaj sözleşmesi değişmedi. Hapis
+    # v1.2.1 B.2'de ev ∪ izinli_kokler'e genişledi; iki uç aynı köklerle
+    # doğrular (kökler config'ten, `create_app` state'e koyar).
+    hedef = Path(
+        fs.secimi_dogrula(
+            istek.path,
+            fs.ev_dizini(request),
+            izinli_kokler=fs.izinli_kokler_state(request),
+        ).yol
+    )
     # v1.2.1: geçersiz çıktı kolu istemcide değil BURADA ölür — arayüzü
     # atlayıp POST eden de aynı kapıya çarpar (kurulum kilidiyle aynı ilke).
     # Tek doğruluk kaynağı `config.CIKTI_SECENEKLERI`; pipeline'a ulaşan
@@ -643,12 +651,17 @@ def job_video(job_id: str, request: Request) -> FileResponse:
     ``Content-Range``, geçersiz aralıkta 416); davranış testle kilitlidir —
     sürüm yükseltmesinde sessizce kaybolursa oynatıcı seek'i bozulurdu.
 
-    Yol job başlarken doğrulanmıştı; burada ev dizini hapsi TEKRAR uygulanır
+    Yol job başlarken doğrulanmıştı; burada hapis TEKRAR uygulanır
     (derinlemesine savunma: job kaydına elle dokunulmuş olsa bile dışarı
-    dosya servis edilmez).
+    dosya servis edilmez). Hapis, işi başlatan uçla AYNI köklerdir
+    (ev ∪ izinli_kokler) — yoksa izinli kökten seçilen video oynatılamazdı.
     """
     job = _job_al(job_id, request)
-    hedef = fs.guvenli_yol(job.video_yolu, fs.ev_dizini(request))
+    hedef = fs.guvenli_yol(
+        job.video_yolu,
+        fs.ev_dizini(request),
+        izinli_kokler=fs.izinli_kokler_state(request),
+    )
     if hedef is None or not hedef.is_file():
         raise HTTPException(status_code=404, detail="Video dosyası bulunamadı.")
     tur, _ = mimetypes.guess_type(hedef.name)

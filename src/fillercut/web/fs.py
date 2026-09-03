@@ -20,11 +20,14 @@ from __future__ import annotations
 import stat as stat_mod
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
+
+from fillercut.config import ConfigError
 
 #: Gezginin listelediği video uzantıları (karşılaştırma küçük harfle).
 VIDEO_UZANTILARI = frozenset({".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v"})
@@ -84,31 +87,98 @@ class GezginCevap(BaseModel):
     dizinler: list[DizinGirdisi]
     videolar: list[VideoGirdisi]
     uzantilar: list[str]
+    #: v1.2.1 B.2 — hapsin kökleri (ev + izinli kökler), sırayla. Tek kök
+    #: varsa UI kök seçici GÖSTERMEZ (davranış eskiyle birebir). ``ad`` ev
+    #: için ``EV_ETIKETI``, diğerleri için kökün yoludur.
+    kokler: list[YolParcasi]
 
 
-def guvenli_yol(istek: str | None, ev: Path) -> Path | None:
-    """İstenen yolu canonicalize edip ev dizini hapsinde doğrular (saf kontrol).
+def _kokler(ev: Path, izinli_kokler: Sequence[Path]) -> list[Path]:
+    """Hapsin tüm kökleri, sırayla: ev + izinli kökler (hepsi çözülmüş).
+
+    Ev HER ZAMAN ilk köktür (config yoksa tek kök). İzinli kökler
+    ``create_app`` zamanında zaten çözülmüş/varlığı doğrulanmış gelir; yine
+    de ``resolve`` idempotenttir ve saf-fonksiyon testlerinden ham ``Path``
+    de geçebilir.
+    """
+    return [ev.resolve(), *(k.resolve() for k in izinli_kokler)]
+
+
+def _kok_bul(aday: Path, kokler: Sequence[Path]) -> Path | None:
+    """``aday``ı içeren ilk kök (eşit ya da altında); yoksa ``None``.
+
+    ``is_relative_to`` kök EŞİTLİĞİNİ de kabul eder (kökün kendisi hapistedir).
+    """
+    for k in kokler:
+        if aday.is_relative_to(k):
+            return k
+    return None
+
+
+def izinli_kokler_coz(ham_kokler: Sequence[str | Path], ev: Path) -> list[Path]:
+    """Config'ten gelen ham kökleri çözer, VARLIĞINI doğrular, tekrarları eler.
+
+    Ev bu listeye DAHİL DEĞİLDİR (çağıran onu ayrı, ilk kök olarak tutar);
+    ev'e eşit ya da ev'in altındaki bir kök elenir (çift saymamak için).
+
+    Bu fonksiyon dosya sistemine dokunan tek yerdir — ``Config`` şekli
+    doğrular, varlık burada sınanır. Var olmayan / dizin olmayan kök SESSİZCE
+    ATLANMAZ: ``ConfigError`` fırlatılır ve ``cli.ui`` onu temiz Türkçe hataya
+    çevirir (güvenlik kararı gizlenmez).
+
+    Raises:
+        ConfigError: Bir kök çözülemiyor ya da bir dizin değil.
+    """
+    ev_c = ev.resolve()
+    sonuc: list[Path] = []
+    for ham in ham_kokler:
+        try:
+            k = Path(ham).expanduser().resolve()
+        except OSError as exc:
+            raise ConfigError(
+                f"[ui].izinli_kokler çözülemedi: {ham!r} ({exc})"
+            ) from exc
+        if not k.is_dir():
+            raise ConfigError(
+                f"[ui].izinli_kokler içindeki kök yok ya da dizin değil: {ham!r} "
+                "(yolu düzeltin ya da satırı silin)"
+            )
+        if k.is_relative_to(ev_c):
+            continue  # ev zaten hapiste; ev'e eşit/altındaki kök çift saymaz
+        if k not in sonuc:
+            sonuc.append(k)
+    return sonuc
+
+
+def guvenli_yol(
+    istek: str | None, ev: Path, *, izinli_kokler: Sequence[Path] = ()
+) -> Path | None:
+    """İstenen yolu canonicalize edip hapiste doğrular (saf kontrol).
+
+    Hapis = ev ∪ ``izinli_kokler``; ``izinli_kokler`` boşken davranış v1.0
+    ile BİREBİR aynıdır (tek kök = ev).
 
     Args:
         istek: Kullanıcıdan gelen ham yol; ``None``/boş → gezgin kökü (ev).
-        ev: Hapis kökü (gerçek kullanımda ``Path.home()``; testler enjekte eder).
+        ev: Ev dizini (gerçek kullanımda ``Path.home()``; testler enjekte eder).
+        izinli_kokler: Ev dışındaki izinli kökler (``create_app`` çözer).
 
     Returns:
-        Çözümlenmiş yol, ya da RED için ``None`` — hapis dışına çıkıyor
-        (``..``, mutlak dış yol, dışarıyı gösteren symlink/junction) veya
-        çözümlenemiyor (OS hatası). Var olup olmadığına BAKILMAZ; o karar
-        (404) çağıranındır — güvenlik kararıyla karışmasın.
+        Çözümlenmiş yol, ya da RED için ``None`` — hiçbir köke düşmüyor
+        (``..``, dış yol, dışarıyı gösteren symlink/junction) veya
+        çözümlenemiyor. Var olup olmadığına BAKILMAZ; o karar (404)
+        çağıranındır — güvenlik kararıyla karışmasın.
     """
-    ev_cozulmus = ev.resolve()
+    kokler = _kokler(ev, izinli_kokler)
     if istek is None or not istek.strip():
-        return ev_cozulmus
+        return kokler[0]  # varsayılan gezgin kökü = ev
     try:
         aday = Path(istek).expanduser().resolve()
     except OSError:
         return None
     # resolve iki tarafı da kanonik hale getirdi (Windows'ta gerçek disk
     # büyük/küçük harfi dahil); is_relative_to kök eşitliğini de kabul eder.
-    if not aday.is_relative_to(ev_cozulmus):
+    if _kok_bul(aday, kokler) is None:
         return None
     return aday
 
@@ -129,32 +199,50 @@ def _gizli(p: Path) -> bool:
 EV_ETIKETI = "Ev"
 
 
-def yol_parcalari(dizin: Path, ev: Path) -> list[YolParcasi]:
-    """Ev dizininden ``dizin``e kadar tıklanabilir parçalar (saf fonksiyon).
+def kok_etiketi(kok: Path, ev: Path) -> str:
+    """Kökün arayüzde görünen adı: ev için ``EV_ETIKETI``, diğerinde yolu.
 
-    Ev'in kendisi ilk parçadır (``EV_ETIKETI``); üstündeki hiçbir bileşen
-    listelenmez — hapis dışına tıklanacak bir bağlantı üretmek kullanıcıya
-    var olmayan bir yol vaat etmek olurdu. ``dizin`` ev'in altında değilse
-    boş liste döner (çağıran zaten 403 vermiştir).
+    İzinli kök bir sürücü kökü (``D:\\``) ya da klasör olabilir; yolun
+    kendisi en anlaşılır etikettir (kullanıcı config'e onu yazdı).
     """
-    ev_cozulmus = ev.resolve()
-    if not dizin.is_relative_to(ev_cozulmus):
+    return EV_ETIKETI if kok.resolve() == ev.resolve() else str(kok)
+
+
+def yol_parcalari(
+    dizin: Path, ev: Path, *, izinli_kokler: Sequence[Path] = ()
+) -> list[YolParcasi]:
+    """İçeren KÖKTEN ``dizin``e kadar tıklanabilir parçalar (saf fonksiyon).
+
+    İlk parça, ``dizin``i içeren köktür (ev → ``EV_ETIKETI``, izinli kök →
+    yolu); kökün ÜSTÜNDEKİ hiçbir bileşen listelenmez — hapis dışına
+    tıklanacak bir bağlantı üretmek kullanıcıya var olmayan bir yol vaat
+    etmek olurdu. ``dizin`` hiçbir köke düşmüyorsa boş liste döner (çağıran
+    zaten 403 vermiştir).
+    """
+    kokler = _kokler(ev, izinli_kokler)
+    kok = _kok_bul(dizin, kokler)
+    if kok is None:
         return []
-    parcalar = [YolParcasi(ad=EV_ETIKETI, yol=str(ev_cozulmus))]
-    goreli = dizin.relative_to(ev_cozulmus)
-    imlec = ev_cozulmus
-    for parca in goreli.parts:
+    parcalar = [YolParcasi(ad=kok_etiketi(kok, ev), yol=str(kok))]
+    imlec = kok
+    for parca in dizin.relative_to(kok).parts:
         imlec = imlec / parca
         parcalar.append(YolParcasi(ad=parca, yol=str(imlec)))
     return parcalar
 
 
-def dizini_listele(dizin: Path, ev: Path) -> GezginCevap:
+def dizini_listele(
+    dizin: Path, ev: Path, *, izinli_kokler: Sequence[Path] = ()
+) -> GezginCevap:
     """Tek dizinin gezgin görünümü: alt dizinler + video dosyaları (ada sıralı).
 
     Tek tek girdilerdeki erişim hataları sessizce atlanır (gezgin kırılmaz);
     dizinin KENDİSİNE erişim hatası (``iterdir``'ün ``PermissionError``'ı)
     çağırana taşar — route onu 403'e çevirir.
+
+    ``ust`` bir kökün KENDİSİNDEyken ``None``'dır (ev ya da izinli kök —
+    hiçbir kökün üstüne çıkılamaz). ``kokler`` tüm kökleri taşır; UI birden
+    çok kök varsa kök seçici gösterir.
     """
     dizinler: list[DizinGirdisi] = []
     videolar: list[VideoGirdisi] = []
@@ -172,45 +260,68 @@ def dizini_listele(dizin: Path, ev: Path) -> GezginCevap:
             continue
     dizinler.sort(key=lambda g: g.ad.lower())
     videolar.sort(key=lambda g: g.ad.lower())
-    ev_cozulmus = ev.resolve()
-    ust = None if dizin == ev_cozulmus else str(dizin.parent)
+    kokler = _kokler(ev, izinli_kokler)
+    ust = None if any(dizin == k for k in kokler) else str(dizin.parent)
     return GezginCevap(
         yol=str(dizin),
         ust=ust,
-        parcalar=yol_parcalari(dizin, ev_cozulmus),
+        parcalar=yol_parcalari(dizin, ev, izinli_kokler=izinli_kokler),
         dizinler=dizinler,
         videolar=videolar,
         uzantilar=sorted(VIDEO_UZANTILARI),
+        kokler=[YolParcasi(ad=kok_etiketi(k, ev), yol=str(k)) for k in kokler],
     )
 
 
 def ev_dizini(request: Request) -> Path:
-    """Uygulamanın hapis kökü (``create_app(fs_home=...)`` ile enjekte edilir)."""
+    """Uygulamanın ev dizini (``create_app(fs_home=...)`` ile enjekte edilir)."""
     return cast(Path, request.app.state.fs_home)
 
 
-def secimi_dogrula(istek_yolu: str, ev: Path) -> VideoGirdisi:
+def izinli_kokler_state(request: Request) -> list[Path]:
+    """Config'ten çözülmüş izinli kökler (``create_app`` state'e koyar).
+
+    ``getattr`` varsayılanı boş: eski/enjekte edilmiş app state'lerde alan
+    yoksa davranış tek köke (ev) düşer — regresyon güvenliği.
+    """
+    return cast(list[Path], getattr(request.app.state, "fs_izinli_kokler", []))
+
+
+def _izinli_konumlar_metni(ev: Path, izinli_kokler: Sequence[Path]) -> str:
+    """403 mesajı için izinli kökleri sayan metin ("Ev dizini, D:\\, E:\\")."""
+    parcalar = ["Ev dizini"]
+    parcalar.extend(str(k.resolve()) for k in izinli_kokler)
+    return ", ".join(parcalar)
+
+
+def secimi_dogrula(
+    istek_yolu: str, ev: Path, *, izinli_kokler: Sequence[Path] = ()
+) -> VideoGirdisi:
     """Seçilen/bırakılan yolu doğrular; kabul edilirse dosya bilgisini döner.
 
     **Tek kapı (v1.2.1):** gezginden tıklama, native dosya diyaloğu,
     sürükle-bırak ve doğrudan ``POST /api/jobs`` — dördü de buradan geçer.
     Kuralların iki ayrı kopyası zamanla ayrışırdı.
 
-    Sıra bilinçlidir: önce hapis (güvenlik), sonra klasör ayrımı, sonra
-    varlık, en sonda uzantı. Klasör kontrolü varlıktan ÖNCE gelir çünkü
-    tersi durumda kullanıcı bir klasör bıraktığında "dosya bulunamadı"
-    diye yanıltıcı bir mesaj alırdı.
+    Hapis = ev ∪ ``izinli_kokler`` (v1.2.1 B.2). Sıra bilinçlidir: önce hapis
+    (güvenlik), sonra klasör ayrımı, sonra varlık, en sonda uzantı. Klasör
+    kontrolü varlıktan ÖNCE gelir çünkü tersi durumda kullanıcı bir klasör
+    bıraktığında "dosya bulunamadı" diye yanıltıcı bir mesaj alırdı.
 
     Raises:
-        HTTPException: 403 (ev dışı), 400 (klasör / bulunamadı / uzantı).
+        HTTPException: 403 (hapis dışı), 400 (klasör / bulunamadı / uzantı).
             Hepsi Türkçe ve eyleme dökülebilirdir; ``detail`` doğrudan
             arayüzde gösterilir.
     """
-    hedef = guvenli_yol(istek_yolu, ev)
+    hedef = guvenli_yol(istek_yolu, ev, izinli_kokler=izinli_kokler)
     if hedef is None:
         raise HTTPException(
             status_code=403,
-            detail="Ev dizini dışındaki dosya işlenemez — yol reddedildi.",
+            detail=(
+                "İzin verilen konumlar dışındaki dosya işlenemez — yol reddedildi. "
+                f"İzinli konumlar: {_izinli_konumlar_metni(ev, izinli_kokler)} "
+                "(filler-cut.toml [ui].izinli_kokler ile genişletilir)."
+            ),
         )
     if hedef.is_dir():
         raise HTTPException(
@@ -253,7 +364,9 @@ def sec(istek: SecimIstek, request: Request) -> VideoGirdisi:
     Ayrı uç olmasının sebebi budur: kullanıcı dosyayı seçtiğinde henüz
     mod/dışa aktarım tercihlerini yapmamıştır.
     """
-    return secimi_dogrula(istek.path, ev_dizini(request))
+    return secimi_dogrula(
+        istek.path, ev_dizini(request), izinli_kokler=izinli_kokler_state(request)
+    )
 
 
 def reveal_komutu(hedef: Path, *, platform: str) -> list[str] | None:
@@ -294,10 +407,11 @@ def reveal(istek: RevealIstek, request: Request) -> dict[str, object]:
     geçer — arayüzün gösterdiği çıktı yolları zaten oradadır.
     """
     ev = ev_dizini(request)
-    hedef = guvenli_yol(istek.path, ev)
+    kokler = izinli_kokler_state(request)
+    hedef = guvenli_yol(istek.path, ev, izinli_kokler=kokler)
     if hedef is None:
         raise HTTPException(
-            status_code=403, detail="Ev dizini dışındaki yol açılamaz."
+            status_code=403, detail="İzin verilen konumlar dışındaki yol açılamaz."
         )
     if not hedef.exists():
         raise HTTPException(status_code=404, detail=f"Dosya bulunamadı: {hedef}")
@@ -326,16 +440,17 @@ def browse(request: Request, path: str | None = None) -> GezginCevap:
     Hata gövdeleri FastAPI standardıdır: ``{"detail": "<Türkçe mesaj>"}``.
     """
     ev = ev_dizini(request)
-    hedef = guvenli_yol(path, ev)
+    kokler = izinli_kokler_state(request)
+    hedef = guvenli_yol(path, ev, izinli_kokler=kokler)
     if hedef is None:
         raise HTTPException(
             status_code=403,
-            detail="Ev dizini dışına çıkılamaz — yol reddedildi.",
+            detail="İzin verilen konumlar dışına çıkılamaz — yol reddedildi.",
         )
     if not hedef.is_dir():
         raise HTTPException(status_code=404, detail=f"Dizin bulunamadı: {hedef}")
     try:
-        return dizini_listele(hedef, ev)
+        return dizini_listele(hedef, ev, izinli_kokler=kokler)
     except PermissionError:
         raise HTTPException(
             status_code=403, detail=f"Bu dizine erişim izni yok: {hedef}"

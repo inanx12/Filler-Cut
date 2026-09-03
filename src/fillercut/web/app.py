@@ -107,6 +107,7 @@ def create_app(
     *,
     on_ready: Callable[[], None] | None = None,
     fs_home: Path | None = None,
+    izinli_kokler: list[Path] | None = None,
     kayit: JobKayit | None = None,
     kurulum: kurulum_mod.KurulumYoneticisi | None = None,
 ) -> FastAPI:
@@ -120,9 +121,15 @@ def create_app(
             startup) BİR KEZ çağrılır — ``cli.ui`` tarayıcıyı bununla açar.
             starlette 1.x'te ``add_event_handler`` kaldırıldığı için kanal
             lifespan üzerinden kurulur; testler doğrudan enjekte eder.
-        fs_home: Dosya gezgini hapsinin kökü (``web/fs.py``). Default
+        fs_home: Dosya gezgini hapsinin EV kökü (``web/fs.py``). Default
             ``Path.home()`` — üretimde HEP odur; parametre test enjeksiyonu
             içindir (tmp_path hapsi). Job başlatma da AYNI hapisten geçer.
+        izinli_kokler: Ev DIŞINDAKİ izinli kökler (v1.2.1 B.2). Verilirse
+            olduğu gibi (çözülerek) kullanılır — TEST ENJEKSİYONU yolu.
+            ``None`` ise ``config.ui.izinli_kokler``ten çözülür ve varlığı
+            doğrulanır (``fs.izinli_kokler_coz``; var olmayan kök
+            ``ConfigError``). Üretimde ``cli.ui`` çözülmüş listeyi geçirir —
+            hata orada, socket açılmadan yakalanır.
         kayit: Job kaydı; verilmezse gerçek pipeline koşucusuyla kurulur.
             Route testleri sahte/kontrollü koşuculu kayıt enjekte eder —
             testlerde gerçek video koşusu YOK (handoff).
@@ -135,6 +142,13 @@ def create_app(
     """
     cfg = config if config is not None else Config()
     ev = (fs_home if fs_home is not None else Path.home()).resolve()
+    # İzinli kökler: enjekte edilmişse (test) olduğu gibi; değilse config'ten
+    # ÇÖZÜLÜR ve varlığı doğrulanır (var olmayan kök → ConfigError; cli.ui
+    # onu socket açılmadan yakalar).
+    if izinli_kokler is not None:
+        fs_izinli_kokler = [Path(k).resolve() for k in izinli_kokler]
+    else:
+        fs_izinli_kokler = fs.izinli_kokler_coz(cfg.ui.izinli_kokler, ev)
     job_kayit = kayit if kayit is not None else JobKayit(kosucu=_pipeline_kosucu(cfg))
     kurulum_yoneticisi = (
         kurulum if kurulum is not None else kurulum_mod.KurulumYoneticisi(cfg)
@@ -160,6 +174,7 @@ def create_app(
     )
     app.state.config = cfg
     app.state.fs_home = ev
+    app.state.fs_izinli_kokler = fs_izinli_kokler
     app.state.kayit = job_kayit
     app.state.kurulum = kurulum_yoneticisi
 
