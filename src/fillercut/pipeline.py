@@ -491,16 +491,6 @@ def run(
         except OSError as exc:
             _fail(f"transkript yazılamadı: {exc} — {IPUCU_DISK}")
 
-        # SRT (v1.2.1) — aynı kelime listesinden, yani KAYDEDİLEN transkriptle
-        # birebir aynı (re-anchor'lı) sınırlardan. Ayrı bir ASR koşusu yoktur.
-        yazilan_srt: Path | None = None
-        if cfg.srt:
-            try:
-                yazilan_srt = write_srt(words, srt_yolu)
-            except OSError as exc:
-                _fail(f"SRT yazılamadı: {exc} — {IPUCU_DISK}")
-            _out.print(f"[dim]      altyazı yazıldı: {yazilan_srt}[/dim]")
-
         # [3] DETECT — filler (re-anchor'lı transkript) + sessizlik (yukarıda
         # çıkarılan ham harita; burada yalnızca süre süzgeci uygulanır).
         _bildir(progress_cb, "DETECT")
@@ -689,6 +679,22 @@ def run(
                 "[encoder].preference sırasını değiştirip (örn. libx264) tekrar deneyin"
             )
         uretilen = dst
+
+    # SRT (v1.2.1) — RENDER'dan SONRA ve `render_plan`'dan yazılır: altyazı
+    # KESİLMİŞ zaman çizgisinin altyazısıdır, kaynağın değil (kaynak-zamanlı
+    # kayıt zaten `<ad>_transkript.json`tadır). İlk sürüm bunu transkriptin
+    # hemen ardından, PLAN daha kurulmadan yazıyordu; kusur gerçek Resolve
+    # içe aktarımında yakalandı (son altyazı zaman çizgisi sonunu aşıyordu).
+    # `render_plan` seçilmesi web review'unun düzenlemelerini de kapsar —
+    # altyazı, gerçekten üretilen çıktıyla aynı çizgide olmak zorunda.
+    yazilan_srt: Path | None = None
+    if cfg.srt:
+        try:
+            yazilan_srt = write_srt(words, srt_yolu, plan=render_plan)
+        except OSError as exc:
+            _fail(f"SRT yazılamadı: {exc} — {IPUCU_DISK}")
+        _out.print(f"[dim]      altyazı yazıldı: {yazilan_srt}[/dim]")
+
     try:
         rapor_dosyasi = write_json_report(
             rapor_plani,

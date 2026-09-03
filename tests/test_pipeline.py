@@ -1234,3 +1234,103 @@ class TestSrtCiktisi:
             )
         assert sonuc.srt_path is not None and sonuc.srt_path.is_file()
         assert sonuc.output_path.suffix == ".xml"
+
+
+class TestSrtKesilmisCizgide:
+    """SRT, KESİLMİŞ zaman çizgisinin altyazısıdır (v1.2.1 düzeltmesi).
+
+    Kusur gerçek Resolve içe aktarımında yakalandı: SRT kelime zamanlarını
+    kaynak çizgide yazıyordu ve son altyazı XML zaman çizgisinin sonunu
+    aşıyordu. Kaynak-zamanlı kayıt zaten ``<ad>_transkript.json``tadır.
+
+    Fixture planı: keep [0,3400) + [3920,5000), kesim [3400,3920).
+    Kelimeler (re-anchor sonrası): ``merhaba`` [0,100), ``Eee,`` [3320,4040).
+    ``Eee,``nin ortası 3680 → KESİM içinde → altyazıdan düşmeli.
+    """
+
+    def _srt(self, girdi: Path, katmanlar: Any, **kw: Any) -> str:
+        sonuc = run(
+            girdi,
+            config=Config(yes=True, srt=True, **kw),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+        )
+        assert sonuc.srt_path is not None
+        return sonuc.srt_path.read_text(encoding="utf-8")
+
+    def test_kesilen_kelime_altyazida_yok(self, girdi: Path, katmanlar: Any) -> None:
+        metin = self._srt(girdi, katmanlar)
+        assert "merhaba" in metin
+        assert "Eee" not in metin
+
+    def test_hicbir_damga_kalan_sureyi_asmaz(self, girdi: Path, katmanlar: Any) -> None:
+        kalan = sum(s.duration_ms for s in PLAN.keep)
+        for damga in _srt_damgalari(self._srt(girdi, katmanlar)):
+            assert damga <= kalan
+
+    def test_transkript_json_kaynak_zamanli_kalir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        """Remap YALNIZ SRT'ye uygulanır — transkript kaydı kaynak çizgide."""
+        sonuc = run(
+            girdi,
+            config=Config(yes=True, srt=True),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+        )
+        veri = json.loads(sonuc.transcript_path.read_text(encoding="utf-8"))
+        assert [w["text"] for w in veri["words"]] == ["merhaba", "Eee,"]
+        assert veri["words"][1]["start_ms"] == 3_320  # kaynak zamanı, kaydırılmamış
+
+    def test_web_review_duzenlemesi_altyaziya_yansir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        """SRT UYGULANMIŞ plandan yazılır — kullanıcının düzenlemesi dahil."""
+        uygulanmis = CutPlan(
+            original_duration_ms=TOPLAM_MS,
+            keep=[Segment(start_ms=3_000, end_ms=5_000, kind="keep", reason="konuşma")],
+            cut=[
+                Segment(
+                    start_ms=0, end_ms=3_000, kind="manuel",
+                    reason="manuel: kullanıcı elle ekledi",
+                )
+            ],
+        )
+        sonuc = run(
+            girdi,
+            config=Config(yes=False, srt=True),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+            review_cb=lambda _b: ReviewKarari(plan=uygulanmis),
+        )
+        assert sonuc.srt_path is not None
+        metin = sonuc.srt_path.read_text(encoding="utf-8")
+        # `merhaba` [0,100) artık kesilen bölgede → düşer; `Eee,` [3320,4040)
+        # keep [3000,5000) içinde → 320 ms'e kayar.
+        assert "merhaba" not in metin
+        assert metin.startswith("1\n00:00:00,320 --> 00:00:01,040\nEee,\n")
+
+    def test_xml_kolunda_da_ayni_cizgi(self, girdi: Path, katmanlar: Any) -> None:
+        with patch(
+            "fillercut.pipeline.probe_medya",
+            return_value=MedyaBilgisi(
+                kare=Kare(pay=60, payda=1),
+                genislik=1920,
+                yukseklik=1080,
+                ses_kanali=2,
+                ses_hizi=48000,
+                sure_ms=TOPLAM_MS,
+            ),
+        ):
+            metin = self._srt(girdi, katmanlar, cikti="xml")
+        assert "Eee" not in metin
+        kalan = sum(s.duration_ms for s in PLAN.keep)
+        for damga in _srt_damgalari(metin):
+            assert damga <= kalan
+
+
+def _srt_damgalari(srt: str) -> list[int]:
+    """SRT metnindeki tüm zaman damgalarını ms olarak döner."""
+    import re
+
+    return [
+        ((int(m[0]) * 60 + int(m[1])) * 60 + int(m[2])) * 1000 + int(m[3])
+        for m in re.findall(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})", srt)
+    ]
