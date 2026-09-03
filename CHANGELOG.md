@@ -7,6 +7,50 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [1.2.2] — 2026-09-04
+
+**Hotfix: kurulu masaüstü uygulaması açılmıyordu.**
+
+Kurucuyla kurulan Filler-Cut'ta Başlat Menüsü kısayoluna (ya da masaüstü
+ikonuna) tıklandığında **pencere hiç açılmıyordu** ve ekranda bir hata da
+görünmüyordu. **v1.2.0 ve v1.2.1 kurucularının ikisi de etkileniyordu.**
+Bu sürüm yalnızca o kusuru kapatır; kesim motoruna, arayüze ve dosya
+biçimlerine dokunmaz.
+
+Konsollu `fillercut.exe` ve `pip install` ile gelen `fillercut` komutu
+**etkilenmiyordu** — sorun yalnızca konsolsuz masaüstü uygulamasındaydı.
+
+### Düzeltildi
+
+- **Konsolsuz uygulama artık açılıyor** (KI-11). Konsolsuz Windows
+  uygulamalarında Python'un `sys.stdout`/`sys.stderr`'i `None`'dur; web
+  sunucusunun (uvicorn) log kurulumu bunu tolere etmiyor ve süreç, sunucu
+  hiç ayağa kalkmadan sessizce ölüyordu. Giriş noktası artık akışları
+  önceden bir günlük dosyasına bağlıyor.
+- **Yeni: teşhis günlüğü.** Konsolsuz koşuda çıktı ve hatalar
+  `%LOCALAPPDATA%\fillercut\logs\ui.log` dosyasına yazılır (en çok 3 × 1 MB,
+  dönüşümlü). Bir sorun bildirirken bu dosyayı eklemek teşhisi hızlandırır.
+  **Dosya yereldir ve hiçbir yere gönderilmez** — geri bildirim düğmesi log
+  göndermez, telemetri hâlâ yoktur; paylaşmak sizin kararınızdır. Günlük
+  dizini açılamazsa (sanallaştırılmış/salt-okunur profil) uygulama yine
+  açılır, yalnız günlük tutulmaz.
+
+### Testler
+
+- `tests/test_gunluk.py` (10 test): kusurun kırmızı kanıtı, yönlendirme
+  sözleşmesi ve **gerçek giriş noktasının** `sys.stdout is None` iken
+  gerçek bir portta servis verdiği uçtan uca kilidi. Hepsi ayrı
+  yorumlayıcıda koşar ve build artefaktı gerektirmez — CI'da da koşar.
+- Kör nokta kapandı: mevcut `exe` marker'lı smoke testi `fillercut-ui.exe`'yi
+  zaten koşturuyordu, ama `Popen` ile başlatılan çocuk geçerli bir stdout
+  tanıtıcısı alıyor; Explorer'dan çift tıklama koşulu taklit edilmemişti.
+
+### Süreç
+
+- `AGENTS.md`'ye **Release Kontrol Listesi** eklendi. Madde 5: kurulu
+  `fillercut-ui.exe`'nin açıldığı ve arayüzün servis verdiği **manuel**
+  doğrulanmadan tag atılmaz.
+
 ## [1.2.1] — 2026-09-03
 
 **NLE köprüsü, altyazı, sürükle-bırak ve PyPI: masaüstünün çevresini tamamlayan sürüm.**
@@ -349,6 +393,7 @@ sınırlar: `experiments/pywebview_spike/README.md`.
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
 
+[1.2.2]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.2
 [1.2.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.1
 [1.2.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.0
 
