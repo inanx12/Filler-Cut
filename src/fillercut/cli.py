@@ -393,6 +393,23 @@ def main(
             help="Kesimleri tarayıcıda tek tek onayla (lokal sunucu, v0.3).",
         ),
     ] = False,
+    cikti: Annotated[
+        str | None,
+        typer.Option(
+            "--cikti",
+            help=(
+                "Çıktı kolu: mp4 (hazır video) | xml (NLE projesi, FCP7 — "
+                "render çalışmaz)."
+            ),
+        ),
+    ] = None,
+    srt: Annotated[
+        bool | None,
+        typer.Option(
+            "--srt/--no-srt",
+            help="Transkripti ayrıca <video_adı>.srt olarak da yaz.",
+        ),
+    ] = None,
     version: Annotated[
         bool,
         typer.Option(
@@ -409,11 +426,14 @@ def main(
     whisper.cpp kurulumu için: fillercut setup
     """
     try:
+        # `merge_config` de aynı try içinde: geçersiz `--cikti` değeri
+        # `Config.__post_init__`'te ConfigError verir (tek kapı) ve kullanıcı
+        # traceback değil tek satır Türkçe hata görmeli.
         cfg = load_config(config)
+        cfg = merge_config(cfg, aggressive=aggressive, yes=yes, cikti=cikti, srt=srt)
     except ConfigError as exc:
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    cfg = merge_config(cfg, aggressive=aggressive, yes=yes)
     sonuc = run(
         video,
         output_path=output,
@@ -421,11 +441,14 @@ def main(
         open_review=open_review,
         interactive=interactive,
     )
-    typer.echo(
-        f"Bitti: {sonuc.output_path} (%{sonuc.report.saved_percent} kazanım)\n"
-        f"rapor: {sonuc.report_path}\n"
-        f"transkript: {sonuc.transcript_path}"
-    )
+    satirlar = [
+        f"Bitti: {sonuc.output_path} (%{sonuc.report.saved_percent} kazanım)",
+        f"rapor: {sonuc.report_path}",
+        f"transkript: {sonuc.transcript_path}",
+    ]
+    if sonuc.srt_path is not None:
+        satirlar.append(f"altyazı: {sonuc.srt_path}")
+    typer.echo("\n".join(satirlar))
 
 
 #: `fillercut ui`'nin varsayılan portu. Doluysa CRASH YOK — ephemeral (0)

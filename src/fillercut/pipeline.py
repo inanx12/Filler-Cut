@@ -27,6 +27,13 @@ RENDER'ın encoder'ı ``run()`` başında BİR KEZ probe'lanır
 ve rapor.json'un ``encoder`` alanına girer — "HW hızlandırma çalıştı mı yoksa
 sessizce CPU'ya mı düşüldü" sorusunun cevabı dosyada durur.
 
+ÇIKTI KOLU (v1.2.1): ``config.cikti`` altıncı adımın NE yaptığını seçer —
+``"mp4"`` mevcut RENDER'dır, ``"xml"`` ise RENDER'a HİÇ girmeden FCP7 (xmeml)
+proje dosyası yazar (``export/fcp7.py``): encode yok, encoder probe'u bile yok.
+Aşama ADI iki kolda da ``"RENDER"``tır — ``ASAMALAR`` bant dışı kanalın
+sözleşmesidir ve web göstergesi ona bağlıdır. ``config.srt`` ise transkripti
+ayrıca ``<video_adı>.srt`` olarak yazar (iki kolda da çalışır).
+
 Ara WAV `tempfile.TemporaryDirectory`'ye çıkarılır — analiz artığı kullanıcının
 video klasöründe kalmaz; iş bitince/hata olursa temizlik otomatiktir.
 
@@ -66,8 +73,11 @@ from fillercut.audio.silence import SilenceDetectionError, detect_silence
 from fillercut.config import AsrConfig, Config
 from fillercut.detect.fillers import count_aday_fillers, detect_fillers
 from fillercut.detect.silence import filter_silence
+from fillercut.export.fcp7 import write_fcp7_xml
+from fillercut.export.medya import MedyaHatasi, probe_medya
+from fillercut.export.srt import write_srt
 from fillercut.models import CutPlan, Segment
-from fillercut.plan.cutplan import build_cutplan, filter_cutplan
+from fillercut.plan.cutplan import CutPlanError, build_cutplan, filter_cutplan
 from fillercut.render.encoder import build_encode_args, select_encoder
 from fillercut.render.render import RenderError, render
 from fillercut.report.html_report import build_interactive_html, write_html_report
@@ -141,6 +151,9 @@ class ReviewKarari:
 class PipelineResult:
     """`run()` çıktısı — CLI'nin son özeti basması için yollar + rapor."""
 
+    #: Üretilen ana çıktı: ``cikti="mp4"``te temiz video, ``cikti="xml"``te
+    #: FCP7 proje dosyası. Tek alan olması bilinçlidir — "Klasörde göster"
+    #: gibi tüketiciler kolu bilmek zorunda kalmasın.
     output_path: Path
     report_path: Path
     transcript_path: Path
@@ -148,6 +161,10 @@ class PipelineResult:
     #: REVIEW HTML'inin yolu — interaktif modda (``yes=False``) üretilir;
     #: ``--yes`` (headless) akışında ``None``.
     review_html_path: Path | None = None
+    #: v1.2.1: ``srt=True`` ise yazılan altyazı dosyası, yoksa ``None``.
+    srt_path: Path | None = None
+    #: v1.2.1: hangi kol koştu (``config.cikti``) — UI etiketi buna bakar.
+    cikti: str = "mp4"
 
 
 def default_output_path(input_path: Path) -> Path:
@@ -315,6 +332,8 @@ def run(
         video_path: Kaynak video.
         output_path: Hedef MP4; verilmezse ``<ad>_temiz.mp4``. Rapor her zaman
             çıktının ``.json`` uzantılı eşidir (örn. ``video_temiz.json``).
+            ``config.cikti="xml"`` iken MP4 ÜRETİLMEZ; bu yol yalnız çıktı
+            KLASÖRÜNÜ ve rapor adını belirler, XML ``<video_adı>.xml`` olur.
         config: TOML'den yüklenmiş yapılandırma (CLI > config > default
             zinciri ``cli.py``'de çözülür). Verilmezse default Config.
         transcriber: ASR backend'i; verilmezse config.asr ayarlarıyla
@@ -361,12 +380,24 @@ def run(
         _fail(f"girdi dosyası bulunamadı: {src} — yolu kontrol edin")
     dst = Path(output_path) if output_path is not None else default_output_path(src)
     rapor_yolu = dst.with_suffix(".json")
+    # XML ve SRT kullanıcı çıktılarıdır: adları KAYNAK videodan, klasörleri
+    # seçilen ÇIKTIDAN gelir — transkript kaydının (v0.1'den beri) kuralıyla
+    # aynı. `plan.json diske yazılmaz` invariant'ı bunları kapsamaz.
+    xml_yolu = dst.parent / f"{src.stem}.xml"
+    srt_yolu = dst.parent / f"{src.stem}.srt"
 
     # Encoder probe'u run() başında BİR KEZ (render/encoder.py): sonuç hem
     # RENDER'ın arg setini hem raporun "encoder" alanını besler. Aday başına
     # ~0.1-0.4 sn; diske cache yoktur (sürücü değişebilir).
-    encoder_secimi = select_encoder(cfg.encoder)
-    encoder_bilgisi = EncoderInfo.from_selection(encoder_secimi)
+    #
+    # XML kolunda HİÇ koşmaz: hiçbir şey encode edilmiyorsa donanım probe'u
+    # boşa 4 ffmpeg koşusu ödemek olurdu ve rapordaki `encoder` alanı
+    # "şununla encode edildi" diye YALAN söylerdi. Alan zaten opsiyoneldir
+    # (v0.1 raporlarıyla uyum), o kolda `None` kalır.
+    encoder_secimi = select_encoder(cfg.encoder) if cfg.cikti == "mp4" else None
+    encoder_bilgisi = (
+        EncoderInfo.from_selection(encoder_secimi) if encoder_secimi is not None else None
+    )
 
     # [1] EXTRACT öncesi süre — silence parse (kapanmamış sessizlik) ve
     # json_report ikisi de total_ms ister; tek ffprobe ile alınır.
@@ -459,6 +490,16 @@ def run(
             transkript_yolu.write_text(words_to_json(words) + "\n", encoding="utf-8")
         except OSError as exc:
             _fail(f"transkript yazılamadı: {exc} — {IPUCU_DISK}")
+
+        # SRT (v1.2.1) — aynı kelime listesinden, yani KAYDEDİLEN transkriptle
+        # birebir aynı (re-anchor'lı) sınırlardan. Ayrı bir ASR koşusu yoktur.
+        yazilan_srt: Path | None = None
+        if cfg.srt:
+            try:
+                yazilan_srt = write_srt(words, srt_yolu)
+            except OSError as exc:
+                _fail(f"SRT yazılamadı: {exc} — {IPUCU_DISK}")
+            _out.print(f"[dim]      altyazı yazıldı: {yazilan_srt}[/dim]")
 
         # [3] DETECT — filler (re-anchor'lı transkript) + sessizlik (yukarıda
         # çıkarılan ham harita; burada yalnızca süre süzgeci uygulanır).
@@ -610,18 +651,44 @@ def run(
     # (şeffaflık). Web review'unda (review_cb) rapor UYGULANMIŞ plandan yazılır
     # — sınır sürükleme/elle ekleme sonrası rapor rendere gidenle aynı olmalı;
     # reddin sayısı `duzenleme.devre_disi` alanında kayıtta kalır.
+    #
+    # v1.2.1: aşama ADI değişmez ("RENDER" — ``ASAMALAR`` bant dışı kanal
+    # sözleşmesidir, web göstergesi ona bağlı); değişen, o aşamada NE
+    # yapıldığıdır. XML kolu encode etmez, saf metadata yazar.
     _bildir(progress_cb, "RENDER")
-    _out.print(
-        f"[cyan][6/6] RENDER[/cyan] — encoder: {encoder_secimi.ffmpeg_name} "
-        f"(probe: {encoder_secimi.summary})"
-    )
-    try:
-        render(src, render_plan, dst, encode_args=build_encode_args(encoder_secimi, cfg.render))
-    except (RenderError, FileNotFoundError) as exc:
-        _fail(
-            f"RENDER başarısız: {exc} — {IPUCU_DISK}; sorun encoder'daysa "
-            "[encoder].preference sırasını değiştirip (örn. libx264) tekrar deneyin"
+    uretilen: Path
+    if cfg.cikti == "xml":
+        _out.print("[cyan][6/6] NLE PROJESİ[/cyan] — FCP7 XML yazılıyor (render yok)…")
+        try:
+            medya = probe_medya(src)
+        except (MedyaHatasi, FileNotFoundError) as exc:
+            _fail(f"NLE projesi başarısız: {exc} — {IPUCU_FFMPEG}")
+        try:
+            # `resolve()`: pathurl mutlak yol ister — göreli yol NLE'de
+            # "Media Offline" üretir (export/fcp7.py).
+            uretilen = write_fcp7_xml(
+                render_plan, xml_yolu, video_path=src.resolve(), medya=medya
+            )
+        except CutPlanError as exc:
+            _fail(f"NLE projesi başarısız: {exc}")
+        except OSError as exc:
+            _fail(f"NLE projesi yazılamadı: {exc} — {IPUCU_DISK}")
+    else:
+        assert encoder_secimi is not None  # mp4 kolunda run() başında seçildi
+        _out.print(
+            f"[cyan][6/6] RENDER[/cyan] — encoder: {encoder_secimi.ffmpeg_name} "
+            f"(probe: {encoder_secimi.summary})"
         )
+        try:
+            render(
+                src, render_plan, dst, encode_args=build_encode_args(encoder_secimi, cfg.render)
+            )
+        except (RenderError, FileNotFoundError) as exc:
+            _fail(
+                f"RENDER başarısız: {exc} — {IPUCU_DISK}; sorun encoder'daysa "
+                "[encoder].preference sırasını değiştirip (örn. libx264) tekrar deneyin"
+            )
+        uretilen = dst
     try:
         rapor_dosyasi = write_json_report(
             rapor_plani,
@@ -636,9 +703,11 @@ def run(
         _fail(f"rapor.json yazılamadı: {exc} — {IPUCU_DISK}")
 
     return PipelineResult(
-        output_path=dst,
+        output_path=uretilen,
         report_path=rapor_dosyasi,
         transcript_path=transkript_yolu,
         report=report,
         review_html_path=review_html,
+        srt_path=yazilan_srt,
+        cikti=cfg.cikti,
     )

@@ -135,6 +135,11 @@ class RenderConfig:
     audio_sample_rate: int = 48000
 
 
+#: v1.2.1 — koşunun çıktı kolu. ``"mp4"`` mevcut RENDER yoludur; ``"xml"``
+#: RENDER'a hiç girmeden FCP7 (xmeml) proje dosyası üretir (``export/fcp7.py``).
+CIKTI_SECENEKLERI: tuple[str, ...] = ("mp4", "xml")
+
+
 @dataclass(frozen=True)
 class Config:
     """Tam çözümlenmiş yapılandırma — tüm alanlar doludur (default'larla bile)."""
@@ -142,11 +147,29 @@ class Config:
     config_version: int = SUPPORTED_CONFIG_VERSION
     aggressive: bool = False
     yes: bool = False
+    #: Çıktı kolu (``CIKTI_SECENEKLERI``). Bir katmanın ayarı değil KOŞU
+    #: parametresidir — `aggressive`/`yes` gibi top-level durur.
+    cikti: str = "mp4"
+    #: Transkripti ayrıca ``<video_adı>.srt`` olarak da yaz (``export/srt.py``).
+    srt: bool = False
     asr: AsrConfig = field(default_factory=AsrConfig)
     detect: DetectConfig = field(default_factory=DetectConfig)
     padding: PaddingConfig = field(default_factory=PaddingConfig)
     encoder: EncoderConfig = field(default_factory=EncoderConfig)
     render: RenderConfig = field(default_factory=RenderConfig)
+
+    def __post_init__(self) -> None:
+        """``cikti``'yı TEK KAPIDA doğrular.
+
+        Doğrulamanın burada olması bilinçlidir: değer hem TOML'dan hem CLI
+        bayrağından (``merge_config``) gelebilir; iki ayrı yerde kontrol
+        etmek, birinin unutulduğu bir yolun sessizce geçmesi demekti.
+        """
+        if self.cikti not in CIKTI_SECENEKLERI:
+            raise ConfigError(
+                f"geçersiz 'cikti' değeri: {self.cikti!r} — "
+                f"geçerli: {', '.join(CIKTI_SECENEKLERI)}"
+            )
 
 
 # ─── Tip doğrulama yardımcıları ───────────────────────────────────────────────
@@ -335,7 +358,8 @@ def load_config(config_path: str | Path | None = None) -> Config:
 
     # Bilinmeyen top-level anahtarlar → uyarı (forward-compat)
     known_top = {
-        "config_version", "aggressive", "yes", "asr", "detect", "padding", "encoder", "render",
+        "config_version", "aggressive", "yes", "cikti", "srt",
+        "asr", "detect", "padding", "encoder", "render",
     }
     for key in data:
         if key not in known_top:
@@ -353,11 +377,22 @@ def load_config(config_path: str | Path | None = None) -> Config:
     if "yes" in data:
         _tip_kontrol("yes", data["yes"], bool)
         yes = data["yes"]  # type: ignore[assignment]
+    cikti = "mp4"
+    if "cikti" in data:
+        _tip_kontrol("cikti", data["cikti"], str)
+        cikti = data["cikti"]  # type: ignore[assignment]
+    srt = False
+    if "srt" in data:
+        _tip_kontrol("srt", data["srt"], bool)
+        srt = data["srt"]  # type: ignore[assignment]
 
+    # Geçersiz `cikti` burada değil `Config.__post_init__`'te ölür (tek kapı).
     return Config(
         config_version=SUPPORTED_CONFIG_VERSION,
         aggressive=aggressive,
         yes=yes,
+        cikti=cikti,
+        srt=srt,
         asr=_asr_yap(_bolum_al(data, "asr")),
         detect=_detect_yap(_bolum_al(data, "detect")),
         padding=_padding_yap(_bolum_al(data, "padding")),
@@ -374,6 +409,8 @@ def merge_config(
     *,
     aggressive: bool | None = None,
     yes: bool | None = None,
+    cikti: str | None = None,
+    srt: bool | None = None,
 ) -> Config:
     """CLI argümanlarını config'in üzerine uygular (CLI > config > default).
 
@@ -381,12 +418,20 @@ def merge_config(
     bir CLI tercihidir ve config'deki ``True``'yu ezer.
 
     Saf fonksiyondur, yan etkisizdir; doğrudan test edilebilir.
+
+    Raises:
+        ConfigError: ``cikti`` geçerli seçeneklerden biri değilse
+            (``Config.__post_init__`` — tek kapı).
     """
     overrides: dict[str, object] = {}
     if aggressive is not None:
         overrides["aggressive"] = aggressive
     if yes is not None:
         overrides["yes"] = yes
+    if cikti is not None:
+        overrides["cikti"] = cikti
+    if srt is not None:
+        overrides["srt"] = srt
     if not overrides:
         return config
     return replace(config, **overrides)  # type: ignore[arg-type]

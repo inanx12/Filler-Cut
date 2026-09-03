@@ -493,3 +493,82 @@ class TestPaketlenmisVarsayilan:
         monkeypatch.setattr(sys, "_MEIPASS", "C:/x", raising=False)
         monkeypatch.chdir(tmp_path)
         assert load_config(None).asr.backend == "whispercpp"
+
+
+class TestCiktiVeSrt:
+    """v1.2.1 — dışa aktarım seçenekleri (top-level, `aggressive`/`yes` deseni).
+
+    ``cikti`` koşunun ÇIKTI KOLUNU seçer (hazır MP4 / NLE projesi), ``srt``
+    transkriptin altyazı olarak da yazılmasını açar. İkisi de koşu
+    parametresidir — bir katmanın ayarı değil — bu yüzden `[render]` ya da
+    yeni bir bölüm değil, top-level'da durur.
+    """
+
+    def test_defaultlar(self) -> None:
+        cfg = Config()
+        assert cfg.cikti == "mp4"
+        assert cfg.srt is False
+
+    def test_tomldan_okunur(self, tmp_path: Path) -> None:
+        yol = tmp_path / "filler-cut.toml"
+        yol.write_text(
+            'config_version = 1\ncikti = "xml"\nsrt = true\n', encoding="utf-8"
+        )
+        cfg = load_config(yol)
+        assert cfg.cikti == "xml"
+        assert cfg.srt is True
+
+    def test_bilinmeyen_anahtar_uyarisi_vermez(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        yol = tmp_path / "filler-cut.toml"
+        yol.write_text(
+            'config_version = 1\ncikti = "xml"\nsrt = true\n', encoding="utf-8"
+        )
+        load_config(yol)
+        assert "bilinmeyen config anahtarı" not in capsys.readouterr().err
+
+    def test_gecersiz_cikti_configerror(self, tmp_path: Path) -> None:
+        yol = tmp_path / "filler-cut.toml"
+        yol.write_text('config_version = 1\ncikti = "mov"\n', encoding="utf-8")
+        with pytest.raises(ConfigError) as exc_info:
+            load_config(yol)
+        assert "cikti" in str(exc_info.value)
+        assert "mp4" in str(exc_info.value) and "xml" in str(exc_info.value)
+
+    def test_cikti_tip_hatasi(self, tmp_path: Path) -> None:
+        yol = tmp_path / "filler-cut.toml"
+        yol.write_text("config_version = 1\ncikti = 4\n", encoding="utf-8")
+        with pytest.raises(ConfigError):
+            load_config(yol)
+
+    def test_srt_tip_hatasi(self, tmp_path: Path) -> None:
+        yol = tmp_path / "filler-cut.toml"
+        yol.write_text('config_version = 1\nsrt = "evet"\n', encoding="utf-8")
+        with pytest.raises(ConfigError):
+            load_config(yol)
+
+    def test_dogrudan_kurulan_config_de_dogrulanir(self) -> None:
+        """Tek kapı: TOML'dan da CLI'dan da gelse geçersiz değer aynı yerde ölür."""
+        with pytest.raises(ConfigError):
+            Config(cikti="mov")
+
+    def test_merge_cli_ezer(self) -> None:
+        temel = Config(cikti="mp4", srt=False)
+        birlesik = merge_config(temel, cikti="xml", srt=True)
+        assert birlesik.cikti == "xml"
+        assert birlesik.srt is True
+
+    def test_merge_none_override_sayilmaz(self) -> None:
+        temel = Config(cikti="xml", srt=True)
+        birlesik = merge_config(temel, aggressive=True)
+        assert birlesik.cikti == "xml"
+        assert birlesik.srt is True
+
+    def test_merge_false_gecerli_tercihtir(self) -> None:
+        """`--no-srt`, config'deki `srt = true`'yu EZER (aggressive deseni)."""
+        assert merge_config(Config(srt=True), srt=False).srt is False
+
+    def test_merge_gecersiz_cikti_configerror(self) -> None:
+        with pytest.raises(ConfigError):
+            merge_config(Config(), cikti="avi")

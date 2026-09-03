@@ -9,6 +9,7 @@ ad alanında mock'lanır, transcriber enjekte edilir.
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack
 from pathlib import Path
@@ -23,6 +24,7 @@ from fillercut.audio.extractor import ExtractionError
 from fillercut.audio.probe import ProbeError
 from fillercut.audio.silence import SilenceDetectionError
 from fillercut.config import AsrConfig, Config, RenderConfig
+from fillercut.export.medya import Kare, MedyaBilgisi, MedyaHatasi
 from fillercut.kurulum import yollar as kurulum_yollar
 from fillercut.models import CutPlan, Segment, Word
 from fillercut.pipeline import (
@@ -1050,3 +1052,185 @@ class TestPipelineError:
         with pytest.raises(PipelineError) as exc_info:
             run(tmp_path / "yok.mp4", config=Config(yes=True), transcriber=Mock())
         assert "girdi dosyası bulunamadı" in exc_info.value.mesaj
+
+
+class TestCiktiModu:
+    """v1.2.1 — dışa aktarım kolu: hazır MP4 (RENDER) vs NLE projesi (FCP7 XML).
+
+    XML kolu RENDER'a HİÇ girmez: encode yoktur, encoder probe'u bile
+    koşmaz. Aşama adı (``ASAMALAR``) değişmez — bant dışı kanal sözleşmesi
+    web UI göstergesini besliyor.
+    """
+
+    @staticmethod
+    def _medya() -> MedyaBilgisi:
+        return MedyaBilgisi(
+            kare=Kare(pay=60, payda=1),
+            genislik=1920,
+            yukseklik=1080,
+            ses_kanali=2,
+            ses_hizi=48000,
+            sure_ms=TOPLAM_MS,
+        )
+
+    def _kos_xml(self, girdi: Path, katmanlar: Any, **kw: Any) -> PipelineResult:
+        with patch("fillercut.pipeline.probe_medya", return_value=self._medya()):
+            return run(
+                girdi,
+                config=Config(yes=True, cikti="xml", **kw),
+                transcriber=_SahteTranscriber(katmanlar.sira),
+            )
+
+    def test_xml_modunda_render_kosmaz(self, girdi: Path, katmanlar: Any) -> None:
+        self._kos_xml(girdi, katmanlar)
+        katmanlar.render.assert_not_called()
+        assert "render" not in katmanlar.sira
+
+    def test_xml_modunda_encoder_probe_kosmaz(self, girdi: Path, katmanlar: Any) -> None:
+        """Encode yoksa probe encode'u da yok — boşa 4 ffmpeg koşusu ödenmez."""
+        self._kos_xml(girdi, katmanlar)
+        katmanlar.select_encoder.assert_not_called()
+
+    def test_xml_video_adiyla_cikti_klasorune_yazilir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        sonuc = self._kos_xml(girdi, katmanlar)
+        beklenen = girdi.parent / "video.xml"
+        assert sonuc.output_path == beklenen
+        assert beklenen.is_file()
+        assert sonuc.cikti == "xml"
+
+    def test_xml_icerigi_planla_uyusur(self, girdi: Path, katmanlar: Any) -> None:
+        sonuc = self._kos_xml(girdi, katmanlar)
+        kok = ET.fromstring(sonuc.output_path.read_text(encoding="utf-8"))
+        clipler = kok.findall("./sequence/media/video/track/clipitem")
+        assert len(clipler) == len(PLAN.keep)
+
+    def test_xml_modunda_rapor_yine_yazilir(self, girdi: Path, katmanlar: Any) -> None:
+        """Rapor MP4'e bağlı değildir — "neden burayı kesti" cevabı kalmalı."""
+        sonuc = self._kos_xml(girdi, katmanlar)
+        katmanlar.json.assert_called_once()
+        assert sonuc.report_path == girdi.parent / "video_temiz.json"
+
+    def test_xml_modunda_encoder_alani_yok(self, girdi: Path, katmanlar: Any) -> None:
+        """Hiçbir şey encode edilmediyse rapor "şununla encode edildi" demez."""
+        self._kos_xml(girdi, katmanlar)
+        assert katmanlar.json.call_args.kwargs["encoder"] is None
+
+    def test_asama_adlari_degismedi(self, girdi: Path, katmanlar: Any) -> None:
+        asamalar: list[str] = []
+        with patch("fillercut.pipeline.probe_medya", return_value=self._medya()):
+            run(
+                girdi,
+                config=Config(yes=True, cikti="xml"),
+                transcriber=_SahteTranscriber(katmanlar.sira),
+                progress_cb=asamalar.append,
+            )
+        assert asamalar == list(ASAMALAR)
+
+    def test_mp4_modu_degismedi(self, girdi: Path, katmanlar: Any) -> None:
+        """Varsayılan yol regresyon kilidi: render koşar, XML yazılmaz."""
+        run(girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira))
+        katmanlar.render.assert_called_once()
+        katmanlar.select_encoder.assert_called_once()
+        assert not (girdi.parent / "video.xml").exists()
+
+    def test_bos_plan_temiz_hata(self, girdi: Path, katmanlar: Any) -> None:
+        katmanlar.cutplan.return_value = None
+        katmanlar.cutplan.side_effect = _izli(
+            katmanlar.sira,
+            "build_cutplan",
+            CutPlan(
+                original_duration_ms=TOPLAM_MS,
+                keep=[],
+                cut=[
+                    Segment(
+                        start_ms=0, end_ms=TOPLAM_MS, kind="silence", reason="sessizlik"
+                    )
+                ],
+            ),
+        )
+        with pytest.raises(PipelineError) as exc_info:
+            self._kos_xml(girdi, katmanlar)
+        assert "NLE projesi" in exc_info.value.mesaj
+        assert "Traceback" not in exc_info.value.mesaj
+
+    def test_medya_okunamazsa_temiz_hata(self, girdi: Path, katmanlar: Any) -> None:
+        with patch(
+            "fillercut.pipeline.probe_medya", side_effect=MedyaHatasi("kare hızı yok")
+        ), pytest.raises(PipelineError) as exc_info:
+            run(
+                girdi,
+                config=Config(yes=True, cikti="xml"),
+                transcriber=_SahteTranscriber(katmanlar.sira),
+            )
+        assert "kare hızı yok" in exc_info.value.mesaj
+        assert "ffmpeg.org/download" in exc_info.value.mesaj
+
+
+class TestSrtCiktisi:
+    """``srt=True`` transkripti standart altyazı olarak da yazar."""
+
+    def test_varsayilan_kapali(self, girdi: Path, katmanlar: Any) -> None:
+        sonuc = run(
+            girdi, config=Config(yes=True), transcriber=_SahteTranscriber(katmanlar.sira)
+        )
+        assert sonuc.srt_path is None
+        assert not (girdi.parent / "video.srt").exists()
+
+    def test_video_adiyla_cikti_klasorune(self, girdi: Path, katmanlar: Any) -> None:
+        sonuc = run(
+            girdi,
+            config=Config(yes=True, srt=True),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+        )
+        beklenen = girdi.parent / "video.srt"
+        assert sonuc.srt_path == beklenen
+        assert beklenen.is_file()
+
+    def test_cikti_klasoru_output_ile_tasinir(
+        self, girdi: Path, katmanlar: Any, tmp_path: Path
+    ) -> None:
+        """SRT videonun yanına değil, seçilen çıktı klasörüne yazılır."""
+        hedef = tmp_path / "disari"
+        hedef.mkdir()
+        sonuc = run(
+            girdi,
+            output_path=hedef / "temiz.mp4",
+            config=Config(yes=True, srt=True),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+        )
+        assert sonuc.srt_path == hedef / "video.srt"
+
+    def test_icerik_re_anchorlu_sinirlari_tasir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        """Kaydedilen transkriptle aynı sınırlar — SRT ile JSON ayrışamaz."""
+        sonuc = run(
+            girdi,
+            config=Config(yes=True, srt=True),
+            transcriber=_SahteTranscriber(katmanlar.sira),
+        )
+        assert sonuc.srt_path is not None
+        metin = sonuc.srt_path.read_text(encoding="utf-8")
+        assert metin.startswith("1\n00:00:00,000 --> 00:00:00,100\nmerhaba\n")
+
+    def test_xml_moduyla_birlikte_calisir(self, girdi: Path, katmanlar: Any) -> None:
+        with patch(
+            "fillercut.pipeline.probe_medya",
+            return_value=MedyaBilgisi(
+                kare=Kare(pay=60, payda=1),
+                genislik=1920,
+                yukseklik=1080,
+                ses_kanali=2,
+                ses_hizi=48000,
+                sure_ms=TOPLAM_MS,
+            ),
+        ):
+            sonuc = run(
+                girdi,
+                config=Config(yes=True, cikti="xml", srt=True),
+                transcriber=_SahteTranscriber(katmanlar.sira),
+            )
+        assert sonuc.srt_path is not None and sonuc.srt_path.is_file()
+        assert sonuc.output_path.suffix == ".xml"

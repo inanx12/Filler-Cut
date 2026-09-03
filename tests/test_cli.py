@@ -734,3 +734,58 @@ class TestMainEntryUiDispatch:
             main_entry()
         sahte_app.assert_called_once_with()
         sahte_ui.assert_not_called()
+
+
+class TestCiktiBayraklari:
+    """v1.2.1 — `--cikti` (mp4|xml) ve `--srt` CLI ucu.
+
+    CLI yalnız argüman ayrıştırır: değerler config'e biner, kararı pipeline
+    verir (`cli.py` modül docstring'i). Bu testler zincirin CLI ucunu kilitler.
+    """
+
+    def _sonuc(self, tmp_path: Path) -> PipelineResult:
+        return PipelineResult(
+            output_path=tmp_path / "video.xml",
+            report_path=tmp_path / "video_temiz.json",
+            transcript_path=tmp_path / "video_transkript.json",
+            report=_RAPOR,
+            cikti="xml",
+        )
+
+    def test_help_bayraklari_listeler(self) -> None:
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "--cikti" in result.output
+        assert "--srt" in result.output
+
+    def test_cikti_xml_config_e_biner(self, tmp_path: Path) -> None:
+        with patch("fillercut.cli.run", return_value=self._sonuc(tmp_path)) as m:
+            result = runner.invoke(app, ["video.mp4", "--cikti", "xml", "-y"])
+        assert result.exit_code == 0
+        assert m.call_args.kwargs["config"].cikti == "xml"
+
+    def test_srt_bayragi_config_e_biner(self, tmp_path: Path) -> None:
+        with patch("fillercut.cli.run", return_value=self._sonuc(tmp_path)) as m:
+            result = runner.invoke(app, ["video.mp4", "--srt", "-y"])
+        assert result.exit_code == 0
+        assert m.call_args.kwargs["config"].srt is True
+
+    def test_varsayilan_mp4(self, tmp_path: Path) -> None:
+        with patch("fillercut.cli.run", return_value=self._sonuc(tmp_path)) as m:
+            runner.invoke(app, ["video.mp4", "-y"])
+        cfg = m.call_args.kwargs["config"]
+        assert cfg.cikti == "mp4" and cfg.srt is False
+
+    def test_gecersiz_cikti_temiz_hata(self) -> None:
+        """Traceback yok: Türkçe tek satır + kod 1."""
+        with patch("fillercut.cli.run") as m:
+            result = runner.invoke(app, ["video.mp4", "--cikti", "mov", "-y"])
+        assert result.exit_code == 1
+        assert "Traceback" not in _birlesik_cikti(result)
+        assert "mp4" in _birlesik_cikti(result)
+        m.assert_not_called()
+
+    def test_xml_modunda_bitis_satiri_xml_yolunu_gosterir(self, tmp_path: Path) -> None:
+        with patch("fillercut.cli.run", return_value=self._sonuc(tmp_path)):
+            result = runner.invoke(app, ["video.mp4", "--cikti", "xml", "-y"])
+        assert "video.xml" in result.output
