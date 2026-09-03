@@ -42,21 +42,33 @@ kapatılamıyordu. Kesim motoruna, dosya biçimlerine ve CLI'ye dokunulmadı.
 - Bir iş koşarken kapatılırsa uyarı verilir ve **koşan iş yarıda kesilmez** —
   süreç iş bitince kapanır (v1.0'dan beri geçerli kural).
 
+### Düzeltildi — yükseltme eski dosyaları bırakıyordu (KI-15)
+
+- Var olan bir kurulumun üstüne yükseltme yapıldığında eski sürümün
+  dosyaları siliniyor. Önceden kalıyorlardı ve uygulama **kendi sürümünü
+  yanlış bildiriyordu** (yükseltilmiş makinede `--version` eski sürümü
+  basıyordu). Kurulum dizini dışındaki **modelleriniz ve ayarlarınız
+  etkilenmez.**
+
 ### Testler
 
-- `tests/test_ui_yasam_dongusu.py` (15 test): ikinci başlatma, pencereyi öne
+- `tests/test_ui_yasam_dongusu.py` (18 test): ikinci başlatma, pencereyi öne
   getirme, kapatma ucu ve **aç→kapat üç döngü** zombi regresyonu. Hepsi
   gerçek portta, ayrı yorumlayıcıda koşar; koşu sırasında tarayıcı açılmaz.
 - `tests/test_paketleme.py::TestNativeBundleSozlesmesi`: native bileşenin
   bundle'a girdiği hem niyet (workflow + build script) hem sonuç (artefakt)
   düzeyinde kilitlendi.
+- `tests/test_kurucu.py::TestYukseltmeTemizligi`: yükseltmenin eski bundle'ı
+  temizlediği, kullanıcı verisine dokunmadığı kilitlendi.
 - `scripts/build_exe.ps1` pywebview yoksa artık **durur** — sessizce
   tarayıcı-fallback'li bir exe üretmez.
 
 ### Süreç
 
-- `AGENTS.md` Release Kontrol Listesi'ne madde: kurulu exe'de **native
-  pencerenin açıldığı gözle görülmeden** tag atılmaz.
+- `AGENTS.md` Release Kontrol Listesi genişletildi: kurulu exe'de **native
+  pencerenin açıldığı gözle görülmeden**, **yaşam döngüsü (aç → Kapat →
+  yeniden aç) denenmeden** ve kurucu **var olan bir kurulumun üstüne**
+  koşulmadan tag atılmaz.
 
 ## [1.2.2] — 2026-09-04
 

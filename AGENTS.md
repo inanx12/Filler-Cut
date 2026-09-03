@@ -107,7 +107,13 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
    `tests/test_release.py::TestSurumTutarliligi`). `[Unreleased]` kalmamış.
 3. **Exe'ler yeniden derlenir** (`scripts/build_exe.ps1`) — bump sonrası
    `dist/fillercut.exe` BAYAT'tır; `exe` marker'lı smoke bunu yakalar.
-4. **Kurucu üretilir** (`scripts/build_setup.ps1`) ve **kurulur**.
+   Build **pywebview kurulu bir venv'den** alınmalı; script bunu ön kontrol
+   eder ve eksikse durur (KI-12).
+4. **Kurucu üretilir** (`scripts/build_setup.ps1`) ve **var olan bir
+   kurulumun ÜSTÜNE kurulur.** Temiz makineye kurmak yetmez: KI-15 yalnız
+   yükseltme yolunda görünüyordu (eski `dist-info` kalıyor, uygulama
+   kendi sürümünü yanlış bildiriyordu). Kurulumdan sonra
+   `fillercut.exe --version` beklenen sürümü basmalı.
 5. **MANUEL — kurulu `fillercut-ui.exe` AÇILIYOR ve UI SERVİS VERİYOR.**
    Başlat Menüsü kısayoluna (ya da masaüstü ikonuna) **çift tıkla**;
    pencere açılmalı ve arayüz yüklenmeli. **Bu madde doğrulanmadan tag
@@ -117,15 +123,114 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
    Otomatik kilit (`tests/test_gunluk.py`) bu maddenin YERİNE geçmez:
    `Popen`'la başlatılan bir çocuk geçerli bir stdout tanıtıcısı alır,
    Explorer'dan çift tıklama almaz.
-6. **MANUEL — bir gerçek video uçtan uca işlenir** (kurulu exe ile, repo'dan
+6. **MANUEL — açılan pencere NATIVE olmalı, tarayıcı sekmesi DEĞİL.**
+   Gözle bak: kendi çerçevesi ve "Filler-Cut" başlığı olan bir masaüstü
+   penceresi mi, yoksa tarayıcıda bir sekme mi? Tarayıcıya düştüyse
+   **tag YOK** — bundle'da pywebview eksiktir (KI-12). Makinede
+   doğrulaması: `fillercut.exe ui --tani` → `native pencere: hazir` ve
+   `pywebview: var`; ayrıca kurulum dizininde `_internal\webview` bulunmalı.
+7. **MANUEL — yaşam döngüsü:** aç → **Kapat** düğmesi → Görev
+   Yöneticisi'nde `fillercut*` süreci KALMAMALI ve 8765 dinlenmemeli →
+   yeniden aç. Çalışırken kısayola ikinci kez basınca var olan pencere öne
+   gelmeli (yeni süreç doğmamalı). KI-13 + KI-14.
+8. **MANUEL — bir gerçek video uçtan uca işlenir** (kurulu exe ile, repo'dan
    değil): dosya seçilir, 6 aşama koşar, review ekranı açılır, onaydan
    sonra çıktı yazılır.
-7. Tag + push + Release (`release.yml` Release'i CHANGELOG'dan kendi açar).
+9. Tag + push + Release (`release.yml` Release'i CHANGELOG'dan kendi açar).
 
-**Kural:** 5 ve 6 insan gözüyle yapılır ve sonucu ana sohbete yazılır.
-"Testler yeşildi" bir release doğrulaması DEĞİLDİR.
+**Kural:** 5-8 insan gözüyle yapılır ve sonucu ana sohbete yazılır.
+"Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-15'e
+kadar beş kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
 ## Mevcut Durum (2026-09-02)
+
+**v1.2.3 HOTFIX TAMAMLANDI (2026-09-04) — frozen native yolu (KI-12/13/14/15).**
+Sürüm 1.2.2 → **1.2.3**. Push/tag/release YOK — İnan onaylar.
+
+**Bağlam:** v1.2.0/v1.2.1 kurucuları KI-11 yüzünden hiç açılmıyordu, yani
+**frozen native yolu tarihte ilk kez v1.2.2'de gerçek kullanıcıda koştu.**
+Bu tur o yolun üç kusurunu kapattı; gerçek doğrulama bir dördüncüsünü
+(KI-15) ve bir de kendi düzeltmemizin kenar durumunu çıkardı.
+
+**KI-12 — native pencere hiç açılmıyordu (KÖK NEDEN).** `release.yml`
+`pip install -e ".[dev]"` yapıyordu; `native` extra'sı (pywebview) runner'da
+**hiç kurulu değildi**. Spec'teki `webview.platforms.*` hidden import'ları
+eksik pakette yalnızca WARNING üretir — build YEŞİL biter ve exe çalışma
+anında tarayıcı fallback'ine düşer. **Kanıt gerçek artefakt üzerinde:**
+kurulu v1.2.2'de `_internal\webview`, `clr_loader`, `pythonnet` **hiçbiri
+yoktu**. Yerel/release ayrışması buydu — Claude'un venv'inde pywebview
+kurulu olduğu için yerel build'de pencere açılıyordu.
+**ELENEN şüpheli:** "tespit `importlib.metadata` tabanlı" değil —
+`_pywebview_var` gerçek `import webview` yapar, `webview/__init__.py`
+metadata'ya dokunmaz (kurulu 6.2.1 kaynağından okundu).
+Düzeltme: workflow `.[dev,native]`; `build_exe.ps1` pywebview yoksa
+**durur**; paketlenmiş koşuda hata mesajı artık "pip install" DEMEZ.
+
+**KI-13 — ikinci başlatma hiçbir şey açmıyordu.** `cli.ui` yalnız `echo`
+yapıp çıkıyordu; konsolsuz exe'de o satır görünmez. Artık koşan örneğin
+penceresi öne getirilir, olmazsa tarayıcı sekmesi açılır.
+**Pencereyi ÇAĞIRAN süreç kaldırır:** Windows foreground kilidi bu hakkı
+kullanıcının son girdisiyle başlatılmış sürece verir — kısayola tıklayanın
+açtığı ikinci süreç odur.
+
+**KI-14 — çıkış yolu yoktu (headless zombi).** UI'a "Kapat" düğmesi +
+`POST /api/kapat`. Cevap ÖNCE gider, kapanış SONRA olur (`BackgroundTask`) —
+doğrudan çağrılsaydı istemci başarılı kapanışı "bağlantı koptu" sanardı.
+Native modda düğme PENCEREYİ yok eder, tarayıcı modunda `should_exit`.
+Koşan iş YARIDA KESİLMEZ (kilitli invariant korundu).
+
+**KI-15 — yükseltme bayat dosya bırakıyordu (GERÇEK DOĞRULAMANIN BULDUĞU
+DÖRDÜNCÜ KATMAN).** Inno üzerine yazar, artık olmayanı silmez. Yükseltmeden
+sonra `_internal`de iki `dist-info` duruyor ve `importlib.metadata` eskisini
+döndürüyordu: kurulu uygulama **kendi sürümünü yanlış bildiriyordu**.
+"Sürümün tek doğruluk kaynağı" invariant'ı kurulu makinede sessizce
+kırılmıştı; repoda testler yeşildi. `[InstallDelete]` ile `{app}\_internal`
+temizleniyor (kullanıcı verisi etkilenmez).
+
+**YENİ TEŞHİS UCU — `fillercut ui --tani`.** Paketlenmiş mi / WebView2 /
+pywebview / karar / günlük yolu. Sunucu başlatmaz. Konsolsuz exe hiçbir şey
+gösteremediği için cevap konsollu `fillercut.exe`'den sorulur; release
+smoke testi de bunu kullanır. Günlük (v1.2.2) + `--tani` (v1.2.3) + "Kapat"
+(v1.2.3) ile konsolsuz koşunun üç kör noktası kapandı: ne oldu, ne tespit
+edildi, nasıl çıkılır.
+
+**Tuzaklar (bir sonraki agent için):**
+- **Sessiz no-op, ikinci kez.** `_Kapanis`in eylemi native modda ancak
+  pencere yaratıldıktan sonra takılıyordu; sunucu pencereden birkaç yüz ms
+  ÖNCE cevap verdiği için o aralıkta basılan "Kapat" yutuluyordu ve
+  uygulama kapanmıyordu. Üç turluk aç/kapat provasında yakalandı. Geç
+  bağlanan her kancada **ilk eylem kurulu olmalı** ve `ayarla` daha önce
+  gelen isteği hemen uygulamalı.
+- **venv'in `Scripts\python.exe`'si Windows'ta YÖNLENDİRİCİDİR** — taban
+  yorumlayıcıyı ayrı süreç olarak başlatır. `Popen.pid` ile sunucunun
+  pid'i EŞLEŞMEZ (ölçüldü: 3616 vs 16116) ve `terminate()` yalnız
+  yönlendiriciyi öldürür, sunucu öksüz kalıp portu dinlemeye devam eder.
+  PyInstaller bootloader tuzağının aynı sınıfı. Testler bu yüzden pid
+  karşılaştırmaz, **portun cevabına** bakar; temizlikte `taskkill /T /F`.
+  (Kurulu onedir exe'de bu sorun YOK — pid eşleşiyor.)
+- **8765 testlerde paylaşılan kaynaktır.** Elle bırakılan bir örnek
+  `tests/test_cli.py::TestUiKomutu`'nun on testini birden kırar ("zaten
+  çalışıyor" dalına düşer). Manuel doğrulamadan sonra süreçleri öldür.
+- **pywebview'in `set_on_top`u `Invoke` KULLANMAZ** (`winforms.py:1003`) —
+  uvicorn worker thread'inden çağrılırsa çapraz-thread. `window.destroy()`
+  ise `Invoke`la marşalize edilir, thread-güvenlidir.
+
+**GERÇEK DOĞRULAMA (yerel build + Inno kurulum, kurulu 1.2.3):**
+- `_internal\webview` var; `fillercut.exe ui --tani` → `pywebview: var`,
+  `native pencere: hazir`.
+- Kurulu `fillercut-ui.exe` **native pencere** açtı: `MainWindowTitle=
+  'Filler-Cut'`, 1280×800, gerçek arayüz ve "Kapat" düğmesi ekran
+  görüntüsüyle doğrulandı. `ui.log`: "Filler-Cut penceresi açılıyor".
+- **Aç→Kapat üç tur:** üç FARKLI pid, her turda native pencere, her turda
+  süreç öldü ve 8765 serbest kaldı. Öksüz `msedgewebview2.exe` **0**.
+- **Kenar durum:** pencere doğmadan Kapat → süreç temiz kapandı.
+- **Çift başlatma:** ikinci tık `penceresi öne getirildi` dedi, yeni süreç
+  DOĞMADI, portta aynı pid kaldı.
+- **Yükseltme:** bayat `dist-info` elle geri konup kurucu tekrar koşuldu →
+  tek `dist-info` kaldı, `--version` 1.2.3 bastı.
+
+**dist_pypi/** 1.2.3 olarak yeniden üretildi (twine check ×2 PASSED, wheel
+53 girdi, sızıntı yok).
 
 **v1.2.2 HOTFIX TAMAMLANDI (2026-09-04) — kurulu masaüstü uygulaması
 açılmıyordu (KI-11).** Sürüm 1.2.1 → **1.2.2**. Push/tag/release YOK —

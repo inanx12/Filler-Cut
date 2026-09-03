@@ -1338,3 +1338,123 @@ maliyeti ayrıca ölçülmeli, bu kayıtta ölçülmedi.
   `src/fillercut/cli.py::_sunucu_kur`; kilitler `tests/test_gunluk.py`
   (kırmızı kanıtı dahil: guard'sız gövde `Unable to configure formatter`
   ile ölür).
+
+## KI-12 — Release exe'sine pywebview girmiyordu, native pencere hiç açılmıyordu — **Çözüldü (v1.2.3)**
+
+- **Çözüm (2026-09-04):** `release.yml` artık `pip install -e ".[dev,native]"`
+  yapıyor ve `scripts/build_exe.ps1` pywebview kurulu değilse **build'i
+  durduruyor**. Sessizce tarayıcı-fallback'li bir artefakt üretmektense
+  build zamanında patlamak yeğdir.
+
+- **Belirti:** Kurucuyla kurulan Filler-Cut native masaüstü penceresi yerine
+  **tarayıcı sekmesi** açıyordu. `ui.log`'da açık satır:
+  `Native pencere kullanılamıyor (pywebview kurulu degil (pip install
+  "fillercut[native]")) — tarayıcı modu.`
+- **Neden:** CI `pip install -e ".[dev]"` yapıyordu; `native` extra'sı
+  (pywebview) runner'da **hiç kurulu değildi**. Spec'teki
+  `webview.platforms.*` hidden import'ları eksik pakette yalnızca
+  `WARNING: Hidden import ... not found!` üretir — **build yeşil biter**.
+  `webview/__pyinstaller/hook-webview.py` de yok sayıldığı için
+  `webview/js` ve `webview/lib` veri dosyaları da toplanmaz.
+- **Kanıt (gerçek artefakt üzerinde, tahmin değil):** kurulu v1.2.2'de
+  `_internal\webview`, `_internal\clr_loader` ve `_internal\pythonnet`
+  **hiçbiri yoktu**. v1.2.3 kurucusunda üçü de var.
+- **Yerel/release ayrışması:** Claude'un venv'inde pywebview kuruludur, o
+  yüzden yerel build'de native pencere AÇILIYORDU (v1.2.2 turunda
+  `MainWindowTitle='Filler-Cut'` ölçülmüştü). Kusur yalnız CI'nın ürettiği
+  artefakttaydı — "bende çalışıyor"un ders kitabı örneği.
+- **ELENEN şüpheli:** "tespit `importlib.metadata` tabanlı, frozen'da dist
+  metadata yok" (`copy_metadata` tuzağının kardeşi) **değildi**. Kurulu
+  pywebview 6.2.1 kaynağından doğrulandı: `native._pywebview_var` gerçek
+  `import webview` yapar ve `webview/__init__.py` metadata'ya hiç dokunmaz.
+- **Kapsam:** v1.2.0, v1.2.1, v1.2.2 kurucuları. `pip install` ile kuranlar
+  **etkilenmedi**. v1.2.0/v1.2.1 zaten KI-11 yüzünden hiç açılmıyordu, yani
+  frozen native yolu ilk kez v1.2.2'de gerçek kullanıcıda koştu ve kusur
+  ancak o zaman görünür oldu.
+- **Yeni teşhis ucu:** `fillercut ui --tani` — paketlenmiş mi, WebView2 var
+  mı, pywebview var mı, karar ne, günlük nerede. Sunucu başlatmaz. Konsolsuz
+  exe hiçbir şey gösteremediği için bu cevap konsollu `fillercut.exe`'den
+  sorulur; release smoke testi de bunu kullanır.
+- **Referans:** `.github/workflows/release.yml`, `scripts/build_exe.ps1`,
+  `src/fillercut/web/native.py::native_hazir`, `src/fillercut/cli.py::_tani_yazdir`;
+  kilitler `tests/test_paketleme.py::TestNativeBundleSozlesmesi` (niyet ve
+  sonuç ayrı ayrı).
+
+## KI-13 — İkinci başlatma hiçbir şey açmıyordu — **Çözüldü (v1.2.3)**
+
+- **Çözüm (2026-09-04):** İkinci başlatma önce koşan örneğin native
+  penceresini **öne getirir**, pencere yoksa tarayıcı sekmesi açar.
+  `--no-browser` ikisini de bastırır.
+
+- **Belirti:** Filler-Cut çalışırken kısayola tekrar basmak hiçbir şey
+  yapmıyordu. `ui.log`'da art arda beş satır:
+  `Filler-Cut zaten çalışıyor (port 8765, pid 23404): http://127.0.0.1:8765/`
+  — kullanıcının tekrar tekrar tıkladığının kaydı.
+- **Neden:** `cli.ui` portu dolu ve bizim bulunca yalnız `typer.echo` yapıp
+  çıkıyordu. Konsolsuz exe'de o satırı kimse görmez; uygulama ölü görünür.
+- **Pencereyi ÇAĞIRAN süreç kaldırır, koşan örnek değil:** Windows'un
+  foreground kilidi bu hakkı "kullanıcının son girdisiyle başlatılmış"
+  sürece verir — kısayola tıklayanın açtığı İKİNCİ süreç odur, arka plandaki
+  birinci değil.
+- **pywebview API'si neden kullanılmadı:** `window.restore()` /
+  `window.on_top` koşan sürecin içinden çağrılır; üstelik `set_on_top`
+  WinForms `TopMost`ini `Invoke` olmadan doğrudan set eder (kurulu 6.2.1
+  kaynağı, `winforms.py:1003`) — uvicorn worker thread'inden çapraz-thread
+  çağrı olurdu.
+- **Referans:** `src/fillercut/web/native.py::pencereyi_one_getir`,
+  `src/fillercut/cli.py::_var_olan_ornegi_goster`; kilitler
+  `tests/test_ui_yasam_dongusu.py::TestIkinciBaslatma` +
+  `TestPencereyiOneGetir`.
+
+## KI-14 — Konsolsuz + tarayıcı modunda çıkış yolu yoktu (headless zombi) — **Çözüldü (v1.2.3)**
+
+- **Çözüm (2026-09-04):** Arayüze "Kapat" düğmesi + `POST /api/kapat`.
+  Native modda pencereyi yok eder, tarayıcı modunda uvicorn'a `should_exit`
+  der. Cevap **önce** gider, kapanış **sonra** olur (`BackgroundTask`).
+
+- **Belirti:** Tarayıcı sekmesini kapatmak sunucuyu durdurmuyordu; süreç
+  `LISTENING` hâlde kalıyordu (`tasklist` + `netstat` ile ölçüldü) ve bir
+  sonraki açılışı da engelliyordu ("zaten çalışıyor"). Konsolsuz exe'de
+  "Ctrl+C" imkânsız olduğu için tek kurtuluş Görev Yöneticisi'ydi.
+- **Kilitli invariant korundu:** koşan iş YARIDA KESİLMEZ. Kapat düğmesi iş
+  koşarken farklı bir onay metni gösterir ve perde "koşan iş bitince süreç
+  tamamen kapanacak" der.
+- **WebView2 çocukları:** `msedgewebview2.exe` süreçleri host'la birlikte
+  ölüyor — ölçüldü, kapanıştan sonra öksüz çocuk **0**.
+- **Tuzak — sessiz no-op (aynı sınıf, ikinci kez):** ilk sürümde kapanış
+  tutamağının eylemi native modda ancak pencere yaratıldıktan sonra
+  takılıyordu; sunucu pencereden birkaç yüz ms önce cevap verdiği için o
+  aralıkta basılan "Kapat" **yutuluyordu**. Üç turluk aç/kapat provasında
+  yakalandı (1. tur kapanmadı, 2. tur aynı pid'i buldu). Çözüm: ilk eylem
+  her modda kuruludur ve `ayarla` daha önce istenen kapanışı hemen
+  uygular.
+- **Referans:** `src/fillercut/web/app.py::kapat`, `src/fillercut/cli.py::_Kapanis`,
+  `src/fillercut/web/static/{index.html,app.js,style.css}`; kilitler
+  `tests/test_ui_yasam_dongusu.py::TestKapatUcu`, `TestKapatUctanUca`
+  (aç→kapat üç döngü) ve `TestKapanisTutamagi` (sıra).
+
+## KI-15 — Yükseltme bayat bundle dosyaları bırakıyordu — **Çözüldü (v1.2.3)**
+
+- **Çözüm (2026-09-04):** `packaging/fillercut.iss`'e `[InstallDelete]`:
+  `Type: filesandordirs; Name: "{app}\_internal"`. Kullanıcı verisi
+  (`%LOCALAPPDATA%\fillercut` modelleri, `%APPDATA%\fillercut` ayarı)
+  ETKİLENMEZ — silinen yalnız uygulama bundle'ı.
+
+- **Belirti (1.2.2 → 1.2.3 provasında ölçüldü):** Yükseltmeden sonra
+  `_internal` altında **hem** `fillercut-1.2.2.dist-info` **hem**
+  `fillercut-1.2.3.dist-info` duruyordu. `importlib.metadata` ilk bulduğunu
+  döndüğü için kurulu uygulama kendi sürümünü **1.2.2** diye bildiriyordu —
+  `fillercut --version`, `GET /api/instance` ve geri bildirim formundaki
+  ortam bloğu dahil.
+- **Neden:** Inno dosyaları ÜZERİNE yazar ama **artık olmayanları silmez**.
+  PyInstaller onedir bundle'ı ise birleştirilecek bir ağaç değildir.
+- **Etki:** "Sürümün tek doğruluk kaynağı pyproject.toml" invariant'ı
+  **kurulu makinede** sessizce kırılıyordu; repoda testler yeşil kalır
+  (`tests/test_release.py::TestSurumTutarliligi` kurulu artefakta bakmaz).
+  Aynı sınıf tehlike bayat `.pyd`/`.dll`de daha ağırdır: yanlış ikili
+  yüklenir ve hata build'de değil kullanıcıda çıkar.
+- **Nasıl bulundu:** yalnızca gerçek yükseltme provasıyla. Bu madde,
+  "kurucuyu **var olan bir kurulumun üstüne** kur" adımının Release Kontrol
+  Listesi'ne girmesinin sebebidir.
+- **Referans:** `packaging/fillercut.iss` `[InstallDelete]`; kilit
+  `tests/test_kurucu.py::TestYukseltmeTemizligi`.
