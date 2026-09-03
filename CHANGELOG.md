@@ -7,6 +7,57 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [1.2.3] — 2026-09-04
+
+**Hotfix: masaüstü uygulaması artık gerçekten bir masaüstü uygulaması.**
+
+v1.2.2 kurulu uygulamanın **açılmasını** sağladı; bu sürüm açıldıktan
+sonrasını düzeltir. Kurucudan gelen Filler-Cut native pencere yerine
+tarayıcı sekmesi açıyor, ikinci kez tıklandığında hiçbir tepki vermiyor ve
+kapatılamıyordu. Kesim motoruna, dosya biçimlerine ve CLI'ye dokunulmadı.
+
+### Düzeltildi — native pencere hiç açılmıyordu (KI-12)
+
+- Kurucuyla gelen sürüm **native masaüstü penceresini** açıyor. v1.2.0'dan
+  beri üretilen kurucularda pencere bileşeni (pywebview) pakete hiç
+  girmemişti; uygulama sessizce tarayıcı sekmesine düşüyordu. Sorun
+  yalnızca **paketlenmiş** sürümlerdeydi — `pip install` ile kuranlar
+  etkilenmiyordu.
+- **Yeni: `fillercut ui --tani`.** Native pencerenin neden açılıp
+  açılmadığını tek komutla söyler (paketlenmiş mi, WebView2 var mı,
+  pywebview var mı, karar ne, günlük nerede). Sunucu başlatmaz.
+
+### Düzeltildi — ikinci kez açmak hiçbir şey yapmıyordu (KI-13)
+
+- Filler-Cut çalışırken kısayola tekrar basmak artık **çalışan pencereyi
+  öne getiriyor**; pencere yoksa (tarayıcı modu) sekmeyi açıyor. Önceden
+  ikinci tıklama sessizce hiçbir şey yapmıyor, uygulama ölü görünüyordu.
+
+### Düzeltildi — uygulama kapatılamıyordu (KI-14)
+
+- Arayüzün sağ üstüne **"Kapat"** düğmesi eklendi. Tarayıcı modunda sekmeyi
+  kapatmak sunucuyu durdurmuyordu: süreç arka planda çalışmaya devam ediyor,
+  bir dahaki açılışı da engelliyordu. Kapatmanın tek yolu Görev
+  Yöneticisi'ydi.
+- Bir iş koşarken kapatılırsa uyarı verilir ve **koşan iş yarıda kesilmez** —
+  süreç iş bitince kapanır (v1.0'dan beri geçerli kural).
+
+### Testler
+
+- `tests/test_ui_yasam_dongusu.py` (15 test): ikinci başlatma, pencereyi öne
+  getirme, kapatma ucu ve **aç→kapat üç döngü** zombi regresyonu. Hepsi
+  gerçek portta, ayrı yorumlayıcıda koşar; koşu sırasında tarayıcı açılmaz.
+- `tests/test_paketleme.py::TestNativeBundleSozlesmesi`: native bileşenin
+  bundle'a girdiği hem niyet (workflow + build script) hem sonuç (artefakt)
+  düzeyinde kilitlendi.
+- `scripts/build_exe.ps1` pywebview yoksa artık **durur** — sessizce
+  tarayıcı-fallback'li bir exe üretmez.
+
+### Süreç
+
+- `AGENTS.md` Release Kontrol Listesi'ne madde: kurulu exe'de **native
+  pencerenin açıldığı gözle görülmeden** tag atılmaz.
+
 ## [1.2.2] — 2026-09-04
 
 **Hotfix: kurulu masaüstü uygulaması açılmıyordu.**
@@ -396,6 +447,7 @@ sınırlar: `experiments/pywebview_spike/README.md`.
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
 
+[1.2.3]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.3
 [1.2.2]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.2
 [1.2.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.1
 [1.2.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.0
