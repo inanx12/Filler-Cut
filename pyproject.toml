@@ -80,4 +80,5 @@ markers = [
     "wcpp: gerçek whisper-cli binary + GGML model gerektirir — CI'da değil, kullanıcı makinesinde koşar (CI deselect: -m 'not wcpp')",
     "ag: gerçek ağ indirmesi gerektirir (HF / GitHub Release) — CI'da değil, kullanıcı makinesinde koşar (CI deselect: -m 'not ag')",
     "exe: PyInstaller build artefaktı gerektirir (dist/fillercut) — CI'da değil, build sonrası koşar (CI deselect: -m 'not exe')",
+    "xml: FCP7 XML / SRT dışa aktarım kilitleri — SEÇİM marker'ıdır, dış kaynak gerektirmez ve CI'da koşar (yalnız bu takım: -m xml). Gerçek dosya okuyan tek test ayrıca 'ffmpeg' marker'lıdır.",
 ]
