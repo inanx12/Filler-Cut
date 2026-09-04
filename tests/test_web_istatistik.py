@@ -267,7 +267,7 @@ class TestRevealApi:
         self, client: TestClient, ev: Path
     ) -> None:
         hedef = ev / "video_temiz.mp4"
-        with patch("fillercut.web.fs.subprocess.Popen") as m_popen:
+        with patch("fillercut.surec.subprocess.Popen") as m_popen:
             r = client.post("/api/reveal", json={"path": str(hedef)})
         assert r.status_code == 200
         assert r.json()["yol"] == str(hedef.resolve())
@@ -277,13 +277,13 @@ class TestRevealApi:
     def test_ev_disi_yol_403(self, client: TestClient, tmp_path: Path) -> None:
         disari = tmp_path / "disari.mp4"
         disari.write_bytes(b"x")
-        with patch("fillercut.web.fs.subprocess.Popen") as m_popen:
+        with patch("fillercut.surec.subprocess.Popen") as m_popen:
             r = client.post("/api/reveal", json={"path": str(disari)})
         assert r.status_code == 403
         m_popen.assert_not_called()  # hapis dışı yol için süreç açılmaz
 
     def test_traversal_403(self, client: TestClient, ev: Path) -> None:
-        with patch("fillercut.web.fs.subprocess.Popen") as m_popen:
+        with patch("fillercut.surec.subprocess.Popen") as m_popen:
             r = client.post("/api/reveal", json={"path": str(ev / ".." / "x.mp4")})
         assert r.status_code == 403
         m_popen.assert_not_called()
@@ -306,7 +306,7 @@ class TestRevealApi:
         self, client: TestClient, ev: Path
     ) -> None:
         with patch(
-            "fillercut.web.fs.subprocess.Popen", side_effect=OSError("bulunamadı")
+            "fillercut.surec.subprocess.Popen", side_effect=OSError("bulunamadı")
         ):
             r = client.post("/api/reveal", json={"path": str(ev / "video_temiz.mp4")})
         assert r.status_code == 500

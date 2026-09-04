@@ -24,6 +24,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from fillercut import surec
 from fillercut.models import Segment
 
 #: Eşik sabitleri — config'e v0.2'de taşınacak (DESIGN.md §6).
@@ -130,7 +131,7 @@ def detect_silence(
         raise SilenceDetectionError("ffmpeg bulunamadı — PATH'e kurulu olmalı")
 
     try:
-        proc = subprocess.run(
+        proc = surec.kos(
             build_command(src),
             capture_output=True,
             text=True,

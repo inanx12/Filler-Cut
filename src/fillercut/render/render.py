@@ -41,6 +41,7 @@ from pathlib import Path
 
 from rich.progress import Progress
 
+from fillercut import surec
 from fillercut.models import CutPlan, Segment
 
 #: Hata mesajında gösterilecek maksimum stderr uzunluğu.
@@ -128,7 +129,7 @@ def build_concat_command(list_path: Path, output_path: Path) -> list[str]:
 def _run_ffmpeg(cmd: list[str], *, adim: str, timeout: float) -> None:
     """Tek ffmpeg çağrısı; hatayı `adim` + stderr kuyruğuyla RenderError'a çevirir."""
     try:
-        proc = subprocess.run(
+        proc = surec.kos(
             cmd,
             capture_output=True,
             text=True,

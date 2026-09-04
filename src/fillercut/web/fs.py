@@ -20,7 +20,6 @@ from __future__ import annotations
 import logging
 import os
 import stat as stat_mod
-import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -29,6 +28,7 @@ from typing import cast
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 
+from fillercut import surec
 from fillercut.config import ConfigError
 
 _log = logging.getLogger(__name__)
@@ -503,7 +503,7 @@ def reveal(istek: RevealIstek, request: Request) -> dict[str, object]:
             ),
         )
     try:
-        subprocess.Popen(komut)  # noqa: S603 - sabit komut + hapisten geçmiş yol
+        surec.baslat(komut)  # sabit komut + hapisten geçmiş yol
     except OSError as exc:
         raise HTTPException(
             status_code=500, detail=f"Dosya yöneticisi açılamadı: {exc}"

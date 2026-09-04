@@ -44,6 +44,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from fillercut import surec
 from fillercut.config import EncoderConfig, RenderConfig
 
 #: Config'deki kısa isim → ffmpeg encoder adı. Codec ailesi v0.2'de h264'te
@@ -224,7 +225,7 @@ def probe_encoder(name: str, *, timeout: float = PROBE_TIMEOUT) -> ProbeAttempt:
     """
     ffmpeg_name = ENCODER_MAP[name]
     try:
-        proc = subprocess.run(
+        proc = surec.kos(
             build_probe_command(ffmpeg_name),
             capture_output=True,
             text=True,

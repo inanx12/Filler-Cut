@@ -36,6 +36,8 @@ from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
 
+from fillercut import surec
+
 #: Hata mesajında gösterilecek maksimum stderr uzunluğu (probe.py deseni).
 _STDERR_TAIL = 400
 
@@ -265,7 +267,7 @@ def probe_medya(path: str | Path, *, timeout: float = 60.0) -> MedyaBilgisi:
         raise MedyaHatasi("ffprobe bulunamadı — ffmpeg ile birlikte PATH'e kurulu olmalı")
 
     try:
-        proc = subprocess.run(
+        proc = surec.kos(
             build_command(src),
             capture_output=True,
             text=True,

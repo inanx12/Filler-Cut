@@ -13,6 +13,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from fillercut import surec
+
 #: ASR backend'lerinin beklediği örnekleme hızı (Hz).
 SAMPLE_RATE = 16_000
 #: Analiz için mono yeterli.
@@ -86,7 +88,7 @@ def extract_audio(
     cmd = build_command(src, dst)
 
     try:
-        proc = subprocess.run(
+        proc = surec.kos(
             cmd,
             capture_output=True,
             text=True,

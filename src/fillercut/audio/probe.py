@@ -14,6 +14,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from fillercut import surec
+
 #: Hata mesajında gösterilecek maksimum stderr uzunluğu.
 _STDERR_TAIL = 400
 
@@ -72,7 +74,7 @@ def probe_duration_ms(path: str | Path, *, timeout: float = 60.0) -> int:
         raise ProbeError("ffprobe bulunamadı — ffmpeg ile birlikte PATH'e kurulu olmalı")
 
     try:
-        proc = subprocess.run(
+        proc = surec.kos(
             build_command(src),
             capture_output=True,
             text=True,

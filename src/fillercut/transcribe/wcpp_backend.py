@@ -36,6 +36,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from fillercut import surec
 from fillercut.models import Word
 from fillercut.transcribe.base import Transcriber
 
@@ -249,7 +250,7 @@ class WhisperCppTranscriber(Transcriber):
             prefix = Path(tmp_str) / _OUT_PREFIX
             cmd = build_command(self.binary, model, src, prefix, language=self.language)
             try:
-                proc = subprocess.run(
+                proc = surec.kos(
                     cmd,
                     capture_output=True,
                     text=True,
