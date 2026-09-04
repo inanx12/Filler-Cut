@@ -1458,3 +1458,57 @@ maliyeti ayrıca ölçülmeli, bu kayıtta ölçülmedi.
   Listesi'ne girmesinin sebebidir.
 - **Referans:** `packaging/fillercut.iss` `[InstallDelete]`; kilit
   `tests/test_kurucu.py::TestYukseltmeTemizligi`.
+
+## KI-16 — Konsolsuz exe'de çocuk süreçler boş konsol penceresi açıyordu — **Çözüldü (v1.2.4)**
+
+- **Çözüm (2026-09-04):** Alt süreç başlatmanın tek kapısı `fillercut/surec.py`
+  (`kos` / `baslat`); Windows'ta `CREATE_NO_WINDOW` bayrağı eklenir. Sekiz
+  çağrı yeri oradan geçer, statik AST taraması kaçağı kilitler.
+
+- **Belirti:** Native pencere düzgün açılıyor, ama bir video işlenirken
+  **TRANSCRIBE ve RENDER** aşamalarında ekranda **boş siyah pencereler**
+  sürekli açılıp kapanıyordu.
+- **Neden:** `console=False` build'in konsolu YOKTUR. Windows, konsolu olmayan
+  bir süreç **console-subsystem** bir çocuk doğurduğunda o çocuğa **yeni bir
+  konsol ayırır** ve penceresini gösterir. Filler-Cut'ın çocukları (ffmpeg,
+  ffprobe, whisper-cli) console subsystem'dir; çıktıları PIPE'a gittiği için
+  pencereler **boş** görünür. Konsollu koşuda çocuk ebeveynin konsolunu
+  **miras alır**, yeni pencere açılmaz — kusur bu yüzden geliştirmede ve
+  CLI'de hiç görünmedi.
+- **Kapsam:** v1.2.0'dan beri vardı ama frozen exe KI-11 (hiç açılmıyordu)
+  ve KI-12 (tarayıcıya düşüyordu) yüzünden bu aşamalara **hiç gelememişti**.
+  İlk kez v1.2.3'te gerçek kullanıcıda görüldü. `pip install` ile kuranlar
+  ve CLI kullanıcıları etkilenmedi.
+- **Neden merkezî çözüm, call-site yaması değil:** asıl risk bugünkü sekiz
+  çağrı değil, **yarın eklenecek dokuzuncusudur**. Kilit
+  `tests/test_surec.py::TestTekKapi` paket ağacını **AST ile** tarar ve
+  `surec.py` dışında çıplak bir `subprocess.run`/`Popen` bulursa kırmızıya
+  döner. **Satır taraması bu repoda işe yaramaz:** `subprocess.run` ifadesi
+  docstring ve yorumlarda onlarca kez geçer (v0.3.2 decode sözleşmesi
+  anlatılıyor). Tarayıcının kendi kilidi de vardır (sahte ihlal yakalanır,
+  docstring metni sayılmaz).
+- **FROZEN ŞARTI YOK — bilinçli, kilit testli.** Bayrak `win32`de her koşuda
+  konur, "paketlenmiş miyiz" diye sorulmaz. Konsollu koşuda zararsızdır
+  (çocuğun çıktısı zaten `capture_output` ile PIPE'a alınıyor, kimse çocuğun
+  konsolunu okumuyor) ve iki farklı çalışma-anı davranışı tutmak ancak
+  kullanıcıda görülen bir kusur sınıfı doğurur — bu modülün varlık sebebi
+  tam olarak odur.
+- **İNVARİANT: bayrak yönlendirmeyi DEĞİŞTİRMEZ** (söz değil, ölçüm):
+  `silencedetect` stderr'den okunmaya devam ediyor (re-anchor çalıştı: 7/21
+  kelime çapalandı), whisper-cli çıktısı PIPE'tan geliyor, `pytest -m ffmpeg`
+  8 passed / 6 skipped (yalnız NVENC+QSV donanım yokluğu, bu makine AMD),
+  `pytest -m wcpp` 3 passed (gerçek Vulkan koşusu). Test1.mp4 uçtan uca:
+  çıktı SHA-256 `F5185E7E…D89004` — kayıtlı parite referansıyla **birebir**.
+- **A/B ölçümü (gözcü, aynı ebeveyn ve aynı çocuk sayısı):** `pythonw`
+  altından **bayraksız** 12 ffmpeg çağrısı → **13 görünür konsol penceresi**
+  (biri başlığında ffmpeg.exe yolunu taşıyor); `surec.kos` ile aynı koşu →
+  **0 pencere**. Bu makinede konsol host'u Windows Terminal olduğu için
+  pencere sınıfı `CASCADIA_HOSTING_WINDOW_CLASS`tır (klasik
+  `ConsoleWindowClass` değil) — gözcü ikisini de sayar.
+- **Gerçek doğrulama:** kurulu v1.2.4 UI'ında Test1.mp4 uçtan uca koşuldu,
+  koşu boyunca **2372 örnekte 0 yeni konsol penceresi**; üretilen MP4 yine
+  referans hash'iyle aynı.
+- **Referans:** `src/fillercut/surec.py`; çağrı yerleri `audio/extractor.py`,
+  `audio/probe.py`, `audio/silence.py`, `export/medya.py`, `render/encoder.py`,
+  `render/render.py`, `transcribe/wcpp_backend.py`, `web/fs.py`. Kilitler
+  `tests/test_surec.py` (14 test).

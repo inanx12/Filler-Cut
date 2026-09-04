@@ -149,6 +149,62 @@ kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
 ## Mevcut Durum (2026-09-02)
 
+**v1.2.4 HOTFIX TAMAMLANDI (2026-09-04) — konsolsuz exe'de boş konsol
+pencereleri (KI-16).** Sürüm 1.2.3 → **1.2.4**. Push/tag/release YOK.
+
+**Kök neden.** `console=False` sürecin konsolu yoktur; Windows böyle bir
+sürecin **console-subsystem** çocuğuna (ffmpeg, ffprobe, whisper-cli) **yeni
+bir konsol ayırır** ve penceresini gösterir. Çıktı PIPE'a gittiği için
+pencereler boştur: iş koşarken TRANSCRIBE ve RENDER boyunca boş siyah
+pencereler açılıp kapanır. Konsollu koşuda çocuk ebeveynin konsolunu miras
+alır — kusur bu yüzden geliştirmede ve CLI'de hiç görünmedi. v1.2.0'dan beri
+vardı; frozen exe KI-11/KI-12 yüzünden bu aşamalara hiç gelememişti.
+
+**TEK KAPI — `fillercut/surec.py`.** `kos` (run) ve `baslat` (Popen), Windows'ta
+`CREATE_NO_WINDOW` ekler. Sekiz çağrı yeri buradan geçer. Call-site yamalamak
+YERİNE merkez seçildi: asıl risk bugünkü sekiz çağrı değil, yarın eklenecek
+dokuzuncusudur.
+
+**STATİK KİLİT AST İLEDİR — satır taraması bu repoda ÇALIŞMAZ.**
+`subprocess.run` ifadesi docstring/yorumlarda onlarca kez geçer (v0.3.2
+decode sözleşmesi anlatılıyor); satır bazlı tarama sadece yanlış-pozitif
+üretirdi. `tests/test_surec.py::TestTekKapi` `ast.walk` ile
+`subprocess.<api>(...)` çağrı düğümlerini arar ve tarayıcının kendisini de
+kilitler (sahte ihlal yakalanmalı, docstring metni sayılmamalı).
+
+**FROZEN ŞARTI YOK (bilinçli, kilit testli).** Bayrak `win32`de her koşuda
+konur. Konsollu koşuda zararsızdır (çocuğun çıktısı zaten `capture_output`
+ile PIPE'a alınıyor) ve iki farklı çalışma-anı davranışı tutmak, ancak
+kullanıcıda görülen bir kusur sınıfı doğurur.
+
+**İNVARİANT ÖLÇÜLDÜ, SÖZLE GEÇİLMEDİ:** `-m ffmpeg` 8 passed / 6 skipped
+(yalnız NVENC+QSV donanım yokluğu — bu makine AMD), `-m wcpp` 3 passed
+(gerçek whisper-cli/Vulkan), korpus GT yeşil. Test1.mp4 uçtan uca:
+`silencedetect` yine **stderr'den** okundu (re-anchor 7/21 kelime), wcpp
+PIPE'tan, encoder `h264_amf`; çıktı SHA-256 `F5185E7E…D89004` — kayıtlı
+parite referansıyla **birebir aynı**.
+
+**A/B ÖLÇÜMÜ (gözcü betiği, aynı ebeveyn + aynı çocuk sayısı):**
+`pythonw` altından **bayraksız** 12 ffmpeg çağrısı → **13 görünür konsol
+penceresi**; `surec.kos` ile → **0**. Kurulu v1.2.4 UI'ında Test1.mp4 uçtan
+uca: **2372 örnekte 0 yeni pencere**, MP4 yine referans hash'inde.
+
+**Tuzak (bir sonraki agent için):**
+- **Konsol penceresinin sınıfı makineye göre değişir.** Windows Terminal
+  varsayılan host ise sınıf `CASCADIA_HOSTING_WINDOW_CLASS`tır, klasik
+  `ConsoleWindowClass` DEĞİL. Konsol penceresi arayan bir teşhis ikisini de
+  saymalı (bu makinede gözlenen sınıf Terminal'inkiydi).
+- **`CREATE_NO_WINDOW` konsolu kaldırmaz, PENCERESİNİ kaldırır.** Çocuk yine
+  kendi konsolunu alır; stdout/stderr yönlendirmesi ve `silencedetect`in
+  stderr'i etkilenmez. `DETACHED_PROCESS` ile karıştırılmamalı — o, konsolu
+  komple keser ve `CREATE_NEW_CONSOLE` ile birlikte verilirse bayrak yok
+  sayılır.
+- **Test mock'ları `subprocess.run`'a global yamalanıyor** (`patch("subprocess.run")`),
+  o yüzden kapı üzerinden geçmek onları bozmadı. Ama `web/fs.reveal` testleri
+  modül yoluna yamalıyordu (`fillercut.web.fs.subprocess.Popen`) ve
+  `fillercut.surec.subprocess.Popen`e taşınmak zorunda kaldı — kapıyı
+  değiştiren, modül-yollu mock'ları da taşımalı.
+
 **v1.2.3 HOTFIX TAMAMLANDI (2026-09-04) — frozen native yolu (KI-12/13/14/15).**
 Sürüm 1.2.2 → **1.2.3**. Push/tag/release YOK — İnan onaylar.
 
