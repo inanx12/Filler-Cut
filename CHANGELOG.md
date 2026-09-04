@@ -7,6 +7,39 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [1.2.4] — 2026-09-04
+
+**Hotfix: iş koşarken ekranda boş siyah pencereler açılıp kapanıyordu.**
+
+v1.2.3 masaüstü penceresini düzeltti; bu sürüm o pencerede **iş koşarken**
+görülen rahatsızlığı gideriyor. Kesim sonuçları değişmedi — üretilen video
+bit düzeyinde aynıdır.
+
+### Düzeltildi — boş konsol pencereleri (KI-16)
+
+- Bir video işlenirken **Transkript** ve **Render** aşamalarında ekranda boş
+  siyah pencereler açılıp kapanıyordu. Filler-Cut'ın kullandığı yardımcı
+  programlar (ffmpeg, ffprobe, whisper.cpp) artık **penceresiz** başlatılıyor.
+- Yalnızca masaüstü uygulamasında görülüyordu; komut satırından
+  (`fillercut video.mp4`) koşanlar etkilenmiyordu.
+- **Çıktı birebir aynı:** düzeltme yalnızca pencerenin çizilip çizilmemesiyle
+  ilgilidir; kesim planı, transkript ve video dosyası değişmez. Referans
+  klipte üretilen MP4'ün SHA-256'sı düzeltme öncesiyle **aynı** çıktı.
+
+### Testler
+
+- `tests/test_surec.py` (14 test): bayrak kararının birim kilidi + paket
+  ağacının **AST taraması** — `fillercut/surec.py` dışında doğrudan süreç
+  başlatan bir çağrı kalırsa test kırmızıya döner. Yarın eklenecek bir çağrı
+  bu düzeltmeyi sessizce atlayamaz.
+- Gerçek donanım koşuları (`-m ffmpeg`, `-m wcpp`) ve uçtan uca video
+  koşusu yeşil; sessizlik tespiti ve transkript yolları değişmedi.
+
+### Süreç
+
+- `AGENTS.md` Release Kontrol Listesi'ne madde: kurulu exe'de iş koşarken
+  **konsol penceresi yanıp sönmemeli**.
+
 ## [1.2.3] — 2026-09-04
 
 **Hotfix: masaüstü uygulaması artık gerçekten bir masaüstü uygulaması.**
@@ -459,6 +492,7 @@ sınırlar: `experiments/pywebview_spike/README.md`.
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
 
+[1.2.4]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.4
 [1.2.3]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.3
 [1.2.2]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.2
 [1.2.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.1

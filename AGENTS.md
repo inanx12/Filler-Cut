@@ -133,14 +133,19 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
    Yöneticisi'nde `fillercut*` süreci KALMAMALI ve 8765 dinlenmemeli →
    yeniden aç. Çalışırken kısayola ikinci kez basınca var olan pencere öne
    gelmeli (yeni süreç doğmamalı). KI-13 + KI-14.
-8. **MANUEL — bir gerçek video uçtan uca işlenir** (kurulu exe ile, repo'dan
+8. **MANUEL — iş koşarken ekranda KONSOL PENCERESİ yanıp sönmemeli.**
+   TRANSCRIBE ve RENDER aşamalarını gözle izle: boş siyah pencereler
+   açılıp kapanıyorsa bir alt süreç `fillercut.surec` kapısından
+   geçmiyordur (KI-16). Otomatik kilit (`tests/test_surec.py` AST
+   taraması) niyeti tutar, bu madde SONUCU görür.
+9. **MANUEL — bir gerçek video uçtan uca işlenir** (kurulu exe ile, repo'dan
    değil): dosya seçilir, 6 aşama koşar, review ekranı açılır, onaydan
    sonra çıktı yazılır.
-9. Tag + push + Release (`release.yml` Release'i CHANGELOG'dan kendi açar).
+10. Tag + push + Release (`release.yml` Release'i CHANGELOG'dan kendi açar).
 
-**Kural:** 5-8 insan gözüyle yapılır ve sonucu ana sohbete yazılır.
-"Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-15'e
-kadar beş kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
+**Kural:** 5-9 insan gözüyle yapılır ve sonucu ana sohbete yazılır.
+"Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
+kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
 ## Mevcut Durum (2026-09-02)
 
