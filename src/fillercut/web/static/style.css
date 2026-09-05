@@ -587,7 +587,12 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   object-fit: contain;
 }
 
-#bos-durum { margin: auto 0; width: 100%; }
+/* Boş durum dikeyde ortalanır AMA taşarsa üstten başlar: `safe`
+   olmadan, içerik kaptan uzunken `margin:auto` üst kenarı ERİŞİLEMEZ
+   kılıyordu — kurulu pencerede dropzone ve karşılama metni hiç
+   görünmüyordu, liste ortadan başlıyordu (ölçüldü). */
+.sahne { justify-content: safe center; }
+#bos-durum { width: 100%; }
 
 .oynatici-alt {
   flex: none;
