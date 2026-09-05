@@ -32,6 +32,7 @@ from fillercut.config import Config
 from fillercut.pipeline import run as pipeline_run
 from fillercut.web import fs, geri_bildirim, jobs
 from fillercut.web import kurulum as kurulum_mod
+from fillercut.web import medya as medya_mod
 from fillercut.web.jobs import Job, JobKayit, JobOzet, Kosucu
 from fillercut.web.waveform import peaks_from_wav
 
@@ -112,6 +113,7 @@ def create_app(
     izinli_kokler: list[Path] | None = None,
     kayit: JobKayit | None = None,
     kurulum: kurulum_mod.KurulumYoneticisi | None = None,
+    medya: medya_mod.MedyaOnbellek | None = None,
 ) -> FastAPI:
     """Filler-Cut web uygulamasını kurar (sunucu başlatmadan).
 
@@ -144,6 +146,10 @@ def create_app(
         kurulum: İlk-çalıştırma sihirbazının yöneticisi (v1.2 Faz 2);
             verilmezse gerçek indirme motoruyla kurulur. Testler sahte
             indiricili bir yönetici enjekte eder — gerçek ağ YOK.
+        medya: Medya önizleme önbelleği (v1.3.0 Dalga A) — peaks + süre İŞ
+            BAŞLAMADAN, arka planda hesaplanır ve dosya başına önbelleklenir.
+            Verilmezse gerçek ffmpeg üreticisiyle kurulur; testler sahte
+            üretici enjekte eder — route testlerinde gerçek ffmpeg YOK.
 
     Returns:
         Yapılandırılmış FastAPI uygulaması; ``app.state.config`` config'i taşır.
@@ -171,6 +177,7 @@ def create_app(
     kurulum_yoneticisi = (
         kurulum if kurulum is not None else kurulum_mod.KurulumYoneticisi(cfg)
     )
+    medya_onbellegi = medya if medya is not None else medya_mod.onbellek_kur()
 
     @asynccontextmanager
     async def _yasam(_: FastAPI) -> AsyncIterator[None]:
@@ -182,6 +189,8 @@ def create_app(
         # sonraki açılış kaldığı yerden devam eder (indirme motoru sözleşmesi).
         job_kayit.kapat()
         kurulum_yoneticisi.kapat()
+        # Bekleyen peaks hesabı iptal; koşan ffmpeg yarıda kesilmez (jobs deseni).
+        medya_onbellegi.kapat()
 
     app = FastAPI(
         title="Filler-Cut UI",
@@ -195,6 +204,7 @@ def create_app(
     app.state.fs_izinli_kokler_cozucu = fs_kok_cozucu
     app.state.kayit = job_kayit
     app.state.kurulum = kurulum_yoneticisi
+    app.state.medya = medya_onbellegi
 
     # Windows'ta registry .js/.css için yanlış MIME dönebilir (text/plain) —
     # tarayıcı stylesheet'i reddeder. Tipler açıkça sabitlenir (idempotent).
@@ -203,6 +213,7 @@ def create_app(
 
     app.include_router(fs.router)
     app.include_router(jobs.router)
+    app.include_router(medya_mod.router)
     app.include_router(kurulum_mod.router)
     app.include_router(geri_bildirim.router)
 

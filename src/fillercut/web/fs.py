@@ -18,6 +18,7 @@ attribute) atlanır.
 from __future__ import annotations
 
 import logging
+import mimetypes
 import os
 import stat as stat_mod
 import sys
@@ -42,6 +43,20 @@ VIDEO_UZANTILARI = frozenset({".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v"})
 TUM_SURUCULER = "*"
 
 router = APIRouter()
+
+
+def medya_mime(hedef: Path) -> str:
+    """Video servis eden uçların ORTAK MIME kararı.
+
+    İki uç var (``GET /api/jobs/{id}/video`` ve ``GET /api/medya/video``) ve
+    ikisi de aynı dosyayı aynı oynatıcıya verir; ayrı ayrı tahmin etmeleri
+    "aynı dosya bir uçta oynuyor, diğerinde oynamıyor" sınıfı bir kusur
+    üretirdi. Tanınmayan uzantıda ``application/octet-stream``: tarayıcı o
+    hâlde de Range ile okur, yalnız codec tahminini kendi yapar.
+    """
+    tur, _ = mimetypes.guess_type(hedef.name)
+    return tur or "application/octet-stream"
+
 
 
 class DizinGirdisi(BaseModel):

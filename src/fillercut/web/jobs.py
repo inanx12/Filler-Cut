@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import mimetypes
 import threading
 import time
 from collections.abc import AsyncIterator, Callable
@@ -664,8 +663,7 @@ def job_video(job_id: str, request: Request) -> FileResponse:
     )
     if hedef is None or not hedef.is_file():
         raise HTTPException(status_code=404, detail="Video dosyası bulunamadı.")
-    tur, _ = mimetypes.guess_type(hedef.name)
-    return FileResponse(hedef, media_type=tur or "application/octet-stream")
+    return FileResponse(hedef, media_type=fs.medya_mime(hedef))
 
 
 @router.get("/api/jobs/{job_id}/peaks")
