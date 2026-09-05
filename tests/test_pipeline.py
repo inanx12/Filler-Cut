@@ -1026,6 +1026,147 @@ class TestReviewCbParity:
         assert katmanlar.json.call_args.kwargs["duzenleme"] is None
 
 
+class TestReviewKarariCiktiKanali:
+    """v1.3.0 Dalga A — çıktı kolu review KARARINDAN da gelebilir (EKLEMELİ).
+
+    **Neden.** Yeni arayüzde format "Render Al"a basılınca sorulur, analizden
+    ÖNCE değil (onaylanmış varyant 1). Pipeline ise ``cfg.cikti``yı review
+    kancasından SONRA okur ve ``Config`` frozen'dır — karardan pipeline'a
+    formatı taşıyacak bir kanal yoktu.
+
+    **Sözleşme:** ``ReviewKarari.cikti``/``srt`` ``None`` ise config geçerlidir
+    (v1.2.1 davranışı BİREBİR korunur); dolu ise kararı EZER. Alanlar
+    ``None`` varsayılanlı olduğu için CLI yolu ve mevcut web yolu hiç
+    değişmez — parity kilitleri (``TestReviewCbParity``) buna tanıktır.
+
+    **Encoder probe'u:** ``review_cb`` varken format daha bilinmediği için
+    probe KOŞAR (aksi hâlde kullanıcı XML'den MP4'e dönünce
+    ``encoder_secimi is None`` assert'i patlardı). ``review_cb`` yokken
+    v1.2.1 kuralı aynen: XML kolunda probe yok.
+    """
+
+    @staticmethod
+    def _medya() -> MedyaBilgisi:
+        return MedyaBilgisi(
+            kare=Kare(pay=60, payda=1),
+            genislik=1920,
+            yukseklik=1080,
+            ses_kanali=2,
+            ses_hizi=48000,
+            sure_ms=TOPLAM_MS,
+        )
+
+    def _kos(
+        self, girdi: Path, katmanlar: Any, *, karar: ReviewKarari, **cfg: Any
+    ) -> PipelineResult:
+        with patch("fillercut.pipeline.probe_medya", return_value=self._medya()):
+            return run(
+                girdi,
+                config=Config(yes=False, **cfg),
+                transcriber=_SahteTranscriber(katmanlar.sira),
+                review_cb=lambda _b: karar,
+            )
+
+    # ── kararın config'i ezmesi ──────────────────────────────────────────────
+
+    def test_kararda_xml_configde_mp4_render_kosmaz(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        """Asıl vaka: iş mp4 varsayılanıyla başladı, kullanıcı XML seçti."""
+        sonuc = self._kos(
+            girdi, katmanlar, karar=ReviewKarari(plan=PLAN, cikti="xml"), cikti="mp4"
+        )
+        katmanlar.render.assert_not_called()
+        assert "render" not in katmanlar.sira
+        assert sonuc.cikti == "xml"
+        assert sonuc.output_path == girdi.parent / "video.xml"
+        assert sonuc.output_path.is_file()
+
+    def test_kararda_mp4_configde_xml_render_kosar(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        """Ters kombinasyon — probe koşmasaydı burada assert patlardı."""
+        sonuc = self._kos(
+            girdi, katmanlar, karar=ReviewKarari(plan=PLAN, cikti="mp4"), cikti="xml"
+        )
+        katmanlar.render.assert_called_once()
+        assert sonuc.cikti == "mp4"
+        assert sonuc.output_path == girdi.parent / "video_temiz.mp4"
+
+    def test_kararda_srt_configde_kapali_altyazi_yazilir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        sonuc = self._kos(
+            girdi, katmanlar, karar=ReviewKarari(plan=PLAN, srt=True), srt=False
+        )
+        assert sonuc.srt_path is not None and sonuc.srt_path.is_file()
+
+    # ── None = config geçerli (geriye uyum) ─────────────────────────────────
+
+    def test_kararda_none_configde_xml_config_gecerli(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        sonuc = self._kos(girdi, katmanlar, karar=ReviewKarari(plan=PLAN), cikti="xml")
+        katmanlar.render.assert_not_called()
+        assert sonuc.cikti == "xml"
+
+    def test_kararda_none_configde_mp4_config_gecerli(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        sonuc = self._kos(girdi, katmanlar, karar=ReviewKarari(plan=PLAN), cikti="mp4")
+        katmanlar.render.assert_called_once()
+        assert sonuc.cikti == "mp4"
+
+    def test_kararda_srt_none_configde_acik_altyazi_yazilir(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        sonuc = self._kos(girdi, katmanlar, karar=ReviewKarari(plan=PLAN), srt=True)
+        assert sonuc.srt_path is not None and sonuc.srt_path.is_file()
+
+    def test_kararda_srt_false_configde_acik_altyazi_yazilmaz(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        """``False`` ``None`` DEĞİLDİR: kullanıcı kutuyu boşalttıysa yazılmaz."""
+        sonuc = self._kos(girdi, katmanlar, karar=ReviewKarari(plan=PLAN, srt=False), srt=True)
+        assert sonuc.srt_path is None
+
+    # ── encoder probe'unun kapsamı ──────────────────────────────────────────
+
+    def test_review_cb_varken_xml_configde_bile_probe_kosar(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        """Format daha bilinmiyor: kullanıcı MP4'e dönebilir, probe hazır olmalı."""
+        self._kos(girdi, katmanlar, karar=ReviewKarari(plan=PLAN, cikti="xml"), cikti="xml")
+        katmanlar.select_encoder.assert_called_once()
+
+    def test_review_cb_yokken_xml_kolunda_probe_yok(
+        self, girdi: Path, katmanlar: Any
+    ) -> None:
+        """v1.2.1 kuralı regresyon kilidi — CLI'de boşa 4 ffmpeg koşusu yok."""
+        with patch("fillercut.pipeline.probe_medya", return_value=self._medya()):
+            run(
+                girdi,
+                config=Config(yes=True, cikti="xml"),
+                transcriber=_SahteTranscriber(katmanlar.sira),
+            )
+        katmanlar.select_encoder.assert_not_called()
+
+    def test_gecersiz_cikti_degeri_reddedilir(self, girdi: Path, katmanlar: Any) -> None:
+        """Kanal serbest geçiş DEĞİLDİR: bilinmeyen kol pipeline'da ölür."""
+        with pytest.raises(PipelineError) as exc_info:
+            self._kos(girdi, katmanlar, karar=ReviewKarari(plan=PLAN, cikti="avi"))
+        assert "avi" in exc_info.value.mesaj
+        katmanlar.render.assert_not_called()
+
+    def test_iptalde_cikti_alanlari_yok_sayilir(self, girdi: Path, katmanlar: Any) -> None:
+        """``plan=None`` iptaldir; formatın hiçbir anlamı kalmaz."""
+        with pytest.raises(typer.Exit) as exc_info:
+            self._kos(girdi, katmanlar, karar=ReviewKarari(plan=None, cikti="xml"))
+        assert exc_info.value.exit_code == 0
+        katmanlar.render.assert_not_called()
+        katmanlar.json.assert_not_called()
+
+
 class TestPipelineError:
     """_fail artık PipelineError fırlatır: typer.Exit(1) alt sınıfı + `mesaj`.
 

@@ -29,8 +29,12 @@ STATIK = Path(__file__).resolve().parent.parent / "src" / "fillercut" / "web" / 
 VENDOR = STATIK / "vendor"
 
 
-def _kayit() -> dict[str, object]:
-    return json.loads((VENDOR / "vendor.json").read_text(encoding="utf-8"))
+def _paketler() -> list[dict[str, str]]:
+    """`vendor.json`daki paket kayıtları (tipli okuma — mypy strict)."""
+    ham = json.loads((VENDOR / "vendor.json").read_text(encoding="utf-8"))
+    paketler = ham["paketler"]
+    assert isinstance(paketler, list)
+    return [p for p in paketler if isinstance(p, dict)]
 
 
 class TestVendorKaydi:
@@ -40,18 +44,16 @@ class TestVendorKaydi:
         assert (VENDOR / "vendor.json").is_file()
 
     def test_her_paket_zorunlu_alanlari_tasir(self) -> None:
-        paketler = _kayit()["paketler"]
-        assert isinstance(paketler, list) and paketler, "vendor.json boş olamaz"
+        paketler = _paketler()
+        assert paketler, "vendor.json boş olamaz"
         for paket in paketler:
-            assert isinstance(paket, dict)
             for alan in ("ad", "surum", "lisans", "kaynak", "dosya", "sha256"):
                 assert paket.get(alan), f"{alan} eksik: {paket}"
 
     def test_dosyalar_ve_sha256_uyusuyor(self) -> None:
         """Kayıt ile disk ayrışırsa kırmızı — bayat vendor sessizce kalmasın."""
-        for paket in _kayit()["paketler"]:
-            assert isinstance(paket, dict)
-            hedef = VENDOR / str(paket["dosya"])
+        for paket in _paketler():
+            hedef = VENDOR / paket["dosya"]
             assert hedef.is_file(), f"vendor dosyası yok: {hedef}"
             okunan = hashlib.sha256(hedef.read_bytes()).hexdigest()
             assert okunan == paket["sha256"], (
@@ -61,18 +63,17 @@ class TestVendorKaydi:
 
     def test_lisans_metni_bulunur(self) -> None:
         """Lisans metni bundle'a girer; yokluğu dağıtım kusurudur."""
-        for paket in _kayit()["paketler"]:
-            assert isinstance(paket, dict)
+        for paket in _paketler():
             lisans = paket.get("lisans_dosyasi")
             if lisans:
-                assert (VENDOR / str(lisans)).is_file()
+                assert (VENDOR / lisans).is_file()
 
 
 class TestWavesurferVendor:
     """Dalga formunu çizen kütüphane UMD olmalı — `app.js` klasik script'tir."""
 
     def test_wavesurfer_kayitli(self) -> None:
-        adlar = [p["ad"] for p in _kayit()["paketler"] if isinstance(p, dict)]
+        adlar = [p["ad"] for p in _paketler()]
         assert "wavesurfer.js" in adlar
 
     def test_global_umd_kabugu(self) -> None:

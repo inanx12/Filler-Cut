@@ -34,6 +34,16 @@ Aşama ADI iki kolda da ``"RENDER"``tır — ``ASAMALAR`` bant dışı kanalın
 sözleşmesidir ve web göstergesi ona bağlıdır. ``config.srt`` ise transkripti
 ayrıca ``<video_adı>.srt`` olarak yazar (iki kolda da çalışır).
 
+ÇIKTI KOLU REVIEW'DAN DA GELEBİLİR (v1.3.0 Dalga A): ``ReviewKarari.cikti`` /
+``.srt`` doluysa config'i EZER, ``None`` ise config geçerlidir — yani alanlar
+EKLEMELİDİR ve CLI davranışı bit-birebir korunur. Gerekçe: yeni arayüzde
+format "Render Al"a basılınca sorulur, iş ise ``cikti="mp4"`` varsayılanıyla
+çoktan başlamıştır; ``Config`` frozen olduğu için kararı buraya taşıyan tek
+kanal review kararıdır. Bunun bedeli, ``review_cb`` bekleyen koşuda encoder
+probe'unun formattan ÖNCE koşmasıdır (kullanıcı XML'den MP4'e dönebilir);
+rapora yazılan ``encoder`` alanı yine yalnız gerçekten encode eden kolda
+dolar (``_encoder_bilgisi``).
+
 Ara WAV `tempfile.TemporaryDirectory`'ye çıkarılır — analiz artığı kullanıcının
 video klasöründe kalmaz; iş bitince/hata olursa temizlik otomatiktir.
 
@@ -70,7 +80,7 @@ from rich.table import Table
 from fillercut.audio.extractor import ExtractionError, extract_audio
 from fillercut.audio.probe import ProbeError, probe_duration_ms
 from fillercut.audio.silence import SilenceDetectionError, detect_silence
-from fillercut.config import AsrConfig, Config
+from fillercut.config import CIKTI_SECENEKLERI, AsrConfig, Config
 from fillercut.detect.fillers import count_aday_fillers, detect_fillers
 from fillercut.detect.silence import filter_silence
 from fillercut.export.fcp7 import write_fcp7_xml
@@ -78,7 +88,11 @@ from fillercut.export.medya import MedyaHatasi, probe_medya
 from fillercut.export.srt import write_srt
 from fillercut.models import CutPlan, Segment
 from fillercut.plan.cutplan import CutPlanError, build_cutplan, filter_cutplan
-from fillercut.render.encoder import build_encode_args, select_encoder
+from fillercut.render.encoder import (
+    EncoderSelection,
+    build_encode_args,
+    select_encoder,
+)
 from fillercut.render.render import RenderError, render
 from fillercut.report.html_report import build_interactive_html, write_html_report
 from fillercut.report.json_report import (
@@ -141,10 +155,23 @@ class ReviewKarari:
     ile çıkar (konsol/interaktif review'un ret yolunun aynısı). Plan verilirse
     RENDER onu uygular ve rapor.json UYGULANMIŞ plandan yazılır — ``duzenleme``
     özeti "kullanıcı neyi değiştirdi" sorusunu raporda ayrı tutar.
+
+    **Çıktı kolu kararla da gelebilir (v1.3.0 Dalga A).** Yeni arayüzde format
+    "Render Al"a basılınca sorulur, analizden ÖNCE değil: iş ``cikti="mp4"``
+    varsayılanıyla başlar, kullanıcı kesimleri gördükten sonra MP4/XML ve SRT
+    seçer. ``Config`` frozen olduğu için kararı pipeline'a taşıyacak kanal
+    burasıdır. **Alanlar EKLEMELİDİR:** ``None`` "config geçerli" demektir,
+    yani CLI yolu ve v1.2.1 web yolu bit-birebir korunur.
     """
 
     plan: CutPlan | None
     duzenleme: EditOzeti | None = None
+    #: ``None`` → ``config.cikti`` geçerli. Dolu ise config'i EZER
+    #: (``CIKTI_SECENEKLERI`` dışı bir değer pipeline'da temiz hatayla ölür).
+    cikti: str | None = None
+    #: ``None`` → ``config.srt`` geçerli. ``False`` ``None`` DEĞİLDİR:
+    #: kullanıcı kutuyu boşalttıysa config açık olsa bile altyazı yazılmaz.
+    srt: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -165,6 +192,19 @@ class PipelineResult:
     srt_path: Path | None = None
     #: v1.2.1: hangi kol koştu (``config.cikti``) — UI etiketi buna bakar.
     cikti: str = "mp4"
+
+
+def _encoder_bilgisi(secim: EncoderSelection | None, cikti: str) -> EncoderInfo | None:
+    """Rapora yazılacak encoder alanı — YALNIZ gerçekten encode eden kolda dolu.
+
+    İki koşul birden aranır: probe koştu (``secim``) VE çıktı gerçekten
+    encode ediliyor (``cikti == "mp4"``). İkincisi olmadan rapor "şununla
+    encode edildi" diye YALAN söylerdi; v1.3.0'da bu ayrı bir olasılık oldu,
+    çünkü web review'unda probe formattan ÖNCE koşar (bkz. ``probe_gerekli``).
+    """
+    if secim is None or cikti != "mp4":
+        return None
+    return EncoderInfo.from_selection(secim)
 
 
 def default_output_path(input_path: Path) -> Path:
@@ -394,10 +434,17 @@ def run(
     # boşa 4 ffmpeg koşusu ödemek olurdu ve rapordaki `encoder` alanı
     # "şununla encode edildi" diye YALAN söylerdi. Alan zaten opsiyoneldir
     # (v0.1 raporlarıyla uyum), o kolda `None` kalır.
-    encoder_secimi = select_encoder(cfg.encoder) if cfg.cikti == "mp4" else None
-    encoder_bilgisi = (
-        EncoderInfo.from_selection(encoder_secimi) if encoder_secimi is not None else None
-    )
+    #
+    # v1.3.0 Dalga A — web review'unda format DAHA BİLİNMİYOR: kullanıcı
+    # kesimleri gördükten sonra XML'den MP4'e dönebilir ve o an probe yapacak
+    # yer yoktur (RENDER'ın ortası). Bu yüzden `review_cb` bekleyen koşuda
+    # probe her hâlükârda koşar. `yes=True` iken kanca hiç çağrılmaz, karar
+    # da değişemez — orada eski kural aynen geçerlidir.
+    etkin_cikti = cfg.cikti
+    etkin_srt = cfg.srt
+    probe_gerekli = cfg.cikti == "mp4" or (review_cb is not None and not cfg.yes)
+    encoder_secimi = select_encoder(cfg.encoder) if probe_gerekli else None
+    encoder_bilgisi = _encoder_bilgisi(encoder_secimi, etkin_cikti)
 
     # [1] EXTRACT öncesi süre — silence parse (kapanmamış sessizlik) ve
     # json_report ikisi de total_ms ister; tek ffprobe ile alınır.
@@ -578,6 +625,21 @@ def run(
             render_plan = web_karari.plan
             rapor_plani = web_karari.plan
             duzenleme = web_karari.duzenleme
+            # v1.3.0: karar formatı da taşıyabilir (None → config geçerli).
+            # Doğrulama BURADA: kanal serbest geçiş değildir, bilinmeyen bir
+            # kol RENDER'ın ortasında sessizce "else" dalına düşmemeli.
+            if web_karari.cikti is not None:
+                if web_karari.cikti not in CIKTI_SECENEKLERI:
+                    _fail(
+                        f"geçersiz çıktı türü: {web_karari.cikti!r} — "
+                        f"geçerli: {', '.join(CIKTI_SECENEKLERI)}"
+                    )
+                etkin_cikti = web_karari.cikti
+            if web_karari.srt is not None:
+                etkin_srt = web_karari.srt
+            # Rapor "şununla encode edildi" derken doğruyu söylemeli: kullanıcı
+            # XML'e döndüyse probe koşmuş olsa bile alan boş kalır.
+            encoder_bilgisi = _encoder_bilgisi(encoder_secimi, etkin_cikti)
             report = build_report(
                 rapor_plani,
                 total_ms,
@@ -647,7 +709,7 @@ def run(
     # yapıldığıdır. XML kolu encode etmez, saf metadata yazar.
     _bildir(progress_cb, "RENDER")
     uretilen: Path
-    if cfg.cikti == "xml":
+    if etkin_cikti == "xml":
         _out.print("[cyan][6/6] NLE PROJESİ[/cyan] — FCP7 XML yazılıyor (render yok)…")
         try:
             medya = probe_medya(src)
@@ -664,7 +726,9 @@ def run(
         except OSError as exc:
             _fail(f"NLE projesi yazılamadı: {exc} — {IPUCU_DISK}")
     else:
-        assert encoder_secimi is not None  # mp4 kolunda run() başında seçildi
+        # mp4 kolunda run() başında seçildi; web review'unda format değişse
+        # bile probe koştuğu için burada HER ZAMAN doludur (probe_gerekli).
+        assert encoder_secimi is not None
         _out.print(
             f"[cyan][6/6] RENDER[/cyan] — encoder: {encoder_secimi.ffmpeg_name} "
             f"(probe: {encoder_secimi.summary})"
@@ -688,7 +752,7 @@ def run(
     # `render_plan` seçilmesi web review'unun düzenlemelerini de kapsar —
     # altyazı, gerçekten üretilen çıktıyla aynı çizgide olmak zorunda.
     yazilan_srt: Path | None = None
-    if cfg.srt:
+    if etkin_srt:
         try:
             yazilan_srt = write_srt(words, srt_yolu, plan=render_plan)
         except OSError as exc:
@@ -715,5 +779,5 @@ def run(
         report=report,
         review_html_path=review_html,
         srt_path=yazilan_srt,
-        cikti=cfg.cikti,
+        cikti=etkin_cikti,
     )
