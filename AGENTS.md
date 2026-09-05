@@ -94,6 +94,18 @@ Bunlar tartışmaya kapalı invarian'lardır; değişiklik önce DESIGN.md'de ya
 
 - **Sınır kayıtları çözülse bile silinmez, 'Çözüldü' işaretlenir.**
 
+- **Pipeline DAVRANIŞINA dokunma yok; eklemeli (additive) karar kanalları
+  serbest.** UI/web dalgalarında sık verilen "pipeline'a dokunma" talimatının
+  kapsamı budur: kesim semantiği, katman sırası, `reason` formatları, rapor
+  alanlarının anlamı ve CLI çıktısı DEĞİŞMEZ. Buna karşılık `run()`'a
+  eklenen, varsayılanı `None`/kapalı olan bir kanal (`progress_cb` v1.0,
+  `review_cb`/`analiz_cb` v1.0 Dilim 2, `ReviewKarari.cikti`/`.srt` v1.3.0)
+  bu yasağın DIŞINDADIR — ölçüt "davranış değişti mi", "dosya değişti mi"
+  değil. Kanıt zorunlu: varsayılan yolda CLI çıktısı bayt-birebir aynı
+  kalmalı (parity kilitleri) ve gerçek koşuda referans hash tutmalı.
+  *(v1.3.0 Dalga A'da bu yorum İnan onayıyla netleşti: dar okuma
+  "format Render Al'da sorulur" onaylı kararını uygulanamaz kılıyordu.)*
+
 ## Release Kontrol Listesi — Tag Atmadan Önce
 
 Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
