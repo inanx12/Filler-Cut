@@ -140,8 +140,15 @@ body[data-asama="sonuc"] .sag-bolum[data-goster~="sonuc"] { display: block; }
 body[data-asama="bos"] #oynatici { display: none; }
 body:not([data-asama="bos"]) #bos-durum { display: none; }
 
-/* Zaman çizelgesi ancak süre bilindiğinde anlamlıdır. */
-body[data-asama="bos"] .alt-timeline { visibility: hidden; }
+/* Zaman çizelgesi ancak süre bilindiğinde anlamlıdır. `display: none`
+   BİLİNÇLİ (`visibility: hidden` değil): görünmez ama yer kaplayan bir şerit
+   boş durumda ~200 px ölü alan bırakıyordu (kurulu pencerede ölçüldü) ve
+   ızgara satırı kalktığında paneller o yüksekliği kullanıyor. */
+body[data-asama="bos"] .alt-timeline { display: none; }
+body[data-asama="bos"] .proje {
+  grid-template-areas: "sol orta sag";
+  grid-template-rows: minmax(0, 1fr);
+}
 
 @media (max-width: 1100px) {
   .proje {
@@ -255,6 +262,12 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   overflow-y: auto;
   scrollbar-width: thin;
 }
+
+/* Boş durumda gezgin listesi KENDİ kaydırmasını bırakır: dıştaki `.sahne`
+   zaten kaydırılabilir ve iç içe iki çubuk kullanıcıyı yanıltıyordu
+   (kurulu pencerede görüldü — dıştaki çubuk listenin kesildiğini
+   gizliyordu). */
+#bos-durum .liste { max-height: none; overflow-y: visible; }
 
 .liste li {
   display: flex;
