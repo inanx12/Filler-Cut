@@ -7,6 +7,37 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [1.3.1] — 2026-09-06
+
+**Kurulu sürümde ikinci bir sürücü (D:\ …) artık gerçekten açılabiliyor.**
+
+### Düzeltildi
+
+- **Kurulu kullanıcı `[ui].izinli_kokler`'i ayarlayamıyordu.** Ayar yalnız
+  `filler-cut.toml`'dan okunuyordu; o bir repo dosyasıdır ve kurulu exe onu
+  hiç bulamaz — yani kurucuyla kuran herkes gezginde ev dizinine kilitliydi
+  ve dışarıdan seçilen video reddediliyordu. İzinli kökler artık kullanıcının
+  kendi yapılandırmasından da okunuyor:
+  `%APPDATA%\fillercut\config.json` içindeki `"ui": {"izinli_kokler": [...]}`.
+  Sihirbazın kurulum anahtarlarına (`binary`/`model`) dokunulmuyor; sihirbaz
+  da artık dosyayı üzerine yazarken bu bölümü koruyor.
+  **Öncelik: `filler-cut.toml` > `config.json`** — toml'da kök varsa
+  `config.json` hiç okunmaz, yani mevcut kurulumların davranışı birebir aynı
+  kalır. Bozuk bir `config.json`, düzenlemeyi sessizce yok saymak yerine
+  dosyanın adını veren açık bir hatayla durdurur.
+- **"İzin verilen konumlar dışında" hatası çözümsüz bir yol gösteriyordu.**
+  Kurulu sürümde mesaj artık `config.json`'un tam yolunu ve olduğu gibi
+  kopyalanabilen (geçerli JSON) örneğini veriyor; ulaşılamayan repo
+  dosyasından bahsetmiyor. pip/kaynak koşusunda `filler-cut.toml` yine doğru
+  cevap olarak gösteriliyor.
+
+### Güvenlik
+
+- **İzinli kök invariant'ı değişmedi:** kökler yalnızca **yerel config
+  dosyalarından** gelir — onları değiştiren bir API ucu ya da CLI bayrağı
+  yoktur. `config.json` da `filler-cut.toml` gibi yerel bir dosyadır, tehdit
+  modeli aynıdır. İnvariant artık ayrıca regresyon kilidiyle korunuyor.
+
 ## [1.3.0] — 2026-09-05
 
 **Artık bir editör: kesimleri oynatırken canlı önizleyin.**
@@ -611,6 +642,7 @@ sınırlar: `experiments/pywebview_spike/README.md`.
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
 
+[1.3.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.1
 [1.3.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.0
 [1.2.4]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.4
 [1.2.3]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.3

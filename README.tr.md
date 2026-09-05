@@ -278,6 +278,23 @@ config_version = 1
 izinli_kokler = ['D:\', 'E:\Videolar']
 ```
 
+**Kurucuyla kurduysanız (elinizde `filler-cut.toml` yoksa):** yukarıdaki
+`.toml` bir repo dosyasıdır, kurulu sürüm onu hiç görmez. Aynı ayarı kendi
+yapılandırmanıza, `%APPDATA%\fillercut\config.json` dosyasına yazın:
+
+```json
+{
+  "ui": { "izinli_kokler": ["D:\\", "E:\\Videolar"] }
+}
+```
+
+Dosya zaten duruyor olabilir (ilk çalıştırma sihirbazı oraya `binary`/`model`
+anahtarlarını yazar) — `"ui"` nesnesini onların YANINA ekleyin, gerisine
+dokunmayın. `filler-cut.toml`'da da kök varsa **`.toml` kazanır**;
+`config.json` yalnızca `.toml` hiç kök vermediğinde okunur. Bozuk bir
+`config.json`, düzenlemenizi sessizce yok saymak yerine `fillercut ui`'yi
+dosyanın adını veren açık bir hatayla durdurur.
+
 Sürücüleri tek tek yazmak istemezseniz `izinli_kokler = ["*"]` **makinedeki
 tüm takılı sürücüleri** izinli yapar; liste her açılışta değil **her istekte**
 tazelenir, yani sonradan taktığınız bir USB disk de kendiliğinden görünür.
@@ -286,7 +303,7 @@ tazelenir, yani sonradan taktığınız bir USB disk de kendiliğinden görünü
 > paylaşımlı ya da güvenmediğiniz bir makinede önerilmez — orada sürücüleri
 > tek tek yazın.
 
-Bu kökler **yalnızca config dosyasından** okunur (arayüzde onları değiştiren
+Bu kökler **yalnızca yerel config dosyalarından** okunur (arayüzde onları değiştiren
 bir düğme yoktur — güvenlik sınırı config'in dışına taşmasın diye). Var
 olmayan bir kök yazarsanız `fillercut ui` açık bir hata verip durur. Birden
 çok kök varsa gezginin üstünde bir kök seçici (Ev / D:\ …) çıkar.

@@ -1617,6 +1617,56 @@ testidir, davranışın kendisi gerçek tarayıcıda ölçüldü.
   `pencere.events.loaded.__iadd__.called` yanlış nesneye bakar. Kayıt
   `mock_calls` izinden doğrulanır.
 
+**v1.3.1 (kurulu kullanıcı için izinli kök yapılandırma kapısı) TAMAMLANDI
+(2026-09-06, bump 1.3.1'in İÇİNDE — tag hâlâ yok).** İnan bunu KURULU exe'de
+yakaladı: `[ui].izinli_kokler` yalnız `filler-cut.toml`'dan okunuyordu, kurulu
+exe ise o repo dosyasını hiç bulamaz — kurucuyla kuran herkes gezginde ev
+dizinine kilitliydi ve hata mesajı ona **ulaşamayacağı** bir dosyayı
+gösteriyordu (çözümsüz tuzak).
+
+**EK OKUMA KAYNAĞI: `%APPDATA%\fillercut\config.json` → `"ui": {"izinli_kokler":
+[...]}`.** C.2'nin "config.json'a karıştırma" kararı sihirbazın KURULUM verisi
+içindi (binary/model yolları); izinli kökler kullanıcı TERCİHİdir ve **ayrı bir
+isim alanında** (`"ui"`) yaşar. Sihirbaz anahtarlarına dokunulmaz.
+
+**ÖNCELİK: proje toml'u > config.json.** Toml doluysa config.json HİÇ okunmaz
+(bozuk olsa bile startup'ı düşürmez). Gerekçe: toml koşunun YANINA açıkça
+konmuş dosyadır ve reponun kendi zinciri de ("CLI > config dosyası > default")
+açık olanı üstte tutar; toml'u zaten olan kurulumda davranış BİREBİR aynı
+kalır. **İki liste BİRLEŞTİRİLMEZ** — birleştirme, toml'dan silinen bir kökün
+makine ayarından geri gelmesi demekti. Boş toml listesi "ayarlanmadı" sayılır.
+
+**GÜVENLİK İNVARİANTI AYNEN DURUYOR:** kökler yalnızca YEREL config
+dosyalarından; kök değiştiren API ucu ya da CLI bayrağı YOK. `config.json` da
+yerel bir dosyadır — tehdit modeli değişmedi. Artık ayrıca **regresyon
+kilidiyle** korunuyor (`TestInvariantRegresyonu`: kök yazan uç yok, `web/`
+altında kök yazan kod yok, `ui --help`'te kök bayrağı yok, gövdeden gelen kök
+isteği hapsi genişletmiyor).
+
+**BOZUK JSON'DA AÇIK HATA — sihirbaz ayarından bilinçli AYRILAN tek davranış.**
+`binary`/`model`'i sihirbaz yazar (bozuğu sessizce yok saymak doğru, üstüne
+yazar); `ui.izinli_kokler`'i kullanıcı ELLE yazar — sessiz yok sayma "ekledim
+ama hâlâ göremiyorum" sınıfı çözümsüz bir tuzaktır. İstek başına çözümde
+(`dogrula=False`) yine sessiz: dosya koşu sırasında bozulsa route 500 değil
+temiz 403 verir. **Bedeli kabul edildi:** elle bozulmuş bir `config.json`
+artık `fillercut ui`'yi startup'ta durdurur (mesaj dosyanın TAM yolunu verir).
+
+**`kurulum_yaz` ARTIK BİLİNMEYEN ANAHTARLARI KORUYOR.** Sıfırdan sözlük
+yazıyordu; kullanıcının `"ui"` bölümü sihirbazın bir sonraki indirmesinde
+SESSİZCE uçardı. Bu, özelliğin sessiz katiliydi — kilit
+`TestUiKokleri::test_sihirbaz_yazmasi_ui_bolumunu_KORUR`.
+
+**403 MESAJI KOŞUYA GÖRE DEĞİŞİYOR** (`fs.kok_genisletme_ipucu`,
+`paketlenmis_mi()`): paketlenmişte `config.json`'un TAM yolu + **geçerli JSON**
+örneği (ters bölü kaçırılır, kullanıcı olduğu gibi kopyalar — kilit örneği
+`json.loads` eder), pip/kaynak koşusunda eskisi gibi `filler-cut.toml`.
+
+**Tuzak (bir sonraki agent için):** `izinli_kokler_coz` SAF kaldı ve
+dokunulmadı; kaynak seçimi ayrı kapıda (`etkin_ham_kokler`) ve ikisini
+`etkin_kokler_coz` birleştiriyor. Yeni bir çağıran eklerken `izinli_kokler_coz`
+DEĞİL `etkin_kokler_coz` kullanılmalı — aksi hâlde kurulu kullanıcının kökleri
+o yolda sessizce görünmez.
+
 **v1.2.1 MİKRO C.2 (izinli_kokler "*" otomatik sürücü modu) TAMAMLANDI
 (2026-09-03, bump 1.2.1'in İÇİNDE — tag hâlâ yok).** `[ui].izinli_kokler`
 içinde `"*"` → makinedeki tüm takılı sürücüler (`os.listdrives`, Py 3.12+
@@ -2037,6 +2087,14 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/geri_bildirim.py` + `app.py` + `static/` — telemetrisiz geri bildirim düğmesi | `6934227` |
 | README ×2 — SmartScreen uyarısı normal + SignPath notu | `bf74afb` |
 | `pyproject.toml` + `test_paketleme_pypi.py` + CHANGELOG + KNOWN_ISSUES — PyPI metadata + **1.2.1 bump** | `9d12381` |
+
+**v1.3.1 (kurulu kullanıcı için izinli kök yapılandırma kapısı)**
+
+| Modül | Commit |
+|---|---|
+| `kurulum/yollar.py` — `config.json`'da `ui.izinli_kokler` okuma (`_ayar_ham_oku`, `ui_izinli_kokler_oku`) + `kurulum_yaz` bilinmeyen anahtarları korur; `test_kurulum_yollar.py::TestUiKokleri` (12 kilit) | `f45e123` |
+| `web/fs.py` + `app.py` + `cli.py` — `etkin_ham_kokler`/`etkin_kokler_coz` öncelik kapısı + `kok_genisletme_ipucu` (403 mesajı); `test_web_kok_ayari.py` (22 kilit) | `17a662e` |
+| README ×2 + CHANGELOG `[1.3.1]` + `pyproject.toml` **1.3.1** + `dist_pypi` (twine check ×2 PASSED) + AGENTS kaydı | `72d4e0a` |
 
 **v1.3.0 pre-release düzeltmesi (sürükleme regresyonu + başlık rengi)**
 

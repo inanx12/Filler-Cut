@@ -275,6 +275,22 @@ config_version = 1
 izinli_kokler = ['D:\', 'E:\Videolar']
 ```
 
+**Installed from the setup wizard (no `filler-cut.toml`)?** The `.toml` above
+is a repo file — an installed copy never sees it. Put the same setting in your
+own config instead, at `%APPDATA%\fillercut\config.json`:
+
+```json
+{
+  "ui": { "izinli_kokler": ["D:\\", "E:\\Videolar"] }
+}
+```
+
+The file may already exist (the first-run wizard writes `binary`/`model` keys
+there) — add the `"ui"` object next to them and leave the rest alone. If
+`filler-cut.toml` also lists roots, **the `.toml` wins**; `config.json` is read
+only when the `.toml` sets none. A broken `config.json` stops `fillercut ui`
+with a clear error naming the file, rather than silently ignoring your edit.
+
 If you'd rather not list drives one by one, `izinli_kokler = ["*"]` allows
 **every mounted drive** on the machine; the list is refreshed **per request**
 (not frozen at startup), so a USB disk plugged in later shows up on its own.
@@ -282,7 +298,7 @@ If you'd rather not list drives one by one, `izinli_kokler = ["*"]` allows
 > ⚠️ **Security:** `"*"` lists all your drives to the localhost UI; it is not
 > recommended on a shared or untrusted machine — list drives individually there.
 
-These roots are read **only from the config file** — there is no UI control
+These roots are read **only from local config files** — there is no UI control
 that changes them, so the security boundary can't be moved from inside the
 page. A nonexistent root makes `fillercut ui` stop with a clear error. With
 more than one root, a root switcher (Ev / D:\ …) appears above the browser.
