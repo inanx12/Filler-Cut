@@ -731,7 +731,18 @@ function dalgaCiz() {
    düzeltmedi; `zoom()` düzeltti ama üstüne ikinci bir tuval katmanı
    ekledi. Tek temiz yol örneği yeniden yaratmaktır — kaydırıcı sürüklenirken
    her karede yeniden yaratmamak için gecikmelidir. */
-let zoomDalgaZamanlayici = null;
+let dalgaGecikmeZamanlayici = null;
+
+function dalgaGecikmeliCiz() {
+  /* Kabın boyutu her değiştiğinde çağrılır (zoom, ayırıcı, pencere). Gecikme
+     ZORUNLU: kaydırıcı ya da ayırıcı sürüklenirken her karede yeniden
+     yaratmak tuval fırtınası olurdu. */
+  if (dalgaGecikmeZamanlayici !== null) clearTimeout(dalgaGecikmeZamanlayici);
+  dalgaGecikmeZamanlayici = window.setTimeout(() => {
+    dalgaGecikmeZamanlayici = null;
+    dalgaCiz();
+  }, 120);
+}
 
 function zoomUygula(yeni) {
   zc.zoom = yeni;
@@ -739,11 +750,7 @@ function zoomUygula(yeni) {
   el("tl-track").style.width = yeni * 100 + "%";
   cetvelCiz();
   playheadTazele();
-  if (zoomDalgaZamanlayici !== null) clearTimeout(zoomDalgaZamanlayici);
-  zoomDalgaZamanlayici = window.setTimeout(() => {
-    zoomDalgaZamanlayici = null;
-    dalgaCiz();
-  }, 120);
+  dalgaGecikmeliCiz(); // → dalgaCiz(): tuval kabıyla birlikte büyümez
 }
 
 function zcCiz() {
@@ -757,12 +764,18 @@ el("zoom").addEventListener("input", (ev) => {
   zoomUygula(Number(ev.target.value));
 });
 
-/* Görünür pencere genişliği değişince cetvel yeniden ölçeklenir (pencere
-   boyutlanması, panelin ilk düzeni ve arka sekmenin öne gelmesi aynı
-   yoldan geçer — window.resize üçünü de yakalamaz). */
+/* Görünür pencere boyutu değişince cetvel yeniden ölçeklenir (pencere
+   boyutlanması, ayırıcı sürüklenmesi, panelin ilk düzeni ve arka sekmenin
+   öne gelmesi aynı yoldan geçer — window.resize dördünü de yakalamaz).
+
+   Dalga da yeniden yaratılır: wavesurfer kabını YARATILDIĞI anda ölçer
+   (Dalga A'da zoom'da ölçülen tuzak) — kap ayırıcıyla genişleyip
+   yükseldiğinde tuval bayat kalırdı. */
 if (window.ResizeObserver) {
   new ResizeObserver(() => {
-    if (zc.total_ms) cetvelCiz();
+    if (!zc.total_ms) return;
+    cetvelCiz();
+    dalgaGecikmeliCiz();
   }).observe(el("tl-viewport"));
 }
 
@@ -783,6 +796,151 @@ function playheadGorunurTut(ms) {
     pencere.scrollLeft = Math.max(0, x - pencere.clientWidth / 2);
   }
 }
+
+/* ── panel ayırıcıları ─────────────────────────────────────────────────
+ *
+ * Sol panel GENİŞLİĞİ ve zaman çizelgesi YÜKSEKLİĞİ sürükle-ayarlanır ve
+ * `localStorage`da kalıcıdır. **Docking YOK** — paneller yerinden sökülmez,
+ * yalnız boyutlanır.
+ *
+ * Ölçü TEK YERDE durur: `.proje` üzerindeki iki CSS değişkeni. Izgara
+ * şablonu onları okur, yani JS hiçbir panelin `style`ına dokunmaz ve "hangi
+ * panel ne kadar geniş" sorusunun tek bir cevabı olur (zoom'un `#tl-track`
+ * genişliğini tek yerden sürmesiyle aynı desen).
+ *
+ * Klavye ile boyutlandırma YOK (bilinçli): ayırıcıya `tabindex` verilseydi
+ * odaktayken ok tuşları oynatıcının ±5 sn kısayoluyla çakışırdı. Fare/dokunma
+ * ile boyutlanır, çift tıklamayla varsayılana döner; hiçbir işlev yalnız
+ * ayırıcıdan erişilebilir değildir.
+ */
+
+const AYIRICILAR = [
+  {
+    id: "ayirici-sol",
+    degisken: "--sol-en",
+    anahtar: "fillercut.sol-en",
+    varsayilan: 290,
+    enAz: 200,
+    enCok: 520,
+    eksen: "x",
+    /* Sağa sürüklemek sol paneli BÜYÜTÜR. */
+    yon: 1,
+    /* Sol panel pencerenin bundan fazlasını yiyemez — kaydedilmiş 520 px
+       dar bir pencerede ortayı yok ederdi. */
+    pencerePayi: 0.45,
+  },
+  {
+    id: "ayirici-tl",
+    degisken: "--tl-yukseklik",
+    anahtar: "fillercut.tl-yukseklik",
+    varsayilan: 183,
+    enAz: 120,
+    enCok: 420,
+    eksen: "y",
+    /* Aşağı sürüklemek çizelgeyi KÜÇÜLTÜR (çizelge ayırıcının altındadır). */
+    yon: -1,
+    pencerePayi: 0.6,
+  },
+];
+
+function ayiriciKisitla(tanim, deger) {
+  const pencere = tanim.eksen === "x" ? window.innerWidth : window.innerHeight;
+  /* Pencere ölçüsü 0 OLABİLİR — gizli/simge durumdaki pencere, hiç boyanmamış
+     arka sekme, başsız koşu. Ölçüldü: gizli bir tarayıcı panelinde
+     `innerWidth === 0` geliyor ve pencere tavanı uygulansaydı panel kullanıcı
+     onu hiç görmeden EN KÜÇÜK boyuta çökerdi (sonra da o hâliyle kaydedilirdi).
+     Ölçü bilinmiyorsa pencere tavanı UYGULANMAZ; sabit tavan yeter. */
+  const tavan = pencere > 0
+    ? Math.min(tanim.enCok, Math.max(tanim.enAz, pencere * tanim.pencerePayi))
+    : tanim.enCok;
+  return Math.round(Math.min(Math.max(deger, tanim.enAz), tavan));
+}
+
+function ayiriciUygula(tanim, deger) {
+  document.querySelector(".proje").style.setProperty(
+    tanim.degisken, ayiriciKisitla(tanim, deger) + "px"
+  );
+}
+
+function ayiriciOlcu(tanim) {
+  const kap = document.querySelector(".proje");
+  const ham = window.getComputedStyle(kap).getPropertyValue(tanim.degisken);
+  const sayi = Number.parseFloat(ham);
+  return Number.isFinite(sayi) ? sayi : tanim.varsayilan;
+}
+
+function ayiriciTercih(tanim) {
+  /* Tercih SAKLANANDIR, ekrandaki değil: dar bir pencerede kısıtlanan ölçü
+     pencere büyüyünce geri gelmeli. `localStorage` erişimi özel kipte ya da
+     site verisi kapalıyken ATABİLİR — varsayılana düşülür. */
+  try {
+    const kayit = window.localStorage.getItem(tanim.anahtar);
+    const sayi = Number(kayit);
+    if (kayit !== null && Number.isFinite(sayi) && sayi > 0) return sayi;
+  } catch (_) { /* depolama yok: varsayılan */ }
+  return tanim.varsayilan;
+}
+
+function ayiriciKaydet(tanim, deger) {
+  try {
+    window.localStorage.setItem(tanim.anahtar, String(deger));
+  } catch (_) { /* depolama yok: oturum içi çalışmaya devam eder */ }
+}
+
+function ayiriciTazele(tanim) {
+  /* Zaman çizelgesinin kabı büyüdü/küçüldü: cetvel yeniden ölçeklenir ve
+     dalga yeniden yaratılır. Genişlik yolunda ResizeObserver da tetiklenir;
+     yükseklik yolunda `#tl-viewport`un genişliği DEĞİŞMEZ, o yüzden burada
+     açıkça çağrılır. */
+  if (!zc.total_ms) return;
+  cetvelCiz();
+  dalgaGecikmeliCiz();
+  playheadTazele();
+}
+
+function ayiriciKur(tanim) {
+  const kol = el(tanim.id);
+  ayiriciUygula(tanim, ayiriciTercih(tanim));
+  let surukleme = null;
+
+  kol.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    kol.setPointerCapture(ev.pointerId);
+    kol.classList.add("suruklenen");
+    surukleme = {
+      deger: ayiriciOlcu(tanim),
+      imlec: tanim.eksen === "x" ? ev.clientX : ev.clientY,
+    };
+  });
+
+  kol.addEventListener("pointermove", (ev) => {
+    if (surukleme === null) return;
+    const simdi = tanim.eksen === "x" ? ev.clientX : ev.clientY;
+    ayiriciUygula(tanim, surukleme.deger + tanim.yon * (simdi - surukleme.imlec));
+  });
+
+  const bitir = () => {
+    if (surukleme === null) return;
+    surukleme = null;
+    kol.classList.remove("suruklenen");
+    ayiriciKaydet(tanim, ayiriciOlcu(tanim));
+    ayiriciTazele(tanim);
+  };
+  kol.addEventListener("pointerup", bitir);
+  kol.addEventListener("pointercancel", bitir);
+
+  kol.addEventListener("dblclick", () => {
+    ayiriciUygula(tanim, tanim.varsayilan);
+    ayiriciKaydet(tanim, tanim.varsayilan);
+    ayiriciTazele(tanim);
+  });
+}
+
+/* Pencere boyutu değişince SAKLANAN tercih yeniden kısıtlanır — pencere
+   küçülünce panel daralır, büyüyünce eski ölçüsüne geri döner. */
+window.addEventListener("resize", () => {
+  for (const tanim of AYIRICILAR) ayiriciUygula(tanim, ayiriciTercih(tanim));
+});
 
 /* ── koşu: aşama göstergesi + SSE ────────────────────────────────────── */
 
@@ -2171,6 +2329,7 @@ el("kurulum-model").addEventListener("change", () => {
   kurulumYokla();
 });
 
+for (const tanim of AYIRICILAR) ayiriciKur(tanim); // panel ayırıcıları (kalıcı)
 dropzoneKur();     // sürükle-bırak + dosya seçici (native/tarayıcı)
 gezginYukle(null); // kök: sunucudaki ev dizini
 kurulumBaslat();   // kurulum eksikse sihirbaz ekranı; değilse hiç görünmez

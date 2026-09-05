@@ -140,8 +140,15 @@ class TestZamanCizelgesi:
         js = _oku("app.js")
         bas = js.index("function zoomUygula")
         govde = js[bas : js.index("\n}", bas)]
-        assert "dalgaCiz()" in govde, "zoom dalgayı yeniden yaratmıyor"
-        assert "setTimeout" in govde, "her karede yeniden yaratılıyor (gecikme yok)"
+        assert "dalgaGecikmeliCiz()" in govde, "zoom dalgayı yeniden yaratmıyor"
+        # Gecikme ortak yardımcının içinde (v1.3.0 Dalga B): ayırıcı sürüklemesi
+        # ve pencere boyutlanması da AYNI yoldan geçiyor — üç çağrı, tek gövde.
+        yardimci = js.index("function dalgaGecikmeliCiz")
+        yardimci_govde = js[yardimci : js.index("\n}", yardimci)]
+        assert "dalgaCiz()" in yardimci_govde
+        assert "setTimeout" in yardimci_govde, (
+            "her karede yeniden yaratılıyor (gecikme yok)"
+        )
 
     def test_dalga_yoksa_cizelge_yasar(self) -> None:
         """Dalga formu YAN görselleştirmedir (v1.0 sözleşmesi korunur)."""
@@ -565,3 +572,98 @@ class TestDugmeOdagi:
         govde = js[bas : js.index("\n});", bas)]
         for kod in ("Space", "ArrowLeft", "ArrowRight", "KeyY", "KeyM"):
             assert f'ev.code === "{kod}"' in govde, kod
+
+
+class TestPanelAyiricilari:
+    """Sol panel genişliği + zaman çizelgesi yüksekliği: sürükle-ayarlanır,
+    min/max sınırlı, `localStorage`da kalıcı. **Docking YOK.**"""
+
+    @staticmethod
+    def _govde(js: str, imza: str) -> str:
+        bas = js.index(imza)
+        return js[bas : js.index("\n}", bas)]
+
+    def test_iki_ayirici_da_var(self) -> None:
+        html = _oku("index.html")
+        for oge in ('id="ayirici-sol"', 'id="ayirici-tl"'):
+            assert oge in html, oge
+
+    def test_ayiricilar_erisilebilir_ilan_edilir(self) -> None:
+        """Ekran okuyucu bir `div`i "ayırıcı" diye tanıyabilmeli."""
+        html = _oku("index.html")
+        bas = html.index('id="ayirici-sol"')
+        etiket = html[bas : html.index(">", bas)]
+        assert 'role="separator"' in etiket
+        assert 'aria-orientation="vertical"' in etiket
+        assert "aria-label" in etiket
+
+    def test_olcu_tek_yerde_css_degiskeninde(self) -> None:
+        """Izgara şablonu değişkenleri okur; JS panel `style`ına DOKUNMAZ."""
+        css = _oku("style.css")
+        assert "--sol-en" in css and "--tl-yukseklik" in css
+        assert "grid-template-columns: var(--sol-en)" in css
+        assert "var(--tl-yukseklik)" in css
+        js = _oku("app.js")
+        assert "style.setProperty(" in js
+        assert '.panel.sol").style' not in js
+
+    def test_min_max_sinirlari_var(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("const AYIRICILAR")
+        govde = js[bas : js.index("\n];", bas)]
+        assert govde.count("enAz:") == 2
+        assert govde.count("enCok:") == 2
+        assert govde.count("pencerePayi:") == 2, "pencereye göre tavan yok"
+
+    def test_kisitlama_hem_sabit_hem_pencere_tavanini_uygular(self) -> None:
+        """Kaydedilmiş 520 px'lik bir sol panel dar pencerede ortayı yok ederdi."""
+        govde = self._govde(_oku("app.js"), "function ayiriciKisitla")
+        assert "tanim.enAz" in govde and "tanim.enCok" in govde
+        assert "pencerePayi" in govde
+
+    def test_localStorage_kalici_ve_erisim_korunakli(self) -> None:
+        """Özel kipte / site verisi kapalıyken `localStorage` ATAR."""
+        js = _oku("app.js")
+        for imza in ("function ayiriciTercih", "function ayiriciKaydet"):
+            govde = self._govde(js, imza)
+            assert "window.localStorage" in govde, imza
+            assert "try {" in govde and "catch" in govde, f"{imza} korumasız"
+
+    def test_tercih_saklanandir_ekrandaki_degil(self) -> None:
+        """Pencere büyüyünce panel eski ölçüsüne DÖNMELİ (kısıtlanan değil)."""
+        js = _oku("app.js")
+        bas = js.index('window.addEventListener("resize"')
+        govde = js[bas : js.index("\n});", bas)]
+        assert "ayiriciTercih(tanim)" in govde
+        assert "ayiriciOlcu(tanim)" not in govde
+
+    def test_yukseklik_degisince_dalga_yeniden_yaratilir(self) -> None:
+        """Wavesurfer kabını yaratıldığı anda ölçer (Dalga A'da ölçülen tuzak)."""
+        govde = self._govde(_oku("app.js"), "function ayiriciTazele")
+        assert "dalgaGecikmeliCiz()" in govde
+        assert "cetvelCiz()" in govde
+
+    def test_cizelge_yuksekligi_gorunur_pencereye_gider(self) -> None:
+        """Satır büyüyünce artan yeri `#tl-viewport` almalı, boşluk değil."""
+        css = _oku("style.css")
+        bas = css.index(".tl-viewport {")
+        kural = css[bas : css.index("}", bas)]
+        assert "flex: 1" in kural
+        assert "height: 108px" not in kural, "sabit yükseklik ayırıcıyı etkisiz kılar"
+
+    def test_bos_durumda_yatay_ayirici_gizli(self) -> None:
+        """Çizelge yokken tutamaç ölü bir şerit bırakırdı (Dalga A ölü alan dersi)."""
+        assert 'body[data-asama="bos"] .ayirici.yatay' in _oku("style.css")
+
+    def test_docking_yok_yalniz_boyutlanir(self) -> None:
+        """Kapsam kararı: paneller yerinden SÖKÜLMEZ, yalnız boyutlanır.
+
+        Ölçüt DAVRANIŞTIR: JS yalnız iki uzunluk değişkeni yazar; ızgara
+        yerleşimine (`grid-area` / `grid-template`) hiç dokunmaz ve panelleri
+        DOM'da taşımaz. Docking tam olarak bunları yapmayı gerektirirdi.
+        """
+        js = _oku("app.js")
+        assert "grid-area" not in js
+        assert "grid-template" not in js
+        yazilanlar = set(re.findall(r'setProperty\(\s*tanim\.degisken', js))
+        assert yazilanlar, "ayırıcı ölçüyü CSS değişkeni dışında bir yere yazıyor"

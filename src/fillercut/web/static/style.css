@@ -98,15 +98,24 @@ body {
    yazar. Panel bölümleri hangi durumlarda görüneceğini `data-goster`
    listesinde ilan eder — "hangi ekran açık" sorusu tek yerden cevaplanır. */
 
+/* ÖLÇÜ TEK YERDE: `--sol-en` ve `--tl-yukseklik`. Izgara şablonu onları okur,
+   JS hiçbir panelin `style`ına dokunmaz — "hangi panel ne kadar geniş"
+   sorusunun tek cevabı olur (zoom'un `#tl-track` genişliğini tek yerden
+   sürmesiyle aynı desen). Ayırıcılar ızgaranın KENDİ sütun/satırlarıdır;
+   mutlak konumlu bir tutamaç panelin `overflow-y: auto`suyla kırpılırdı. */
 .proje {
+  --sol-en: 290px;
+  --tl-yukseklik: 183px;
+  --ayirici-en: 6px;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 290px minmax(0, 1fr) 320px;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: var(--sol-en) var(--ayirici-en) minmax(0, 1fr) 320px;
+  grid-template-rows: minmax(0, 1fr) var(--ayirici-en) var(--tl-yukseklik);
   grid-template-areas:
-    "sol orta sag"
-    "alt alt alt";
+    "sol   ayr-v orta  sag"
+    "ayr-h ayr-h ayr-h ayr-h"
+    "alt   alt   alt   alt";
   gap: 12px;
   padding: 12px;
 }
@@ -115,6 +124,27 @@ body {
 .orta { grid-area: orta; }
 .panel.sag { grid-area: sag; }
 .alt-timeline { grid-area: alt; }
+.ayirici.dikey { grid-area: ayr-v; }
+.ayirici.yatay { grid-area: ayr-h; }
+
+/* Ayırıcı: kap `--ayirici-en` (hedef alanı), görünen çizgi 2 px. Fare
+   hedefinin görünenden geniş olması bilinçli — 2 px'lik bir şeridi
+   yakalamak sinir bozucudur. */
+.ayirici { position: relative; background: transparent; touch-action: none; }
+.ayirici.dikey { cursor: col-resize; }
+.ayirici.yatay { cursor: row-resize; }
+
+.ayirici::after {
+  content: "";
+  position: absolute;
+  background: var(--cizgi);
+  border-radius: 2px;
+  transition: background .12s ease;
+}
+.ayirici.dikey::after { top: 8px; bottom: 8px; left: 2px; width: 2px; }
+.ayirici.yatay::after { left: 8px; right: 8px; top: 2px; height: 2px; }
+.ayirici:hover::after,
+.ayirici.suruklenen::after { background: var(--vurgu); }
 
 .panel {
   min-height: 0;
@@ -145,20 +175,25 @@ body:not([data-asama="bos"]) #bos-durum { display: none; }
    BİLİNÇLİ (`visibility: hidden` değil): görünmez ama yer kaplayan bir şerit
    boş durumda ~200 px ölü alan bırakıyordu (kurulu pencerede ölçüldü) ve
    ızgara satırı kalktığında paneller o yüksekliği kullanıyor. */
-body[data-asama="bos"] .alt-timeline { display: none; }
+body[data-asama="bos"] .alt-timeline,
+body[data-asama="bos"] .ayirici.yatay { display: none; }
+/* Bu kural medya sorgusundan SONRA gelmez ama ÖZGÜLLÜĞÜ daha yüksektir
+   (0,2,1 > 0,1,0) — medya sorguları özgüllük eklemez, yani boş durumda
+   çizelge satırı iki genişlikte de kalkar. */
 body[data-asama="bos"] .proje {
-  grid-template-areas: "sol orta sag";
+  grid-template-areas: "sol ayr-v orta sag";
   grid-template-rows: minmax(0, 1fr);
 }
 
 @media (max-width: 1100px) {
   .proje {
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: var(--sol-en) var(--ayirici-en) minmax(0, 1fr);
     grid-template-areas:
-      "sol orta"
-      "sag sag"
-      "alt alt";
-    grid-template-rows: minmax(0, 1fr) auto auto;
+      "sol   ayr-v orta"
+      "sag   sag   sag"
+      "ayr-h ayr-h ayr-h"
+      "alt   alt   alt";
+    grid-template-rows: minmax(0, 1fr) auto var(--ayirici-en) var(--tl-yukseklik);
   }
 }
 
@@ -664,11 +699,19 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   border: 1px solid var(--cizgi);
   border-radius: 10px;
   padding: 10px 12px 8px;
+  /* Yükseklik ızgara satırından gelir (`--tl-yukseklik`); artan yeri
+     GÖRÜNÜR PENCERE alır, başlık ve ipucu şeritleri sabit kalır. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
+
+.timeline-bas, .timeline-ipucu { flex: none; }
 
 .tl-viewport {
   position: relative;
-  height: 108px;
+  flex: 1;
+  min-height: 60px;
   background: #0b0f14;
   border: 1px solid var(--cizgi);
   border-radius: 8px;
