@@ -696,3 +696,62 @@ class TestKoyuBaslik:
         assert any("before_show.__iadd__" in str(c) for c in pencere.mock_calls), (
             pencere.mock_calls
         )
+
+
+class TestKaliciDepolama:
+    """Sayfanın `localStorage`ı native pencerede de KALICI olmalı.
+
+    ÖLÇÜLMÜŞ TUZAK (kurulu 1.3.0 üzerinde bulundu): pywebview varsayılanı
+    `private_mode=True`dır ve o kip WebView2'yi `IsInPrivateModeEnabled` ile
+    açar; ayrıca `winforms.init_storage` cache dizinini
+    `tempfile.TemporaryDirectory()`den verir ve `clear_user_data` kapanışta
+    siler. Sonuç: panel ayırıcılarının ölçüsü **tarayıcı modunda hatırlanır,
+    native modda hatırlanmazdı** — kusur yalnız kurulu uygulamada görünürdü.
+    """
+
+    def _kaynak(self, modul: str) -> str:
+        import importlib.util
+
+        pytest.importorskip("webview")
+        spec = importlib.util.find_spec(modul)
+        assert spec is not None and spec.origin is not None
+        return Path(spec.origin).read_text(encoding="utf-8")
+
+    def test_upstream_varsayilani_hala_gizli_kip(self) -> None:
+        """Varsayılan değişirse bu geçici çözümü gözden geçirmek gerekir."""
+        assert "'private_mode': True," in self._kaynak("webview")
+
+    def test_gizli_kip_webview2_ye_geciyor(self) -> None:
+        """`storage_path` TEK BAŞINA yetmez — pencere yine InPrivate açılırdı."""
+        kaynak = self._kaynak("webview.platforms.edgechromium")
+        assert "set_IsInPrivateModeEnabled(_state['private_mode'])" in kaynak
+        assert "def clear_user_data" in kaynak
+
+    def test_gecici_dizin_dali_upstreamde_duruyor(self) -> None:
+        kaynak = self._kaynak("webview.platforms.winforms")
+        assert "tempfile.TemporaryDirectory().name" in kaynak
+        assert "if not _state['private_mode'] or _state['storage_path']:" in kaynak
+
+    def test_start_kalici_kiple_cagriliyor(self) -> None:
+        sahte = MagicMock()
+        sahte.create_window.return_value = MagicMock()
+        with patch.dict(sys.modules, {"webview": sahte}):
+            native.pencere_ac("http://x/")
+        _, kwargs = sahte.start.call_args
+        assert kwargs["private_mode"] is False
+        assert kwargs["storage_path"] == native.depolama_yolu()
+
+    def test_depolama_korunan_agacin_altinda(self) -> None:
+        """Kaldırıcı `%LOCALAPPDATA%\\fillercut`i korur; profil de oraya girer —
+        kullanıcı "verileri silinsin mi?"ye evet derse bu da gider."""
+        from fillercut.kurulum.yollar import veri_dizini
+
+        yol = Path(native.depolama_yolu())
+        assert yol.parent == veri_dizini()
+        assert yol.name == native.DEPOLAMA_ALT_DIZIN
+
+    def test_pywebview_kendi_sunucusunu_acmaz(self) -> None:
+        """`private_mode=False` yan etkisi olmasın: `http://` YEREL SAYILMAZ."""
+        kaynak = self._kaynak("webview.util")
+        bas = kaynak.index("def is_local_url")
+        assert "url.startswith('http://')" in kaynak[bas : bas + 400]

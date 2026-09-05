@@ -428,6 +428,23 @@ def surukle_birak_kur(pencere: Any) -> None:
         return
 
 
+#: WebView2 profil dizininin adı (``%LOCALAPPDATA%\fillercut`` altında).
+#: Roaming DEĞİL: tarayıcı profili makineye özgüdür ve oturum açmayı
+#: yavaşlatmamalı — model dizininin gerekçesiyle aynı (`kurulum/yollar.py`).
+DEPOLAMA_ALT_DIZIN = "webview"
+
+
+def depolama_yolu() -> str:
+    """Sayfanın kalıcı yerel depolaması için WebView2 profil dizini.
+
+    Kaldırıcının koruduğu ağacın (``%LOCALAPPDATA%\fillercut``) altındadır:
+    kullanıcı "verileri silinsin mi?" sorusuna evet derse bu da gider.
+    """
+    from fillercut.kurulum.yollar import veri_dizini
+
+    return str(veri_dizini() / DEPOLAMA_ALT_DIZIN)
+
+
 #: ``DWMWA_USE_IMMERSIVE_DARK_MODE``. Windows 10 20H1 (build 19041) ve
 #: sonrasında **20**; 18985'ten önceki build'lerde aynı anlamı **19** taşıyordu
 #: ve 20 ``E_INVALIDARG`` döner. İkisi de denenir — eskisi ikinci sırada, çünkü
@@ -588,7 +605,25 @@ def pencere_ac(
         if kapatici_kaydet is not None:
             kapatici_kaydet(pencere.destroy)
     try:
-        webview.start()
+        # KALICI YEREL DEPOLAMA — ÖLÇÜLMÜŞ TUZAK, varsayılan bunun TERSİ:
+        # pywebview `private_mode=True` ile başlar ve o kip WebView2'yi
+        # `IsInPrivateModeEnabled` ile açar; kurulu 6.2.1 kaynağında
+        # (`platforms/edgechromium.py`) profil klasörü ayrıca kapanışta
+        # SİLİNİR (`clear_user_data`) ve `winforms.init_storage` cache dizinini
+        # `tempfile.TemporaryDirectory()`den verir. Sonuç: sayfanın
+        # `localStorage`ı her açılışta SIFIRLANIR — panel ayırıcılarının
+        # ölçüsü hiç hatırlanmazdı (tarayıcı modunda hatırlanır, native modda
+        # hatırlanmaz; kusur ancak kurulu uygulamada görülürdü).
+        #
+        # `storage_path` TEK BAŞINA YETMEZ: `init_storage` kalıcı dalı seçer
+        # ama pencere yine InPrivate açılır. `private_mode=False` şart.
+        # Yan etkisi yok: pywebview'in kendi HTTP sunucusu yalnız YEREL DOSYA
+        # url'lerinde açılır (`is_local_url` `http://` ile başlayanı yerel
+        # SAYMAZ) ve biz gerçek bir localhost adresi veriyoruz.
+        #
+        # Mahremiyet: profil tamamen yereldir ve sayfa yalnız 127.0.0.1'e
+        # bağlanır — dışarı hiçbir şey gitmez, telemetri invariant'ı değişmedi.
+        webview.start(private_mode=False, storage_path=depolama_yolu())
     finally:
         if kapanista is not None:
             kapanista()
