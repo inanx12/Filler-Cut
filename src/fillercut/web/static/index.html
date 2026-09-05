@@ -149,6 +149,8 @@
     <div class="oynatici-alt">
       <button id="btn-oynat" class="dugme ikincil dar" aria-label="Oynat/Duraklat">&#9654;</button>
       <span id="zaman" class="zaman mono">0:00.0 / 0:00.0</span>
+      <!-- Mekik hızı (J/K/L). Boşken yer kaplamaz (`:empty`). -->
+      <span id="shuttle-durum" class="shuttle-durum mono" aria-live="polite"></span>
       <label class="anahtar" title="Kesilecek bölgeleri oynatmadan atla">
         <input type="checkbox" id="atlamali" checked>
         <span class="anahtar-govde"><span class="anahtar-top"></span></span>
@@ -158,7 +160,8 @@
               title="Mıknatıs açık — sürükleme en yakın sessizlik kenarına yapışır (M)">
         <span class="miknatis-ikon">&#129522;</span><span>Mıknatıs</span>
       </button>
-      <span class="ipucu">Boşluk: oynat/dur · ←/→: 5 sn · Y: sessizliğe yasla · M: mıknatıs</span>
+      <span class="ipucu">Boşluk: oynat/dur · J/K/L: mekik · ←/→: 5 sn ·
+        Y: sessizliğe yasla · M: mıknatıs</span>
     </div>
   </section>
 

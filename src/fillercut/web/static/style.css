@@ -625,6 +625,16 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 .zaman { color: var(--metin); font-variant-numeric: tabular-nums; }
 .ipucu { color: var(--soluk); font-size: 12px; margin-left: auto; }
 
+/* Mekik hızı rozeti (J/K/L) — boşken hiç yer kaplamaz, yani normal
+   oynatmada oynatıcı çubuğunun düzeni v1.0'daki gibi kalır. */
+.shuttle-durum {
+  color: var(--vurgu);
+  font-weight: 700;
+  letter-spacing: .5px;
+  font-variant-numeric: tabular-nums;
+}
+.shuttle-durum:empty { display: none; }
+
 /* zaman çizelgesi */
 .timeline-bas {
   display: flex;

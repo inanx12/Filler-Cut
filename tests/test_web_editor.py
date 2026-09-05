@@ -223,9 +223,15 @@ class TestKorunanEtkilesimler:
         Filler Listesi'nden bir kesime tıklamak kullanıcıyı kesimin SONUNA
         fırlatıyordu (ölçüldü: 15245 ms'e tıklandı, oynatıcı 17364 ms'e
         düştü) — yani "tıkla, oraya git" hiç çalışmıyordu.
+
+        Ölçüt DAVRANIŞTIR, tek bir ifade değil: `timeupdate` gövdesi
+        duraklamışken atlamadan ÖNCE çıkmalı.
         """
         js = _oku("app.js")
-        assert "!oynatici.paused" in js
+        bas = js.index('el("oynatici").addEventListener("timeupdate"')
+        govde = js[bas : js.index("\n});", bas)]
+        assert "oynatici.paused" in govde
+        assert govde.index("oynatici.paused") < govde.index("atlamayiUygula")
 
     def test_snap_tercihi_sunucuya_tasinir(self) -> None:
         """Mıknatıs kapalıysa sunucu da snap uygulamamalı (v1.x sözleşmesi)."""
@@ -399,3 +405,163 @@ class TestPasifEylemGorunumu:
         css = _oku("style.css")
         assert ".birincil:disabled" not in css
         assert ".ikincil:disabled" not in css
+
+
+class TestAtlamaliOynatma:
+    """Kesim-atlamalı oynatma: izleyici kaynağı oynatır, FİNAL'i görür."""
+
+    def test_karar_tek_fonksiyonda(self) -> None:
+        """`timeupdate`, `play` ve geri mekik AYNI kararı kullanır.
+
+        Üç çağrı yerinde üç kopya matematik olsaydı biri ötekilerden ayrışırdı
+        — Dalga A'nın "duraklamışken de atlıyor" kusuru tam olarak tek yerde
+        düzeltilip başka yerde unutulabilecek sınıftandı.
+        """
+        js = _oku("app.js")
+        assert "function atlamaHedefi" in js
+        assert "function atlamayiUygula" in js
+        assert "function atlamaAcikMi" in js
+
+    def test_video_sonundaki_kesimde_tutulan_sinira_oturulur(self) -> None:
+        """KENAR KARARI: ileride tutulan malzeme yoksa sınır `bas`tır.
+
+        Eskiden yalnız `pause()` çağrılıyordu ve playhead kesimin İÇİNDE
+        kalıyordu: ekranda, final videoda hiç bulunmayan bir kare donuyordu.
+        """
+        js = _oku("app.js")
+        bas = js.index("function atlamaHedefi")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "SON_TOLERANS_MS" in govde
+        assert "{ ms: bas, dur: true }" in govde
+        assert "{ ms: bit, dur: false }" in govde
+
+    def test_play_aninda_da_karar_verilir(self) -> None:
+        """`timeupdate` ~4 Hz'tir; kesik ses 250 ms'e kadar sızabiliyordu."""
+        js = _oku("app.js")
+        bas = js.index('el("oynatici").addEventListener("play"')
+        govde = js[bas : js.index("\n});", bas)]
+        assert "atlamayiUygula" in govde
+
+    def test_atlama_surukleme_sirasinda_kapali(self) -> None:
+        """Sınır sürüklenirken atlamak kullanıcıyı kendi düzenlemesinden atardı."""
+        js = _oku("app.js")
+        bas = js.index("function atlamaAcikMi")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "review.surukleme" in govde
+        assert 'el("atlamali").checked' in govde
+
+    def test_playhead_iki_yonlu(self) -> None:
+        """video → çizelge (`timeupdate`/`seeked`) ve çizelge → video (tıklama)."""
+        js = _oku("app.js")
+        assert 'el("oynatici").addEventListener("seeked", playheadTazele)' in js
+        bas = js.index('el("tl-track").addEventListener("click"')
+        govde = js[bas : js.index("\n});", bas)]
+        assert 'el("oynatici").currentTime = olayMs(ev) / 1000' in govde
+        # Düzenleme kipinde tıklama sürükleme bitişinden gelir (aynı sonuç).
+        bitis = js.index("function surukleBitir")
+        assert 'el("oynatici").currentTime' in js[bitis : js.index("\n}\n", bitis)]
+
+
+class TestMekik:
+    """J/K/L — NLE mekiği (v1.3.0 Dalga B)."""
+
+    def test_uc_tus_da_bagli(self) -> None:
+        js = _oku("app.js")
+        bas = js.index('document.addEventListener("keydown"')
+        govde = js[bas : js.index("\n});", bas)]
+        for kod, eylem in (
+            ("KeyJ", "shuttleUygula(-1)"),
+            ("KeyK", "shuttleDurdur()"),
+            ("KeyL", "shuttleUygula(1)"),
+        ):
+            assert f'ev.code === "{kod}"' in govde, kod
+            assert eylem in govde, eylem
+
+    def test_ayni_yonde_hiz_katlanir_tavanli(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("function shuttleUygula")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "shuttle.kat * 2" in govde
+        assert "SHUTTLE_TAVAN" in govde
+        assert "shuttle.yon === yon ?" in govde, "yön değişince hız sıfırlanmıyor"
+
+    def test_geri_sarma_simule_negatif_hiz_yok(self) -> None:
+        """ÖLÇÜLMÜŞ KISIT: HTML medya öğesi negatif `playbackRate` desteklemez."""
+        js = _oku("app.js")
+        assert "playbackRate = -" not in js
+        bas = js.index("function shuttleGeriTik")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "currentTime" in govde
+
+    def test_geri_sarma_kesimin_basina_oturur(self) -> None:
+        """İleri gidişin AYNASI: ileri `bit`e, geri `bas`a — ikisi de tutulan."""
+        js = _oku("app.js")
+        bas = js.index("function shuttleGeriTik")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "atlamaAcikMi()" in govde
+        assert "ms = kesim[0]" in govde
+
+    def test_basili_tutmak_hizi_katlamaz(self) -> None:
+        js = _oku("app.js")
+        bas = js.index('document.addEventListener("keydown"')
+        govde = js[bas : js.index("\n});", bas)]
+        assert govde.count("!ev.repeat") == 2  # J ve L
+
+    def test_bosluk_mekigi_sifirlar(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("function oynatDurdur")
+        assert "shuttleSifirla()" in js[bas : js.index("\n}", bas)]
+
+    def test_hiz_ekranda_yazar(self) -> None:
+        assert 'id="shuttle-durum"' in _oku("index.html")
+        assert "function shuttleDurumuYaz" in _oku("app.js")
+        assert ".shuttle-durum:empty" in _oku("style.css")
+
+
+class TestDugmeOdagi:
+    """v1.0'dan beri açık iş: düğmeye tıklayınca Boşluk yutuluyordu."""
+
+    def test_dugmeler_fareyle_odak_almaz(self) -> None:
+        """KÖK ÇÖZÜM 1 — araç düğmesi editörün klavye odağını çalmaz."""
+        js = _oku("app.js")
+        bas = js.index('document.addEventListener("mousedown"')
+        govde = js[bas : js.index("\n});", bas)]
+        assert 'closest("button")' in govde
+        assert "ev.preventDefault()" in govde
+        assert "dugme.disabled" in govde, "pasif düğmede de engellemek gereksiz"
+
+    def test_pointerdown_secilmedi(self) -> None:
+        """`pointerdown` iptali uyumluluk fare olaylarını da düşürürdü."""
+        js = _oku("app.js")
+        bas = js.index('document.addEventListener("mousedown"')
+        assert 'document.addEventListener("pointerdown"' not in js[:bas]
+
+    def test_klavye_odagindaki_dugme_bosluga_sahip(self) -> None:
+        """KÖK ÇÖZÜM 2 — Tab ile gezen kullanıcı düğmeleri Boşlukla basar."""
+        js = _oku("app.js")
+        bas = js.index("function tusDugmeyeAit")
+        govde = js[bas : js.index("\n}", bas)]
+        assert ":focus-visible" in govde
+        assert '"BUTTON"' in govde
+
+    def test_kisayol_artik_butonu_toptan_atlamiyor(self) -> None:
+        """Eski çare kusuru pekiştiriyordu: kısayol yutuluyor, tuş düğmeye gidiyordu."""
+        js = _oku("app.js")
+        bas = js.index('document.addEventListener("keydown"')
+        govde = js[bas : js.index("\n});", bas)]
+        assert '"BUTTON"' not in govde, "keydown gövdesi hâlâ BUTTON'u toptan eliyor"
+
+    def test_kisayollar_metin_girisinde_kapali(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("function girdiOdakli")
+        govde = js[bas : js.index("\n}", bas)]
+        for etiket in ('"INPUT"', '"TEXTAREA"', '"SELECT"'):
+            assert etiket in govde, etiket
+        assert "isContentEditable" in govde
+
+    def test_korunan_kisayollar_duruyor(self) -> None:
+        js = _oku("app.js")
+        bas = js.index('document.addEventListener("keydown"')
+        govde = js[bas : js.index("\n});", bas)]
+        for kod in ("Space", "ArrowLeft", "ArrowRight", "KeyY", "KeyM"):
+            assert f'ev.code === "{kod}"' in govde, kod

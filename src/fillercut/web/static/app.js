@@ -1445,43 +1445,188 @@ function aktifKesimBul(ms) {
   return null;
 }
 
-el("oynatici").addEventListener("timeupdate", () => {
+/* Kesim videonun sonuna bu kadar yaklaşıyorsa "sona kadar sürüyor" sayılır
+   (v1.0'dan beri geçerli tolerans — kare sınırındaki birkaç ms). */
+const SON_TOLERANS_MS = 30;
+
+/* ── atlamalı oynatma ──────────────────────────────────────────────────
+ *
+ * Amaç: izleyici KAYNAK videoyu oynatır ama FİNAL videoyu görür — kesik
+ * bölgeye gelindiğinde otomatik atlanır.
+ *
+ * ATLAMA YALNIZ OYNARKEN. v1.0'da duraklatılmışken de atlanıyordu ve Filler
+ * Listesi'nden bir kesime tıklamak kullanıcıyı kesimin SONUNA fırlatıyordu —
+ * "tıkla, oraya git" hiç çalışmıyordu (ölçüldü: 15245 ms'e tıklandı, oynatıcı
+ * 17364 ms'e düştü). Atlamanın amacı SONUCU önizlemektir; duraklamışken
+ * incelemeyi engellemek amaç değildi, yan etkiydi.
+ *
+ * KENAR — playhead kesik bölgenin İÇİNDEN oynatılırsa: "en yakın TUTULAN
+ * sınıra otur". [bas, bit) kesiminin iki sınırı vardır ve ikisi eşdeğer
+ * DEĞİLDİR:
+ *
+ *   · `bit` — kesimden sonraki tutulan malzemenin başı. İleri oynatma ancak
+ *     buradan sürebilir.
+ *   · `bas` — kesimden ÖNCEKİ tutulan malzemenin sonu. Oraya oturup oynatmak
+ *     kendi kendini yer: bir sonraki karede aynı kesime yeniden girilir ve
+ *     atlama zaten `bit`e taşır. Yani ileri yönde mesafe karşılaştırması
+ *     yapmak sonucu DEĞİŞTİRMEZ, yalnız bir karelik kesik ses duyurur.
+ *
+ * Bu yüzden ileri yönde seçim her zaman `bit`tir. Mesafenin gerçekten
+ * belirleyici olduğu tek durum kesimin videonun SONUNA kadar sürmesidir:
+ * ileride tutulan malzeme YOKTUR, en yakın tutulan sınır `bas`tır — playhead
+ * oraya oturur ve oynatma durur. Eskiden yalnız `pause()` çağrılıyordu ve
+ * playhead kesimin İÇİNDE kalıyordu: son karede kesilmiş, final videoda
+ * hiç olmayan bir görüntü donuyordu.
+ *
+ * Geri sarmada (J) simetriktir ve orada `bas` gerçekten doğrudur — bkz.
+ * `shuttleGeriTik`.
+ */
+
+function atlamaAcikMi() {
+  return !!review.gorunum && el("atlamali").checked && !review.surukleme;
+}
+
+function atlamaHedefi(ms) {
+  /* `ms`den ileri oynatma süremiyorsa ``{ms, dur}``; sürebiliyorsa ``null``. */
+  if (!atlamaAcikMi()) return null;
+  const kesim = aktifKesimBul(ms);
+  if (!kesim) return null;
+  const [bas, bit] = kesim;
+  if (bit >= review.gorunum.total_ms - SON_TOLERANS_MS) return { ms: bas, dur: true };
+  return { ms: bit, dur: false };
+}
+
+function atlamayiUygula(ms) {
+  const hedef = atlamaHedefi(ms);
+  if (hedef === null) return false;
   const oynatici = el("oynatici");
-  const ms = oynatici.currentTime * 1000;
+  if (hedef.dur) oynatici.pause();
+  oynatici.currentTime = hedef.ms / 1000;
+  return true;
+}
+
+el("oynatici").addEventListener("timeupdate", () => {
   playheadTazele();
-  /* Atlama YALNIZ oynarken. v1.0'da duraklatılmışken de atlanıyordu ve
-     Filler Listesi'nden bir kesime tıklamak kullanıcıyı kesimin SONUNA
-     fırlatıyordu — yani "tıkla, oraya git" hiç çalışmıyordu (ölçüldü:
-     15245 ms'e tıklandı, oynatıcı 17364 ms'e düştü). Atlamanın amacı
-     SONUCU önizlemektir; duraklamışken incelemeyi engellemek amaç değil,
-     yan etkiydi. */
-  if (review.gorunum && el("atlamali").checked && !review.surukleme &&
-      !oynatici.paused) {
-    const kesim = aktifKesimBul(ms);
-    // Kesimin bitişine atla; video sonundaki kesimde oynatmayı durdur.
-    if (kesim) {
-      if (kesim[1] >= review.gorunum.total_ms - 30) oynatici.pause();
-      else oynatici.currentTime = kesim[1] / 1000;
-    }
-  }
+  const oynatici = el("oynatici");
+  if (oynatici.paused) return; // atlama YALNIZ oynarken
+  atlamayiUygula(oynatici.currentTime * 1000);
 });
 
-el("oynatici").addEventListener("seeked", playheadTazele);
+/* Karar `play` ANINDA da verilir. `timeupdate` saniyede ~4 kez ateşlenir;
+   kesimin içinden başlatılan oynatma o yüzden 250 ms'e kadar kesik SES
+   duyurabiliyordu. `play` olayı ilk kareden önce gelir. */
 el("oynatici").addEventListener("play", () => {
   el("btn-oynat").innerHTML = "&#10073;&#10073;";
+  atlamayiUygula(el("oynatici").currentTime * 1000);
 });
+
+/* Playhead senkronu İKİ YÖNLÜDÜR: video → çizelge burada (`timeupdate` +
+   `seeked`), çizelge → video `#tl-track` tıklamasında (düzenleme kipinde
+   sürükleme-eşiğinin altında kalan basış "tıklama" sayılır). */
+el("oynatici").addEventListener("seeked", playheadTazele);
 el("oynatici").addEventListener("pause", () => {
   el("btn-oynat").innerHTML = "&#9654;";
 });
+el("oynatici").addEventListener("ended", () => shuttleSifirla());
 
 function oynatDurdur() {
   const oynatici = el("oynatici");
   if (!oynatici.src) return;
+  shuttleSifirla(); // mekik kipinden normal (1×, ileri) oynatmaya dön
   if (oynatici.paused) oynatici.play();
   else oynatici.pause();
 }
 
 el("btn-oynat").addEventListener("click", oynatDurdur);
+
+/* ── J/K/L mekiği ──────────────────────────────────────────────────────
+ *
+ * NLE geleneği: J geri, K dur, L ileri; AYNI yöne her basış hızı KATLAR
+ * (1× → 2× → 4× → …, tavan `SHUTTLE_TAVAN`). Yön değişince hız 1×'e döner —
+ * "8× geriden 8× ileriye" atlamak kimsenin istediği şey değildir.
+ *
+ * GERİ SARMA SİMÜLEDİR — ölçülmüş kısıt, tercih değil: HTML medya öğesi
+ * negatif `playbackRate` desteklemez. Öğe duraklatılır ve `currentTime` sabit
+ * aralıklarla geri alınır; oynatıcı için bu bir dizi arama (seek) işlemidir,
+ * ses yoktur (geri çalınan ses zaten anlaşılmaz).
+ *
+ * Geri yönde de kesikler atlanır ve seçim İLERİDEKİNİN AYNASIDIR: ileri
+ * gidiş kesimin bitişine (`bit`) oturur, geri gidiş başına (`bas`). İki
+ * yönde de tutulan malzemede kalınır — mekik final videoyu tarar.
+ */
+const SHUTTLE_TAVAN = 16;
+
+/* Geri sarma tiki. 100 ms hem akıcı görünür hem de arama (seek) başına
+   makul bir iş yükü bırakır; kat sayısı adım BÜYÜKLÜĞÜNÜ çarpar, sıklığını
+   değil (daha sık arama oynatıcıyı boğardı). */
+const SHUTTLE_ADIM_MS = 100;
+
+const shuttle = { yon: 0, kat: 1, zamanlayici: null };
+
+function shuttleZamanlayiciDurdur() {
+  if (shuttle.zamanlayici !== null) {
+    clearInterval(shuttle.zamanlayici);
+    shuttle.zamanlayici = null;
+  }
+}
+
+function shuttleSifirla() {
+  shuttleZamanlayiciDurdur();
+  shuttle.yon = 0;
+  shuttle.kat = 1;
+  const oynatici = el("oynatici");
+  if (oynatici.playbackRate !== 1) oynatici.playbackRate = 1;
+  shuttleDurumuYaz();
+}
+
+function shuttleDurumuYaz() {
+  /* Hız EKRANDA yazar: 4× ile 8× arasındaki farkı görüntüden okumak zordur
+     ve kullanıcı kaç kez bastığını saymak zorunda kalmamalı. */
+  const kutu = el("shuttle-durum");
+  if (shuttle.yon === 0) {
+    kutu.textContent = "";
+    return;
+  }
+  kutu.textContent = (shuttle.yon < 0 ? "◀◀ " : "▶▶ ") + shuttle.kat + "×";
+}
+
+function shuttleGeriTik() {
+  const oynatici = el("oynatici");
+  let ms = oynatici.currentTime * 1000 - shuttle.kat * SHUTTLE_ADIM_MS;
+  if (ms <= 0) {
+    oynatici.currentTime = 0;
+    shuttleSifirla(); // başa gelindi: mekik kendi kendine durur
+    return;
+  }
+  if (atlamaAcikMi()) {
+    const kesim = aktifKesimBul(ms);
+    if (kesim) ms = kesim[0]; // geri yönde tutulan sınır kesimin BAŞIDIR
+  }
+  oynatici.currentTime = Math.max(0, ms) / 1000;
+}
+
+function shuttleUygula(yon) {
+  const oynatici = el("oynatici");
+  if (!oynatici.src) return;
+  shuttle.kat = shuttle.yon === yon ? Math.min(shuttle.kat * 2, SHUTTLE_TAVAN) : 1;
+  shuttle.yon = yon;
+  shuttleZamanlayiciDurdur();
+  if (yon > 0) {
+    oynatici.playbackRate = shuttle.kat;
+    oynatici.play();
+  } else {
+    oynatici.playbackRate = 1;
+    oynatici.pause();
+    shuttle.zamanlayici = setInterval(shuttleGeriTik, SHUTTLE_ADIM_MS);
+  }
+  shuttleDurumuYaz();
+}
+
+function shuttleDurdur() {
+  /* K — mekik dur. Oynatmayı da durdurur (NLE'de K'nın işi budur). */
+  shuttleSifirla();
+  el("oynatici").pause();
+}
 
 function miknatisCiz() {
   const dugme = el("btn-miknatis");
@@ -1499,17 +1644,76 @@ function miknatisToggle() {
 
 el("btn-miknatis").addEventListener("click", miknatisToggle);
 
-/* Kısayollar: Boşluk / ←→ v1.0'dan; Y ve M v1.x'ten. Diyalog açıkken
-   çalışmazlar (modal içindeki forma karışmasın). */
+/* ── klavye ────────────────────────────────────────────────────────────
+ *
+ * DÜĞME ODAĞI — v1.0'dan beri açık iş, KÖK ÇÖZÜM:
+ *
+ * Fareyle bir düğmeye tıklamak onu odaklı bırakır ve tarayıcı düğmeleri
+ * Boşluk ile etkinleştirir; sonraki Boşluk oynatmayı başlatmak yerine
+ * düğmeyi yeniden tetikliyordu. Eski çare "hedef BUTTON ise kısayolu atla"
+ * idi — kusuru gidermiyor, PEKİŞTİRİYORDU: kısayol yutuluyor, tuş düğmeye
+ * gidiyordu.
+ *
+ * Kök neden şudur: bir editörde araç düğmesi, düzenleyicinin klavye odağını
+ * ÇALMAMALIDIR. İki katman:
+ *
+ *   1. Düğmeler FARE ile odak almaz (`mousedown` → `preventDefault`).
+ *      `mousedown` iptali odağı ve metin seçimini engeller, `click`i
+ *      ETKİLEMEZ. (`pointerdown` iptali uyumluluk fare olaylarını da
+ *      düşürürdü — o yüzden `mousedown` seçildi.)
+ *   2. KLAVYEYLE (Tab) odaklanmış düğmede Boşluk/Enter YİNE düğmenindir:
+ *      ayrımı `:focus-visible` yapar (fare odağı üretmez, klavye odağı
+ *      üretir) — tarayıcı bilir, biz tahmin etmeyiz. Erişilebilirlik
+ *      kaybedilmez: Tab ile gezen kullanıcı düğmeleri hâlâ Boşlukla basar.
+ *
+ * Kısayollar METİN GİRİŞİNDE çalışmaz (INPUT/TEXTAREA/SELECT ve
+ * contenteditable). Diyalog açıkken de çalışmazlar.
+ */
+
+document.addEventListener("mousedown", (ev) => {
+  const hedef = ev.target;
+  if (!hedef || typeof hedef.closest !== "function") return;
+  const dugme = hedef.closest("button");
+  if (dugme && !dugme.disabled) ev.preventDefault();
+});
+
+function girdiOdakli(hedef) {
+  if (!hedef || !hedef.tagName) return false;
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(hedef.tagName)) return true;
+  return hedef.isContentEditable === true;
+}
+
+function tusDugmeyeAit(hedef, kod) {
+  /* Yalnız KLAVYE odağındaki düğme Boşluk/Enter'ı sahiplenir. */
+  if (!hedef || hedef.tagName !== "BUTTON") return false;
+  if (kod !== "Space" && kod !== "Enter") return false;
+  try {
+    return hedef.matches(":focus-visible");
+  } catch (_) {
+    return true; // seçici desteklenmiyorsa erişilebilirlik tarafında kal
+  }
+}
+
+/* Kısayollar: Boşluk / ←→ v1.0'dan; Y ve M v1.x'ten; J/K/L v1.3.0'dan. */
 document.addEventListener("keydown", (ev) => {
   if (document.querySelector("dialog[open]")) return;
   if (durum.asama === "bos") return;
-  const hedef = ev.target;
-  if (hedef && ["INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(hedef.tagName)) return;
+  if (ev.ctrlKey || ev.altKey || ev.metaKey) return;
+  if (girdiOdakli(ev.target)) return;
+  if (tusDugmeyeAit(ev.target, ev.code)) return;
   const oynatici = el("oynatici");
   if (ev.code === "Space") {
     ev.preventDefault();
     oynatDurdur();
+  } else if (ev.code === "KeyJ") {
+    ev.preventDefault();
+    if (!ev.repeat) shuttleUygula(-1); // basılı tutmak hızı katlamaz
+  } else if (ev.code === "KeyK") {
+    ev.preventDefault();
+    shuttleDurdur();
+  } else if (ev.code === "KeyL") {
+    ev.preventDefault();
+    if (!ev.repeat) shuttleUygula(1);
   } else if (ev.code === "ArrowLeft") {
     ev.preventDefault();
     oynatici.currentTime = Math.max(0, oynatici.currentTime - 5);
