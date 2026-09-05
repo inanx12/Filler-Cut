@@ -55,43 +55,102 @@ class TestIskelet:
 
 
 class TestUcEkran:
-    """Dilim 1'in üç ekranı tek sayfada (SPA hissi) — statik dosya kilitleri."""
+    """v1.3.0: beş ayrı ekran TEK proje görünümüne toplandı — statik kilitler.
 
-    def test_index_tum_ekranlari_icerir(self) -> None:
+    Eski `ekran-baslangic/kosu/review/sonuc` bölmeleri ÖLDÜ; görünürlüğü
+    `body[data-asama]` sürüyor ve paneller `data-goster` ile hangi durumda
+    görüneceklerini ilan ediyor. `ekran-yok` (iş bulunamadı) ve
+    `ekran-kurulum` (ilk çalıştırma kapısı) perde olarak KALDI.
+    """
+
+    def test_index_proje_gorunumunu_kurar(self) -> None:
         r = TestClient(create_app()).get("/")
         assert 'lang="tr"' in r.text
-        for ekran_id in (
-            "ekran-baslangic",
-            "ekran-kosu",
-            "ekran-review",  # Dilim 2
-            "ekran-yok",  # "iş bulunamadı" yüzeyi
-            "ekran-sonuc",
+        assert 'data-asama="bos"' in r.text  # durum makinesinin başlangıcı
+        for oge in (
+            'class="proje"',  # 3 panel + alt çizelge ızgarası
+            'class="panel sol"',
+            'class="orta"',
+            'class="panel sag"',
+            'class="alt-timeline"',
         ):
-            assert ekran_id in r.text, ekran_id
+            assert oge in r.text, oge
+
+    def test_durum_makinesinin_alti_asamasi_da_kablolu(self) -> None:
+        """Her aşamanın en az bir paneli olmalı; biri unutulursa ekran boş kalır."""
+        html = TestClient(create_app()).get("/").text
+        css = TestClient(create_app()).get("/static/style.css").text
+        js = TestClient(create_app()).get("/static/app.js").text
+        for asama in ("bos", "yuklendi", "analiz", "analiz_tamam", "render", "sonuc"):
+            assert f'data-asama="{asama}"' in css, f"CSS {asama} durumunu sürmüyor"
+            assert f'"{asama}"' in js, f"JS {asama} durumunu tanımıyor"
+        assert "data-goster" in html
+
+    def test_ust_barda_iki_birincil_eylem(self) -> None:
+        r = TestClient(create_app()).get("/")
+        assert 'id="btn-analiz"' in r.text  # Kesimi Başlat
+        assert 'id="btn-onayla"' in r.text  # Render Al
+        assert 'id="btn-kapat"' in r.text  # KI-14 çıkış yolu
 
     def test_bos_durum_ve_karsilama_yuzeyleri(self) -> None:
         r = TestClient(create_app()).get("/")
-        assert 'class="karsilama"' in r.text  # ana ekran karşılaması
+        assert 'class="karsilama"' in r.text  # karşılama metni
+        assert 'id="bos-durum"' in r.text  # ortadaki dropzone yüzeyi
         assert 'id="gezgin-bos"' in r.text  # boş klasör yüzeyi (metni JS yazar)
         assert 'id="ekran-yok"' in r.text  # iş bulunamadı
+
+    def test_sol_panel_medya_karti_ve_filler_listesi(self) -> None:
+        r = TestClient(create_app()).get("/")
+        for oge in (
+            'id="medya-kart"',
+            'id="medya-ad"',
+            'id="medya-olcu"',
+            'id="medya-kucuk-resim"',
+            'id="btn-medya-degistir"',
+            'id="kesim-listesi"',
+        ):
+            assert oge in r.text, oge
 
     def test_istatistik_paneli_ogeleri(self) -> None:
         r = TestClient(create_app()).get("/")
         for oge in ('id="tur-kirilim"', 'id="filler-dagilim"', 'id="duzenleme-kirilim"'):
             assert oge in r.text, oge
 
-    def test_review_ekrani_gerekli_ogeleri_tasir(self) -> None:
+    def test_zaman_cizelgesi_gerekli_ogeleri_tasir(self) -> None:
         r = TestClient(create_app()).get("/")
         for oge in (
             'id="oynatici"',  # video elementi (Range ile beslenir)
-            'id="dalga"',  # waveform canvas'ı
+            'id="tl-viewport"',  # görünür pencere (zoom'da kaydırılır)
+            'id="tl-track"',  # zoom kadar geniş iç şerit
+            'id="cetvel"',  # zaman cetveli
+            'id="dalga"',  # dalga formu kabı (wavesurfer buraya çizer)
             'id="kesim-katmani"',  # sürüklenebilir kesim blokları
             'id="playhead"',
+            'id="zoom"',  # yakınlaştırma kaydırıcısı
             'id="atlamali"',  # atlamalı oynatma toggle'ı
-            'id="kesim-listesi"',
             'id="btn-onayla"',
         ):
             assert oge in r.text, oge
+
+    def test_dalga_formu_vendor_dosyasindan_yuklenir(self) -> None:
+        """CDN yok: script etiketi repodaki vendor dosyasını göstermeli."""
+        r = TestClient(create_app()).get("/")
+        assert '/static/vendor/wavesurfer.min.js' in r.text
+        assert TestClient(create_app()).get(
+            "/static/vendor/wavesurfer.min.js"
+        ).status_code == 200
+
+    def test_diyaloglar_mod_ve_format_icin_ayri(self) -> None:
+        """Mod analizden ÖNCE, format "Render Al" ANINDA sorulur (varyant 1)."""
+        r = TestClient(create_app()).get("/")
+        assert 'id="dlg-analiz"' in r.text
+        assert 'id="dlg-render"' in r.text
+        # format alanları render diyaloğunun İÇİNDE olmalı
+        render_bas = r.text.index('id="dlg-render"')
+        assert r.text.index('name="cikti"') > render_bas
+        assert r.text.index('id="srt-iste"') > render_bas
+        # mod alanı analiz diyaloğunun içinde ve render'dan ÖNCE
+        assert r.text.index('name="mod"') < render_bas
 
     def test_stil_ve_script_baglari_servis_edilir(self) -> None:
         client = TestClient(create_app())

@@ -1,10 +1,29 @@
 /* Filler-Cut UI — vanilla JS, framework yok (handoff kuralı).
  *
- * Üç ekran: Başlangıç (gezgin + mod) → Koşu (6 aşama, SSE) → Sonuç.
+ * TEK EKRANLI PROJE GÖRÜNÜMÜ (v1.3.0 Dalga A). v1.0'ın beş ayrı ekranı
+ * (başlangıç / koşu / review / sonuç / iş-yok) tek bir editör düzenine
+ * toplandı: üst bar + sol panel (medya kartı + Filler Listesi) + orta
+ * (önizleme) + sağ panel (kesim özeti · ilerleme · sonuç) + alt zaman
+ * çizelgesi. Görünürlüğü DURUM sürer, JS değil: `document.body.dataset.asama`
+ * yazılır ve CSS `[data-asama]` seçicileriyle panelleri gösterir/gizler —
+ * "hangi ekran açık" sorusunun tek bir cevabı olur.
+ *
+ * DURUM MAKİNESİ
+ *   bos        → medya yok; ortada dropzone + gezgin
+ *   yuklendi   → medya var; peaks arka planda hesaplanır, "Kesimi Başlat" aktif
+ *   analiz     → pipeline koşuyor; medya değiştirme/bırakma REDDEDİLİR
+ *   analiz_tamam → kesimler düzenlenebilir; "Render Al" aktif
+ *   render     → onay verildi, RENDER/XML koşuyor
+ *   sonuc      → çıktı yolları + "Yeni video" (aynı ekranda)
+ *
  * Güvenlik: sunucudan/diskten gelen HER metin textContent ile yazılır —
  * innerHTML'e veri girmez. SSE kopuşunda EventSource kendi kendine yeniden
  * bağlanır (sunucu retry: 1000 gönderir) ve Last-Event-ID replay'i kaçan
- * olayları geri getirir; UI yalnız durum satırında uyarı gösterir.
+ * olayları geri getirir.
+ *
+ * Doğruluğun kaynağı SUNUCUDUR: her düzenleme POST edilir ve ekran DÖNEN
+ * görünümden çizilir. Buradaki snap/clamp yalnız sürükleme sırasındaki
+ * görsel geri bildirimdir.
  */
 "use strict";
 
@@ -20,13 +39,26 @@ const ASAMALAR = [
 
 const el = (id) => document.getElementById(id);
 
+/* Durum makinesinin adları — `data-asama` ve CSS `[data-goster]` ile aynı
+   sözlük. Sıra bilgi amaçlıdır; geçişler açıkça yazılır. */
+const ASAMA_ADLARI = [
+  "bos",
+  "yuklendi",
+  "analiz",
+  "analiz_tamam",
+  "render",
+  "sonuc",
+];
+
 const durum = {
+  asama: "bos",
   yol: null,        // gezginin gösterdiği dizin
   ust: null,        // üst dizin (null → kök)
   secili: null,     // {ad, yol, boyut}
   jobId: null,
   es: null,         // aktif EventSource
   uzantilar: [],    // kabul edilen uzantılar — SUNUCUDAN gelir (browse cevabı)
+  mod: "default",   // son seçilen analiz modu (sağ panel özeti gösterir)
 };
 
 /* ── yardımcılar ─────────────────────────────────────────────────────── */
@@ -44,9 +76,10 @@ function boyutMetni(bayt) {
   return bayt + " B";
 }
 
-function ekranGoster(id) {
-  for (const e of document.querySelectorAll(".ekran")) e.classList.add("gizli");
-  el(id).classList.remove("gizli");
+function sureMetni(ms) {
+  const sn = ms / 1000;
+  const dk = Math.floor(sn / 60);
+  return dk + ":" + (sn - dk * 60).toFixed(1).padStart(4, "0");
 }
 
 async function apiHatasi(cevap) {
@@ -76,23 +109,157 @@ function simge(tur) {
   return svg;
 }
 
-/* ── Ekran 1: gezgin + mod + başlat ──────────────────────────────────── */
+/* ── durum makinesi ───────────────────────────────────────────────────
+ *
+ * Tek yazar: `asamaAyarla`. Görünürlük kararı CSS'tedir (`[data-asama]`),
+ * burada yalnız düğme etkinliği ve durum metni ayarlanır — iki yerde
+ * birden gösterme/gizleme yapmak, ekranın hangi durumda olduğunu
+ * belirsizleştirirdi.
+ */
 
-function secimiTemizle() {
-  durum.secili = null;
-  el("secim-ozet").textContent = "Dosya seçilmedi";
-  el("secim-ozet").classList.remove("dolu");
-  el("btn-baslat").disabled = true;
+const DURUM_METNI = {
+  bos: "",
+  yuklendi: "Medya hazır — kesimi başlatabilirsiniz.",
+  analiz: "Analiz ediliyor…",
+  analiz_tamam: "Kesimleri gözden geçirin, sonra Render Al.",
+  render: "Çıktı üretiliyor…",
+  sonuc: "Tamamlandı.",
+};
+
+function asamaAyarla(yeni) {
+  if (!ASAMA_ADLARI.includes(yeni)) return;
+  durum.asama = yeni;
+  document.body.dataset.asama = yeni;
+  el("ust-durum").textContent = DURUM_METNI[yeni] || "";
+  dugmeleriTazele();
 }
 
-function videoSec(girdi, satir) {
-  for (const li of el("gezgin-liste").children) li.classList.remove("secili");
-  satir.classList.add("secili");
+function dugmeleriTazele() {
+  /* "Render Al" yalnız analiz_tamam'da ve plan geçerliyken basılabilir. */
+  const planBozuk = !!(review.gorunum && review.gorunum.hata);
+  el("btn-analiz").disabled = durum.asama !== "yuklendi";
+  el("btn-onayla").disabled = durum.asama !== "analiz_tamam" || planBozuk;
+  el("btn-medya-degistir").disabled = !medyaDegistirilebilir();
+}
+
+function medyaDegistirilebilir() {
+  /* İş koşarken medya DEĞİŞTİRİLEMEZ: pipeline o dosyayı okuyor ve sessizce
+     ikinci bir iş başlatmak kullanıcıyı şaşırtırdı. Ölçüt EKRAN değil DURUM
+     (v1.2.x'te ekran görünürlüğüne bakılıyordu — tek ekranda o ölçüt yok). */
+  return durum.asama === "bos" || durum.asama === "yuklendi";
+}
+
+/* ── medya seçimi + önizleme ─────────────────────────────────────────── */
+
+function medyaKartiCiz(girdi) {
+  el("medya-bos").classList.add("gizli");
+  el("medya-dolu").classList.remove("gizli");
+  el("medya-ad").textContent = girdi.ad;
+  el("medya-ad").title = girdi.yol;
+  el("medya-olcu").textContent = boyutMetni(girdi.boyut);
+  const resim = el("medya-kucuk-resim");
+  resim.hidden = true;
+  resim.removeAttribute("src");
+}
+
+function medyaOlcuTazele() {
+  /* Süre önizleme ucundan (ffprobe) gelir — `video.duration` değil: zaman
+     çizelgesinin ve kesim planının kullandığı süre ile aynı olmalı. */
+  if (!durum.secili) return;
+  const parcalar = [boyutMetni(durum.secili.boyut)];
+  if (zc.total_ms > 0) parcalar.push(mmss(zc.total_ms));
+  el("medya-olcu").textContent = parcalar.join(" · ");
+}
+
+function medyaYukle(girdi) {
   durum.secili = girdi;
-  el("secim-ozet").textContent = girdi.ad + " · " + boyutMetni(girdi.boyut);
-  el("secim-ozet").classList.add("dolu");
-  el("btn-baslat").disabled = false;
+  medyaKartiCiz(girdi);
+  zcSifirla();
+  const oynatici = el("oynatici");
+  oynatici.src = "/api/medya/video?path=" + encodeURIComponent(girdi.yol);
+  oynatici.load();
+  kucukResim.alindi = false;
+  asamaAyarla("yuklendi");
+  onizlemeBaslat(girdi.yol);
 }
+
+/* Önizleme (süre + dalga zarfı) SUNUCUDA, arka planda hesaplanır ve dosya
+   başına önbelleklenir. SSE yerine yoklama bilinçli: tek bir durum alanıdır
+   (kurulum sihirbazındaki kararın aynısı). */
+const onizleme = { zamanlayici: null, yol: null };
+
+function onizlemeDurdur() {
+  if (onizleme.zamanlayici !== null) {
+    clearInterval(onizleme.zamanlayici);
+    onizleme.zamanlayici = null;
+  }
+}
+
+function onizlemeBaslat(yol) {
+  onizlemeDurdur();
+  onizleme.yol = yol;
+  onizlemeYokla();
+  onizleme.zamanlayici = setInterval(onizlemeYokla, 500);
+}
+
+async function onizlemeYokla() {
+  if (!onizleme.yol) return;
+  let veri;
+  try {
+    const cevap = await fetch(
+      "/api/medya/onizleme?path=" + encodeURIComponent(onizleme.yol)
+    );
+    if (!cevap.ok) {
+      onizlemeDurdur();
+      dropNotu(await apiHatasi(cevap), "hata");
+      return;
+    }
+    veri = await cevap.json();
+  } catch (_) {
+    return; // geçici kopma: bir sonraki yoklamada tekrar denenir
+  }
+  if (veri.durum === "hesaplaniyor") return;
+  onizlemeDurdur();
+  if (veri.durum === "hata") {
+    dropNotu(veri.hata || "Önizleme üretilemedi.", "hata");
+    return;
+  }
+  zc.total_ms = veri.total_ms || 0;
+  zc.peaks = veri.peaks;
+  zc.olcek = veri.olcek || 127;
+  medyaOlcuTazele();
+  zcCiz();
+}
+
+/* Küçük resim: ayrı bir ffmpeg koşusu YOK — önizleme oynatıcısının ilk
+   karesi canvas'a çizilir. Yan bir süstür; başarısız olursa kart yazıyla
+   çalışmaya devam eder. */
+const kucukResim = { alindi: false };
+
+function kucukResimUret() {
+  const video = el("oynatici");
+  if (kucukResim.alindi || !video.videoWidth) return;
+  try {
+    const tuval = document.createElement("canvas");
+    const en = 160;
+    tuval.width = en;
+    tuval.height = Math.max(1, Math.round((en * video.videoHeight) / video.videoWidth));
+    tuval.getContext("2d").drawImage(video, 0, 0, tuval.width, tuval.height);
+    const resim = el("medya-kucuk-resim");
+    resim.src = tuval.toDataURL("image/jpeg", 0.7);
+    resim.hidden = false;
+    kucukResim.alindi = true;
+  } catch (_) { /* taint/codec — küçük resim süs, kartı bozmaz */ }
+}
+
+el("oynatici").addEventListener("loadeddata", kucukResimUret);
+
+el("btn-medya-degistir").addEventListener("click", () => {
+  if (!medyaDegistirilebilir()) return;
+  yeniIs();
+});
+
+/* ── gezgin ──────────────────────────────────────────────────────────── */
 
 function koklderiYaz(kokler, tamYol) {
   /* Kök seçici — YALNIZ birden çok kök varsa görünür (config'le izinli
@@ -182,7 +349,6 @@ async function gezginYukle(yol) {
      bir doğruluk kaynağı yaratırdı. Yalnız hızlı geri bildirim için —
      kabul kararı her hâlükârda /api/fs/sec'te verilir. */
   durum.uzantilar = veri.uzantilar || [];
-  secimiTemizle();
   koklderiYaz(veri.kokler || [], veri.yol);
   yolYaz(veri.parcalar, veri.yol);
   el("btn-ust").disabled = veri.ust === null;
@@ -209,10 +375,8 @@ async function gezginYukle(yol) {
     const boyut = document.createElement("span");
     boyut.className = "boyut";
     boyut.textContent = boyutMetni(v.boyut);
-    li.appendChild(ad);
-    li.appendChild(boyut);
-    li.addEventListener("click", () => videoSec(v, li));
-    li.addEventListener("dblclick", () => { videoSec(v, li); baslat(); });
+    li.append(ad, boyut);
+    li.addEventListener("click", () => medyaYukle(v));
     liste.appendChild(li);
   }
   bosDurumYaz(veri);
@@ -233,40 +397,6 @@ function bosDurumYaz(veri) {
     ? "Bu klasörde video yok — bir alt klasöre inin."
     : "Bu klasör boş. Yukarıdaki yol çubuğundan başka bir klasöre geçin.";
   kutu.classList.remove("gizli");
-}
-
-async function baslat() {
-  if (!durum.secili) return;
-  const hata = el("baslangic-hata");
-  hata.classList.add("gizli");
-  el("btn-baslat").disabled = true;
-  const aggressive =
-    document.querySelector('input[name="mod"]:checked').value === "aggressive";
-  // Dışa aktarım kolu: "xml" seçildiğinde RENDER hiç koşmaz (karar sunucuda;
-  // geçersiz bir değer route'ta 400 ile ölür).
-  const cikti = document.querySelector('input[name="cikti"]:checked').value;
-  const srt = el("srt-iste").checked;
-  let cevap;
-  try {
-    cevap = await fetch("/api/jobs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: durum.secili.yol, aggressive, cikti, srt }),
-    });
-  } catch (_) {
-    hata.textContent = "Sunucuya ulaşılamıyor — iş başlatılamadı.";
-    hata.classList.remove("gizli");
-    el("btn-baslat").disabled = false;
-    return;
-  }
-  if (!cevap.ok) {
-    hata.textContent = await apiHatasi(cevap);
-    hata.classList.remove("gizli");
-    el("btn-baslat").disabled = false;
-    return;
-  }
-  const snapshot = await cevap.json();
-  kosuBaslat(snapshot);
 }
 
 /* ── Sürükle-bırak + dosya seçici ────────────────────────────────────────
@@ -297,12 +427,25 @@ function dropNotu(metin, sinif) {
   not.className = "dropzone-not" + (metin ? " " + sinif : "");
 }
 
+/* Koşarken bırakma reddi TEK METİN, TEK YER. Önceden iki çağrı yeri (native
+   köprüsü ve tarayıcı drop'u) aynı cümleyi ayrı ayrı yazıyordu; biri
+   değişirse iki mod farklı konuşurdu. Ret ayrıca üst bardaki durum
+   satırında da görünür: dropzone boş durumda gizlidir, yani yüklü medya
+   üzerine bırakan kullanıcı notu hiç göremezdi. */
+const BIRAKMA_REDDI = "Bir iş çalışıyor — bitmesini bekleyin.";
+
 function birakmaKabulEdilirMi() {
-  /* İş koşarken bırakma REDDEDİLİR: kuyruk tasarımı bu dalganın kapsamı
-     değil, ve sessizce ikinci bir iş başlatmak kullanıcıyı şaşırtırdı.
-     Ölçüt ekranın kendisidir — başlangıç ekranı görünür değilse koşu,
-     review ya da sonuç ekranındayız. */
-  return !el("ekran-baslangic").classList.contains("gizli");
+  return medyaDegistirilebilir();
+}
+
+function birakmaReddet() {
+  dropNotu(BIRAKMA_REDDI, "hata");
+  el("ust-durum").textContent = BIRAKMA_REDDI;
+  window.setTimeout(() => {
+    if (el("ust-durum").textContent === BIRAKMA_REDDI) {
+      el("ust-durum").textContent = DURUM_METNI[durum.asama] || "";
+    }
+  }, 4000);
 }
 
 function uzantiKabul(ad) {
@@ -342,18 +485,14 @@ async function yoluSec(yol) {
     return;
   }
   const girdi = await cevap.json();
-  for (const li of el("gezgin-liste").children) li.classList.remove("secili");
-  durum.secili = girdi;
-  el("secim-ozet").textContent = girdi.ad + " · " + boyutMetni(girdi.boyut);
-  el("secim-ozet").classList.add("dolu");
-  el("btn-baslat").disabled = false;
   dropNotu("Seçildi: " + girdi.ad, "bilgi");
+  medyaYukle(girdi);
 }
 
 /* pywebview (Python) bırakılan dosyanın TAM YOLUNU buraya teslim eder. */
 window.fillercutDosyaBirakildi = function (yol) {
   if (!birakmaKabulEdilirMi()) {
-    dropNotu("Bir iş çalışıyor — bitmesini bekleyin.", "hata");
+    birakmaReddet();
     return;
   }
   yoluSec(yol);
@@ -381,7 +520,7 @@ function dropzoneKur() {
     e.preventDefault();
     const aktarim = e.dataTransfer;
     if (!birakmaKabulEdilirMi()) {
-      dropNotu("Bir iş çalışıyor — bitmesini bekleyin.", "hata");
+      birakmaReddet();
       return;
     }
     if (klasorMu(aktarim)) {
@@ -420,7 +559,10 @@ function dropzoneKur() {
   });
 
   el("btn-dosya-sec").addEventListener("click", async () => {
-    if (!birakmaKabulEdilirMi()) return;
+    if (!birakmaKabulEdilirMi()) {
+      birakmaReddet();
+      return;
+    }
     if (!nativeMi()) {
       dropNotu(
         "Tarayıcı modunda dosya seçici aşağıdaki klasör listesidir.",
@@ -441,7 +583,186 @@ function dropzoneKur() {
   });
 }
 
-/* ── Ekran 2: aşama göstergesi + SSE ─────────────────────────────────── */
+/* ── zaman çizelgesi: cetvel + dalga + bloklar + playhead + zoom ────────
+ *
+ * Ölçek modeli: `#tl-viewport` görünür pencere, `#tl-track` ise zoom kadar
+ * GENİŞ iç şerittir (`width: calc(100% * zoom)`). Bütün konumlar track'in
+ * YÜZDESİDİR — yani zoom değişince tek bir genişlik güncellemesi her şeyi
+ * (dalga, bloklar, playhead, cetvel) birlikte taşır ve sürükleme matematiği
+ * hiç değişmez.
+ */
+
+const zc = {
+  total_ms: 0,
+  peaks: null,
+  olcek: 127,
+  zoom: 1,
+  ws: null,       // wavesurfer örneği (vendor; yoksa dalga çizilmez)
+};
+
+function zcSifirla() {
+  zc.total_ms = 0;
+  zc.peaks = null;
+  zc.zoom = 1;
+  el("zoom").value = "1";
+  el("zoom-deger").textContent = "1×";
+  el("tl-track").style.width = "100%";
+  el("tl-viewport").scrollLeft = 0;
+  el("cetvel").textContent = "";
+  el("kesim-katmani").textContent = "";
+  el("playhead").style.left = "0%";
+  dalgaYok();
+}
+
+function yuzde(ms) {
+  return zc.total_ms > 0 ? (ms / zc.total_ms) * 100 : 0;
+}
+
+function pxMs(px) {
+  const genislik = el("tl-track").clientWidth || 1;
+  return Math.round((px / genislik) * zc.total_ms);
+}
+
+function olayMs(ev) {
+  const kutu = el("tl-track").getBoundingClientRect();
+  const x = Math.min(Math.max(ev.clientX - kutu.left, 0), kutu.width);
+  return Math.min(zc.total_ms, Math.max(0, pxMs(x)));
+}
+
+/* Cetvel adımları (ms). Etiketler en az ~90 px arayla düşsün diye ilk uygun
+   adım seçilir — zoom'da otomatik sıklaşır. */
+const CETVEL_ADIMLARI = [
+  100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000,
+  60000, 120000, 300000, 600000, 900000, 1800000,
+];
+
+function cetvelCiz() {
+  const kap = el("cetvel");
+  kap.textContent = "";
+  const genislik = el("tl-track").clientWidth;
+  if (!zc.total_ms || genislik <= 0) return;
+  const msBasinaPx = genislik / zc.total_ms;
+  const adim =
+    CETVEL_ADIMLARI.find((a) => a * msBasinaPx >= 90) ||
+    CETVEL_ADIMLARI[CETVEL_ADIMLARI.length - 1];
+  for (let ms = 0; ms <= zc.total_ms; ms += adim) {
+    const isaret = document.createElement("span");
+    isaret.className = "tik";
+    isaret.style.left = yuzde(ms) + "%";
+    const etiket = document.createElement("span");
+    etiket.className = "tik-etiket";
+    etiket.textContent = adim < 1000 ? sureMetni(ms) : mmss(ms);
+    isaret.appendChild(etiket);
+    kap.appendChild(isaret);
+  }
+}
+
+function dalgaYok() {
+  if (zc.ws) {
+    try { zc.ws.destroy(); } catch (_) { /* zaten yok */ }
+    zc.ws = null;
+  }
+  el("dalga").textContent = "";
+}
+
+function peaksDuzlestir(peaks, olcek) {
+  /* Sunucu `[[min,max], …]` zarfı verir; wavesurfer kanal başına DÜZ bir
+     normalize örnek dizisi ister. min/max'i sırayla dizmek zarfı birebir
+     korur: kütüphane piksel başına dilimin min/max'ini alır. */
+  const duz = new Float32Array(peaks.length * 2);
+  for (let i = 0; i < peaks.length; i++) {
+    duz[i * 2] = peaks[i][0] / olcek;
+    duz[i * 2 + 1] = peaks[i][1] / olcek;
+  }
+  return duz;
+}
+
+function dalgaCiz() {
+  /* Dalga formu YAN bir görselleştirmedir: wavesurfer yoksa ya da zarf
+     üretilememişse zaman çizelgesi cetvel + bloklarla çalışmaya devam eder
+     (v1.0'dan beri geçerli sözleşme). */
+  dalgaYok();
+  const kap = el("dalga");
+  if (!window.WaveSurfer || !zc.peaks || !zc.peaks.length || !zc.total_ms) return;
+  const yukseklik = kap.clientHeight || 64;
+  try {
+    zc.ws = window.WaveSurfer.create({
+      container: kap,
+      height: yukseklik,
+      waveColor: "rgba(139, 148, 158, .55)",
+      progressColor: "rgba(139, 148, 158, .55)", // ilerleme çubuğu YOK: playhead ayrı
+      cursorWidth: 0,
+      interact: false,       // tıklama/sürükleme bizim katmanımızın
+      fillParent: true,
+      normalize: false,
+      peaks: [peaksDuzlestir(zc.peaks, zc.olcek)],
+      duration: zc.total_ms / 1000,
+    });
+  } catch (_) {
+    zc.ws = null;
+  }
+}
+
+/* Dalga formu ÖLÇÜLDÜ, varsayılmadı: wavesurfer kabını YARATILDIĞI anda
+   ölçer ve kap sonradan genişlediğinde tuvalleri YENİLEMEZ (zoom 8×'te
+   9824 px'lik şeride 1228 px'lik tuval kalıyordu). `setOptions` bunu
+   düzeltmedi; `zoom()` düzeltti ama üstüne ikinci bir tuval katmanı
+   ekledi. Tek temiz yol örneği yeniden yaratmaktır — kaydırıcı sürüklenirken
+   her karede yeniden yaratmamak için gecikmelidir. */
+let zoomDalgaZamanlayici = null;
+
+function zoomUygula(yeni) {
+  zc.zoom = yeni;
+  el("zoom-deger").textContent = yeni.toFixed(yeni % 1 ? 1 : 0) + "×";
+  el("tl-track").style.width = yeni * 100 + "%";
+  cetvelCiz();
+  playheadTazele();
+  if (zoomDalgaZamanlayici !== null) clearTimeout(zoomDalgaZamanlayici);
+  zoomDalgaZamanlayici = window.setTimeout(() => {
+    zoomDalgaZamanlayici = null;
+    dalgaCiz();
+  }, 120);
+}
+
+function zcCiz() {
+  cetvelCiz();
+  dalgaCiz();
+  bloklariCiz();
+  playheadTazele();
+}
+
+el("zoom").addEventListener("input", (ev) => {
+  zoomUygula(Number(ev.target.value));
+});
+
+/* Görünür pencere genişliği değişince cetvel yeniden ölçeklenir (pencere
+   boyutlanması, panelin ilk düzeni ve arka sekmenin öne gelmesi aynı
+   yoldan geçer — window.resize üçünü de yakalamaz). */
+if (window.ResizeObserver) {
+  new ResizeObserver(() => {
+    if (zc.total_ms) cetvelCiz();
+  }).observe(el("tl-viewport"));
+}
+
+function playheadTazele() {
+  const ms = el("oynatici").currentTime * 1000;
+  el("playhead").style.left = yuzde(ms) + "%";
+  el("zaman").textContent = sureMetni(ms) + " / " + sureMetni(zc.total_ms);
+  playheadGorunurTut(ms);
+}
+
+function playheadGorunurTut(ms) {
+  /* Yakınlaştırılmış çizelgede oynatma başlığı pencereden kaçmasın. */
+  if (zc.zoom <= 1 || review.surukleme) return;
+  const pencere = el("tl-viewport");
+  const x = (ms / (zc.total_ms || 1)) * el("tl-track").clientWidth;
+  const kenar = 60;
+  if (x < pencere.scrollLeft + kenar || x > pencere.scrollLeft + pencere.clientWidth - kenar) {
+    pencere.scrollLeft = Math.max(0, x - pencere.clientWidth / 2);
+  }
+}
+
+/* ── koşu: aşama göstergesi + SSE ────────────────────────────────────── */
 
 function asamalariKur() {
   const ol = el("asamalar");
@@ -460,8 +781,7 @@ function asamalariKur() {
     const kodEl = document.createElement("span");
     kodEl.className = "asama-kod";
     kodEl.textContent = " " + kod;
-    govde.appendChild(adEl);
-    govde.appendChild(kodEl);
+    govde.append(adEl, kodEl);
     const sure = document.createElement("span");
     sure.className = "asama-sure";
     sure.dataset.kod = kod;
@@ -517,7 +837,7 @@ function asamaSaatiIsle(olay) {
 
 setInterval(() => {
   if (kosu.aktifAsama === null) return;
-  if (el("ekran-kosu").classList.contains("gizli")) return;
+  if (durum.asama !== "analiz" && durum.asama !== "render") return;
   const simdi = Date.now() - kosu.saatFarki;
   asamaSuresiYaz(kosu.aktifAsama, simdi - kosu.baslangiclar[kosu.aktifAsama], false);
 }, 250);
@@ -546,15 +866,46 @@ function tumAsamalarTamam() {
   }
 }
 
+async function analiziBaslat() {
+  if (!durum.secili) return;
+  const hata = el("baslangic-hata");
+  hata.classList.add("gizli");
+  durum.mod = document.querySelector('input[name="mod"]:checked').value;
+  let cevap;
+  try {
+    /* Çıktı kolu BURADA sorulmaz (onaylanmış varyant 1): iş `mp4`
+       varsayılanıyla başlar, format "Render Al"da seçilip onay gövdesiyle
+       gider. Sunucu tarafında `ReviewKarari.cikti` bunu taşır. */
+    cevap = await fetch("/api/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: durum.secili.yol,
+        aggressive: durum.mod === "aggressive",
+      }),
+    });
+  } catch (_) {
+    hata.textContent = "Sunucuya ulaşılamıyor — iş başlatılamadı.";
+    hata.classList.remove("gizli");
+    return;
+  }
+  if (!cevap.ok) {
+    hata.textContent = await apiHatasi(cevap);
+    hata.classList.remove("gizli");
+    asamaAyarla("yuklendi");
+    return;
+  }
+  kosuBaslat(await cevap.json());
+}
+
 function kosuBaslat(snapshot) {
   durum.jobId = snapshot.id;
-  el("kosu-dosya").textContent = snapshot.video;
   el("kosu-hata").classList.add("gizli");
   el("kosu-durum").textContent = "Başlatılıyor…";
   el("kosu-durum").classList.remove("uyari");
   asamalariKur();
   if (snapshot.asama) asamaGuncelle(snapshot.asama);
-  ekranGoster("ekran-kosu");
+  asamaAyarla("analiz");
   sseAc(snapshot.id);
 }
 
@@ -579,11 +930,7 @@ function sseAc(jobId) {
     el("kosu-durum").classList.add("uyari");
     try {
       const cevap = await fetch("/api/jobs/" + jobId);
-      if (cevap.status === 404) {
-        sseKapat();
-        document.body.classList.remove("review-modu");
-        ekranGoster("ekran-yok");
-      }
+      if (cevap.status === 404) isYok();
     } catch (_) { /* sunucu tamamen kapalı: yeniden deneme sürsün */ }
   };
 }
@@ -595,23 +942,26 @@ function sseKapat() {
   }
 }
 
+function isYok() {
+  sseKapat();
+  el("ekran-yok").classList.remove("gizli");
+}
+
 function olayIsle(olay) {
   asamaSaatiIsle(olay);
   if (olay.tip === "durum") {
     if (olay.durum === "queued") el("kosu-durum").textContent = "Sırada…";
     if (olay.durum === "running") el("kosu-durum").textContent = "Çalışıyor…";
     if (olay.durum === "review") {
-      // Pipeline PLAN'dan sonra durdu: gözden geçirme ekranına geç.
+      // Pipeline PLAN'dan sonra durdu: kesimler düzenlenebilir.
       reviewAc(durum.jobId);
     }
     if (olay.durum === "rendering") {
-      document.body.classList.remove("review-modu");
-      ekranGoster("ekran-kosu");
-      el("kosu-durum").textContent = "Render ediliyor…";
+      asamaAyarla("render");
+      el("kosu-durum").textContent = "Çıktı üretiliyor…";
     }
   } else if (olay.tip === "iptal") {
     sseKapat();
-    document.body.classList.remove("review-modu");
     yeniIs();
   } else if (olay.tip === "asama") {
     asamaGuncelle(olay.asama);
@@ -640,11 +990,7 @@ function hataGoster(mesaj, detay) {
   el("kosu-hata").classList.remove("gizli");
 }
 
-/* ── Ekran 3: review (oynatıcı + zaman çizelgesi + kesim listesi) ─────── */
-
-/* Sunucu doğruluğun kaynağıdır: her düzenleme POST edilir, ekran DÖNEN
- * görünümden çizilir. Buradaki snap/clamp yalnız sürükleme sırasındaki
- * görsel geri bildirimdir — bırakınca sunucunun dediği olur. */
+/* ── review: kesim listesi + bloklar + özet ──────────────────────────── */
 
 const review = {
   gorunum: null,   // sunucudan gelen son ReviewGorunumu
@@ -657,40 +1003,16 @@ const review = {
   snap: true,
 };
 
-function msPx(ms) {
-  const g = el("timeline").clientWidth || 1;
-  return (ms / review.gorunum.total_ms) * g;
-}
-
-function pxMs(px) {
-  const g = el("timeline").clientWidth || 1;
-  return Math.round((px / g) * review.gorunum.total_ms);
-}
-
-function yuzde(ms) {
-  return (ms / review.gorunum.total_ms) * 100;
-}
-
-function sureMetni(ms) {
-  const sn = ms / 1000;
-  const dk = Math.floor(sn / 60);
-  return dk + ":" + (sn - dk * 60).toFixed(1).padStart(4, "0");
-}
-
 async function reviewAc(jobId) {
   durum.jobId = jobId;
-  document.body.classList.add("review-modu");
-  ekranGoster("ekran-review");
-  const oynatici = el("oynatici");
-  if (!oynatici.src) oynatici.src = "/api/jobs/" + jobId + "/video";
+  asamaAyarla("analiz_tamam");
   await reviewYukle();
-  peaksYukle();
 }
 
 async function reviewYukle() {
   const cevap = await fetch("/api/jobs/" + durum.jobId + "/review");
   if (cevap.status === 404) {
-    ekranGoster("ekran-yok");
+    isYok();
     return;
   }
   if (!cevap.ok) {
@@ -698,18 +1020,15 @@ async function reviewYukle() {
     return;
   }
   review.gorunum = await cevap.json();
-  reviewCiz();
-}
-
-async function peaksYukle() {
-  try {
-    const cevap = await fetch("/api/jobs/" + durum.jobId + "/peaks");
-    if (!cevap.ok) return;
-    const veri = await cevap.json();
-    review.peaks = veri.peaks;
-    review.olcek = veri.olcek || 127;
+  /* Süre artık iki kaynaktan gelebilir (önizleme ucu + plan); PLAN'ınki
+     otoritedir — kesim sınırları onunla aynı çizgide olmak zorunda. */
+  if (review.gorunum.total_ms && review.gorunum.total_ms !== zc.total_ms) {
+    zc.total_ms = review.gorunum.total_ms;
+    medyaOlcuTazele();
+    cetvelCiz();
     dalgaCiz();
-  } catch (_) { /* dalga yan bir süs — yokluğu ekranı bozmaz */ }
+  }
+  reviewCiz();
 }
 
 function reviewHata(mesaj) {
@@ -722,80 +1041,60 @@ function reviewHata(mesaj) {
   kutu.classList.remove("gizli");
 }
 
-function dalgaCiz() {
-  const tuval = el("dalga");
-  const kap = el("timeline");
-  const oran = window.devicePixelRatio || 1;
-  const g = kap.clientWidth;
-  const y = kap.clientHeight;
-  /* Genişlik 0 iken çizmek tuvali 1 px'e sabitler ve dalga bir daha
-     görünmez (ekran gizliyken/sekme arkadayken düzen henüz oluşmamıştır).
-     Aşağıdaki ResizeObserver genişlik gelince yeniden çağırır. */
-  if (g <= 0 || y <= 0) return;
-  tuval.width = Math.max(1, Math.floor(g * oran));
-  tuval.height = Math.max(1, Math.floor(y * oran));
-  const ctx = tuval.getContext("2d");
-  ctx.setTransform(oran, 0, 0, oran, 0, 0);
-  ctx.clearRect(0, 0, g, y);
-  if (!review.peaks || !review.peaks.length) return;
-  const orta = y / 2;
-  const olcek = review.olcek || 127;
-  ctx.fillStyle = "rgba(139, 148, 158, .55)";
-  const n = review.peaks.length;
-  for (let i = 0; i < n; i++) {
-    const [alt, ust] = review.peaks[i];
-    const x = (i / n) * g;
-    const w = Math.max(1, g / n);
-    const ustY = orta - (ust / olcek) * (orta - 2);
-    const altY = orta - (alt / olcek) * (orta - 2);
-    ctx.fillRect(x, ustY, w, Math.max(1, altY - ustY));
-  }
-}
-
 function reviewCiz() {
   const g = review.gorunum;
   reviewHata(g.hata);
-  el("btn-onayla").disabled = !!g.hata;
-  canliOzetCiz();
+  dugmeleriTazele();
+  ozetCiz();
   bloklariCiz();
   listeyiCiz();
   miknatisCiz(); // durum ↔ DOM tek yerden senkron
 }
 
-function canliOzetCiz() {
-  /* Onay öncesi kazanım önizlemesi: her düzenlemeden sonra sunucunun
-     döndürdüğü sayılarla yeniden yazılır (istemcide hesap yok). */
+const MOD_ETIKET = { default: "Normal", aggressive: "Agresif" };
+
+const TUR_ETIKET = {
+  kesin_filler: ["Kesin filler", "#e5484d"],
+  aday_filler: ["Aday filler", "#d29922"],
+  silence: ["Sessizlik", "#388bfd"],
+  manuel: ["Elle eklenen", "#a371f7"],
+};
+
+function ozetCiz() {
+  /* Sağ panel — sayıların TEK kaynağı sunucunun döndürdüğü görünümdür;
+     burada hiçbir sayı yeniden hesaplanmaz. `tiers` UYGULANMIŞ plandan
+     gelir, yani rapor.json'a yazılacak sayının aynısıdır. */
   const g = review.gorunum;
-  const aktif = g.kesimler.filter((k) => k.aktif).length;
+  el("ozet-mod").textContent = "Mod: " + (MOD_ETIKET[durum.mod] || durum.mod);
   const yuzdeKazanc = g.total_ms > 0 ? (g.kesilen_ms / g.total_ms) * 100 : 0;
-  const kap = el("canli-ozet");
-  kap.textContent = "";
-  const parcalar = [
-    ["b", String(aktif) + " kesim"],
-    ["span", " · toplam "],
-    ["b", g.kesilen_ms + " ms"],
-    ["span", " kesilecek · yeni süre "],
-    ["span.yeni-sure", mmss(g.kalan_ms)],
-    ["span", " (%" + yuzdeKazanc.toFixed(1) + " kazanım)"],
-  ];
-  for (const [etiket, metin] of parcalar) {
-    const [ad, sinif] = etiket.split(".");
-    const oge = document.createElement(ad);
-    if (sinif) oge.className = sinif;
-    oge.textContent = metin;
-    kap.appendChild(oge);
+  el("ozet-kazanc").textContent = "%" + yuzdeKazanc.toFixed(1) + " kazanım";
+  el("ozet-orijinal").textContent = mmss(g.total_ms);
+  el("ozet-yeni").textContent = mmss(g.kalan_ms);
+
+  const tiers = g.tiers || {};
+  const liste = el("tur-kirilim");
+  liste.textContent = "";
+  const enBuyuk = Math.max(1, ...Object.keys(TUR_ETIKET).map((k) => tiers[k] || 0));
+  for (const anahtar of Object.keys(TUR_ETIKET)) {
+    const [etiket, renk] = TUR_ETIKET[anahtar];
+    liste.appendChild(kirilimSatiri(etiket, tiers[anahtar] || 0, enBuyuk, renk));
   }
+
+  const aktif = g.kesimler.filter((k) => k.aktif).length;
+  el("ozet-plan").textContent =
+    aktif + " kesim · toplam " + mmss(g.kesilen_ms) + " kesilecek";
 }
 
 function bloklariCiz() {
   const katman = el("kesim-katmani");
   katman.textContent = "";
+  if (!review.gorunum) return;
   for (const k of review.gorunum.kesimler) {
     const blok = document.createElement("div");
     blok.className = "kesim-blok tip-" + k.tur + (k.aktif ? "" : " pasif");
     if (k.id === review.secili) blok.classList.add("secili");
     blok.style.left = yuzde(k.bas_ms) + "%";
-    blok.style.width = Math.max(0.15, yuzde(k.bit_ms - k.bas_ms)) + "%";
+    blok.style.width = Math.max(0.05, yuzde(k.bit_ms - k.bas_ms)) + "%";
     blok.dataset.id = k.id;
     blok.title = k.reason;
     for (const yan of ["sol", "sag"]) {
@@ -809,35 +1108,61 @@ function bloklariCiz() {
 }
 
 function listeyiCiz() {
+  /* Sol panelin Filler Listesi: zaman + kelime + tür rozeti. Kelime
+     SUNUCUDAN gelir (`kelimeler`, reason zincirinden) — istemcide reason
+     ayrıştırması YOK, ikinci bir parse kopyası zamanla ayrışırdı. */
   const liste = el("kesim-listesi");
   liste.textContent = "";
-  for (const k of review.gorunum.kesimler) {
+  const kesimler = review.gorunum ? review.gorunum.kesimler : [];
+  el("liste-bos").classList.toggle("gizli", kesimler.length > 0);
+  el("liste-sayi").textContent = kesimler.length ? kesimler.length + " kesim" : "";
+
+  for (const k of kesimler) {
     const li = document.createElement("li");
     li.dataset.id = k.id;
     if (!k.aktif) li.classList.add("pasif");
     if (k.id === review.secili) li.classList.add("secili");
 
+    const bas = document.createElement("div");
+    bas.className = "satir-bas";
+
+    const zaman = document.createElement("span");
+    zaman.className = "aralik mono";
+    zaman.textContent = sureMetni(k.bas_ms);
+
+    const kelime = document.createElement("span");
+    kelime.className = "kelime";
+    /* Kelimesiz kesimde (sessizlik / elle eklenen) tire konur: türü
+       zaten rozet söylüyor, aynı kelimeyi iki kez yazmak satırı gürültüye
+       boğardı. */
+    kelime.textContent = k.kelimeler && k.kelimeler.length
+      ? k.kelimeler.join(" · ")
+      : "—";
+    kelime.classList.toggle("kelimesiz", !(k.kelimeler && k.kelimeler.length));
+
     const rozet = document.createElement("span");
     rozet.className = "rozet tur-" + k.tur;
     rozet.textContent = k.tur;
 
-    const aralik = document.createElement("span");
-    aralik.className = "aralik";
-    aralik.textContent = sureMetni(k.bas_ms) + " → " + sureMetni(k.bit_ms);
+    bas.append(zaman, kelime, rozet);
+
+    const alt = document.createElement("div");
+    alt.className = "satir-alt";
 
     const sure = document.createElement("span");
     sure.className = "sure";
-    sure.textContent = "(" + (k.bit_ms - k.bas_ms) + " ms)";
+    sure.textContent = (k.bit_ms - k.bas_ms) + " ms";
 
     const not = document.createElement("span");
     not.className = "not";
-    not.textContent = k.duzenlendi && !k.manuel ? "sınır değiştirildi" : k.reason;
+    not.textContent = k.duzenlendi && !k.manuel ? "sınır değiştirildi" : "";
+    not.title = k.reason;
 
     /* Tek tık "sessizliğe yasla": kesimin iki sınırını da en yakın sessizlik
        kenarına genişletir (yön başına en çok ±500 ms). Her türde görünür. */
     const yaslaDugme = document.createElement("button");
     yaslaDugme.className = "dugme ikincil dar yasla";
-    yaslaDugme.textContent = "Sessizliğe yasla";
+    yaslaDugme.textContent = "Yasla";
     yaslaDugme.title =
       "Kesimi iki yönde de en yakın sessizliğe genişletir (en çok ±500 ms) · Y";
     yaslaDugme.addEventListener("click", (ev) => {
@@ -854,7 +1179,8 @@ function listeyiCiz() {
       kesimToggle(k.id);
     });
 
-    li.append(rozet, aralik, sure, not, yaslaDugme, dugme);
+    alt.append(sure, not, yaslaDugme, dugme);
+    li.append(bas, alt);
     li.addEventListener("click", () => {
       review.secili = k.id;
       el("oynatici").currentTime = k.bas_ms / 1000;
@@ -862,6 +1188,24 @@ function listeyiCiz() {
     });
     liste.appendChild(li);
   }
+}
+
+function kirilimSatiri(ad, sayi, enBuyuk, renk) {
+  const li = document.createElement("li");
+  const adEl = document.createElement("span");
+  adEl.className = "ad";
+  adEl.textContent = ad;
+  const cubuk = document.createElement("span");
+  cubuk.className = "cubuk";
+  const dolgu = document.createElement("span");
+  dolgu.style.width = (enBuyuk > 0 ? (sayi / enBuyuk) * 100 : 0) + "%";
+  dolgu.style.background = renk;
+  cubuk.appendChild(dolgu);
+  const sayiEl = document.createElement("span");
+  sayiEl.className = "sayi";
+  sayiEl.textContent = String(sayi);
+  li.append(adEl, cubuk, sayiEl);
+  return li;
 }
 
 /* ── overlay ↔ sunucu ─────────────────────────────────────────────────── */
@@ -905,7 +1249,7 @@ async function reviewPost(yol, govde) {
       body: JSON.stringify(govde),
     });
     if (cevap.status === 404) {
-      ekranGoster("ekran-yok");
+      isYok();
       return;
     }
     if (!cevap.ok) {
@@ -976,17 +1320,13 @@ function yerelSnap(ms) {
   return enIyi;
 }
 
-function olayMs(ev) {
-  const kutu = el("timeline").getBoundingClientRect();
-  const x = Math.min(Math.max(ev.clientX - kutu.left, 0), kutu.width);
-  return Math.min(review.gorunum.total_ms, Math.max(0, pxMs(x)));
-}
-
-el("timeline").addEventListener("pointerdown", (ev) => {
-  if (!review.gorunum) return;
+el("tl-track").addEventListener("pointerdown", (ev) => {
+  /* Düzenleme YALNIZ analiz_tamam'da: koşarken ya da sonuçta çizelge
+     salt-okunurdur (sunucu da 409 verirdi, ama sessiz bir istek atmayalım). */
+  if (!review.gorunum || durum.asama !== "analiz_tamam") return;
   const tutamac = ev.target.closest(".tutamac");
   const blok = ev.target.closest(".kesim-blok");
-  el("timeline").setPointerCapture(ev.pointerId);
+  el("tl-track").setPointerCapture(ev.pointerId);
 
   if (tutamac && blok) {
     const kesim = review.gorunum.kesimler.find((k) => k.id === blok.dataset.id);
@@ -1008,7 +1348,7 @@ el("timeline").addEventListener("pointerdown", (ev) => {
   review.surukleme = { tip: "yeni", baslangic, bitis: baslangic };
 });
 
-el("timeline").addEventListener("pointermove", (ev) => {
+el("tl-track").addEventListener("pointermove", (ev) => {
   const s = review.surukleme;
   if (!s) return;
   const ms = olayMs(ev);
@@ -1018,29 +1358,29 @@ el("timeline").addEventListener("pointermove", (ev) => {
     const blok = document.querySelector('.kesim-blok[data-id="' + s.id + '"]');
     if (blok) {
       blok.style.left = yuzde(s.bas) + "%";
-      blok.style.width = Math.max(0.15, yuzde(s.bit - s.bas)) + "%";
+      blok.style.width = Math.max(0.05, yuzde(s.bit - s.bas)) + "%";
     }
   } else {
     s.bitis = ms;
-    let onizleme = el("yeni-secim");
-    if (!onizleme) {
-      onizleme = document.createElement("div");
-      onizleme.id = "yeni-secim";
-      onizleme.className = "yeni-secim";
-      el("kesim-katmani").appendChild(onizleme);
+    let onizlemeBlok = el("yeni-secim");
+    if (!onizlemeBlok) {
+      onizlemeBlok = document.createElement("div");
+      onizlemeBlok.id = "yeni-secim";
+      onizlemeBlok.className = "yeni-secim";
+      el("kesim-katmani").appendChild(onizlemeBlok);
     }
     const bas = Math.min(s.baslangic, s.bitis);
     const bit = Math.max(s.baslangic, s.bitis);
-    onizleme.style.left = yuzde(bas) + "%";
-    onizleme.style.width = yuzde(bit - bas) + "%";
+    onizlemeBlok.style.left = yuzde(bas) + "%";
+    onizlemeBlok.style.width = yuzde(bit - bas) + "%";
   }
 });
 
 function surukleBitir(ev) {
   const s = review.surukleme;
   review.surukleme = null;
-  const onizleme = el("yeni-secim");
-  if (onizleme) onizleme.remove();
+  const onizlemeBlok = el("yeni-secim");
+  if (onizlemeBlok) onizlemeBlok.remove();
   if (!s) return;
   if (s.tip === "sinir") {
     sinirGonder(s.id, s.bas, s.bit);
@@ -1056,8 +1396,16 @@ function surukleBitir(ev) {
   manuelEkle(bas, bit);
 }
 
-el("timeline").addEventListener("pointerup", surukleBitir);
-el("timeline").addEventListener("pointercancel", surukleBitir);
+el("tl-track").addEventListener("pointerup", surukleBitir);
+el("tl-track").addEventListener("pointercancel", surukleBitir);
+
+/* Medya yüklendiğinde (analiz öncesi) çizelgeye tıklamak playhead'i taşır —
+   düzenleme yok, yalnız gezinme. */
+el("tl-track").addEventListener("click", (ev) => {
+  if (durum.asama === "analiz_tamam" || durum.asama === "bos") return;
+  if (!zc.total_ms) return;
+  el("oynatici").currentTime = olayMs(ev) / 1000;
+});
 
 /* ── oynatıcı: atlamalı oynatma + playhead + klavye ───────────────────── */
 
@@ -1072,21 +1420,25 @@ function aktifKesimBul(ms) {
 el("oynatici").addEventListener("timeupdate", () => {
   const oynatici = el("oynatici");
   const ms = oynatici.currentTime * 1000;
-  if (review.gorunum) {
-    el("playhead").style.left = yuzde(ms) + "%";
-    el("zaman").textContent =
-      sureMetni(ms) + " / " + sureMetni(review.gorunum.total_ms);
-    if (el("atlamali").checked && !review.surukleme) {
-      const kesim = aktifKesimBul(ms);
-      // Kesimin bitişine atla; video sonundaki kesimde oynatmayı durdur.
-      if (kesim) {
-        if (kesim[1] >= review.gorunum.total_ms - 30) oynatici.pause();
-        else oynatici.currentTime = kesim[1] / 1000;
-      }
+  playheadTazele();
+  /* Atlama YALNIZ oynarken. v1.0'da duraklatılmışken de atlanıyordu ve
+     Filler Listesi'nden bir kesime tıklamak kullanıcıyı kesimin SONUNA
+     fırlatıyordu — yani "tıkla, oraya git" hiç çalışmıyordu (ölçüldü:
+     15245 ms'e tıklandı, oynatıcı 17364 ms'e düştü). Atlamanın amacı
+     SONUCU önizlemektir; duraklamışken incelemeyi engellemek amaç değil,
+     yan etkiydi. */
+  if (review.gorunum && el("atlamali").checked && !review.surukleme &&
+      !oynatici.paused) {
+    const kesim = aktifKesimBul(ms);
+    // Kesimin bitişine atla; video sonundaki kesimde oynatmayı durdur.
+    if (kesim) {
+      if (kesim[1] >= review.gorunum.total_ms - 30) oynatici.pause();
+      else oynatici.currentTime = kesim[1] / 1000;
     }
   }
 });
 
+el("oynatici").addEventListener("seeked", playheadTazele);
 el("oynatici").addEventListener("play", () => {
   el("btn-oynat").innerHTML = "&#10073;&#10073;";
 });
@@ -1096,6 +1448,7 @@ el("oynatici").addEventListener("pause", () => {
 
 function oynatDurdur() {
   const oynatici = el("oynatici");
+  if (!oynatici.src) return;
   if (oynatici.paused) oynatici.play();
   else oynatici.pause();
 }
@@ -1118,12 +1471,13 @@ function miknatisToggle() {
 
 el("btn-miknatis").addEventListener("click", miknatisToggle);
 
-/* Kısayollar: Boşluk / ←→ v1.0'dan; Y ve M bu dilimde eklendi (ikisi de
-   mevcut haritada boştu). */
+/* Kısayollar: Boşluk / ←→ v1.0'dan; Y ve M v1.x'ten. Diyalog açıkken
+   çalışmazlar (modal içindeki forma karışmasın). */
 document.addEventListener("keydown", (ev) => {
-  if (el("ekran-review").classList.contains("gizli")) return;
+  if (document.querySelector("dialog[open]")) return;
+  if (durum.asama === "bos") return;
   const hedef = ev.target;
-  if (hedef && ["INPUT", "TEXTAREA", "BUTTON"].includes(hedef.tagName)) return;
+  if (hedef && ["INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(hedef.tagName)) return;
   const oynatici = el("oynatici");
   if (ev.code === "Space") {
     ev.preventDefault();
@@ -1136,37 +1490,69 @@ document.addEventListener("keydown", (ev) => {
     oynatici.currentTime = oynatici.currentTime + 5;
   } else if (ev.code === "KeyY") {
     ev.preventDefault();
-    if (review.secili) yaslaGonder(review.secili);
+    if (review.secili && durum.asama === "analiz_tamam") yaslaGonder(review.secili);
   } else if (ev.code === "KeyM") {
     ev.preventDefault();
     miknatisToggle();
   }
 });
 
-/* Timeline genişliği değiştikçe dalgayı yeniden çiz: pencere yeniden
-   boyutlanması, ekran görünür olduğunda oluşan ilk düzen ve arka plandaki
-   sekmenin öne gelmesi aynı yoldan geçer (window.resize üçünü de yakalamaz). */
-if (window.ResizeObserver) {
-  new ResizeObserver(() => {
-    if (review.gorunum && review.peaks) dalgaCiz();
-  }).observe(el("timeline"));
-} else {
-  window.addEventListener("resize", () => {
-    if (review.gorunum) dalgaCiz();
+/* ── diyaloglar: mod (analiz) + format (render) ───────────────────────── */
+
+function dialogKur(id, onay) {
+  /* `<dialog>` native modal: odak tuzağı ve Esc bedava gelir.
+   *
+   * KANCA `submit`TİR, `close` DEĞİL (KI-17). Ölçüldü: bu makinedeki
+   * Chromium'da dialog kapanıyor ve `returnValue` doğru doluyor ama `close`
+   * olayı HİÇ dispatch edilmiyor — ne `method="dialog"` gönderiminde ne de
+   * elle `close()` çağrısında. Yani `close`a bağlanan bir akış sessizce
+   * hiçbir şey yapmaz: kullanıcı "Analizi başlat"a basar, diyalog kapanır,
+   * ekranda HİÇBİR ŞEY olmaz ve konsolsuz koşuda hata da görünmez.
+   * `submit` iki yolda da çalışıyor ve gönderen düğmeyi `ev.submitter` ile
+   * veriyor.
+   *
+   * Eylem bir sonraki göreve bırakılır: diyalog tamamen kapanmadan durum
+   * değiştirmek odağı kapanan modalın içinde bırakırdı. */
+  const dlg = el(id);
+  dlg.querySelector("form").addEventListener("submit", (ev) => {
+    const deger = ev.submitter ? ev.submitter.value : dlg.returnValue;
+    if (deger === "tamam") window.setTimeout(onay, 0);
   });
+  return dlg;
 }
 
-/* ── onay ─────────────────────────────────────────────────────────────── */
+const dlgAnaliz = dialogKur("dlg-analiz", analiziBaslat);
+const dlgRender = dialogKur("dlg-render", onayGonder);
 
-el("btn-onayla").addEventListener("click", async () => {
+el("btn-analiz").addEventListener("click", () => {
+  if (durum.asama !== "yuklendi") return;
+  dlgAnaliz.returnValue = "";
+  dlgAnaliz.showModal();
+});
+
+el("btn-onayla").addEventListener("click", () => {
+  if (durum.asama !== "analiz_tamam") return;
+  dlgRender.returnValue = "";
+  dlgRender.showModal();
+});
+
+async function onayGonder() {
+  /* Format BU ANDA seçilir (onaylanmış varyant 1) ve onay gövdesiyle gider;
+     sunucu bunu `ReviewKarari.cikti`/`.srt` olarak pipeline'a taşır. */
   const dugme = el("btn-onayla");
   dugme.disabled = true;
+  const govde = {
+    cikti: document.querySelector('input[name="cikti"]:checked').value,
+    srt: el("srt-iste").checked,
+  };
   try {
     const cevap = await fetch("/api/jobs/" + durum.jobId + "/approve", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(govde),
     });
     if (cevap.status === 404) {
-      ekranGoster("ekran-yok");
+      isYok();
       return;
     }
     if (!cevap.ok) {
@@ -1175,21 +1561,21 @@ el("btn-onayla").addEventListener("click", async () => {
       return;
     }
     el("oynatici").pause();
-    document.body.classList.remove("review-modu");
-    ekranGoster("ekran-kosu");
-    el("kosu-durum").textContent = "Render ediliyor…";
+    asamaAyarla("render");
+    el("kosu-durum").textContent = "Çıktı üretiliyor…";
   } catch (_) {
     reviewHata("Sunucuya ulaşılamıyor — onay gönderilemedi.");
     dugme.disabled = false;
   }
-});
+}
 
-el("btn-yok-yeni").addEventListener("click", () => {
-  document.body.classList.remove("review-modu");
-  yeniIs();
-});
+/* ── sonuç ───────────────────────────────────────────────────────────── */
 
-/* ── Ekran 5: sonuç ──────────────────────────────────────────────────── */
+const DUZENLEME_ETIKET = {
+  devre_disi: "Geri alınan kesim",
+  sinir_degisen: "Sınırı değiştirilen",
+  manuel_eklenen: "Elle eklenen",
+};
 
 function sonucGoster(ozet) {
   el("sonuc-kazanc").textContent = "%" + ozet.saved_percent + " kazanım";
@@ -1213,54 +1599,12 @@ function sonucGoster(ozet) {
   }
   el("goster-hata").classList.add("gizli");
   istatistikCiz(ozet);
-  ekranGoster("ekran-sonuc");
+  asamaAyarla("sonuc");
 }
 
 /* İstatistik paneli — sayıların TEK kaynağı sunucudan gelen özet (rapor.json
    ile aynı nesne); burada hiçbir sayı yeniden hesaplanmaz. */
-
-const TUR_ETIKET = {
-  kesin_filler: ["Kesin filler", "#e5484d"],
-  aday_filler: ["Aday filler", "#d29922"],
-  silence: ["Sessizlik", "#388bfd"],
-  manuel: ["Elle eklenen", "#a371f7"],
-};
-
-const DUZENLEME_ETIKET = {
-  devre_disi: "Geri alınan kesim",
-  sinir_degisen: "Sınırı değiştirilen",
-  manuel_eklenen: "Elle eklenen",
-};
-
-function kirilimSatiri(ad, sayi, enBuyuk, renk) {
-  const li = document.createElement("li");
-  const adEl = document.createElement("span");
-  adEl.className = "ad";
-  adEl.textContent = ad;
-  const cubuk = document.createElement("span");
-  cubuk.className = "cubuk";
-  const dolgu = document.createElement("span");
-  dolgu.style.width = (enBuyuk > 0 ? (sayi / enBuyuk) * 100 : 0) + "%";
-  dolgu.style.background = renk;
-  cubuk.appendChild(dolgu);
-  const sayiEl = document.createElement("span");
-  sayiEl.className = "sayi";
-  sayiEl.textContent = String(sayi);
-  li.append(adEl, cubuk, sayiEl);
-  return li;
-}
-
 function istatistikCiz(ozet) {
-  const tiers = ozet.tiers || {};
-  const liste = el("tur-kirilim");
-  liste.textContent = "";
-  const degerler = Object.keys(TUR_ETIKET).map((k) => tiers[k] || 0);
-  const enBuyuk = Math.max(1, ...degerler);
-  for (const anahtar of Object.keys(TUR_ETIKET)) {
-    const [etiket, renk] = TUR_ETIKET[anahtar];
-    liste.appendChild(kirilimSatiri(etiket, tiers[anahtar] || 0, enBuyuk, renk));
-  }
-
   const dagilim = ozet.filler_dagilimi || [];
   el("filler-bolum").classList.toggle("gizli", dagilim.length === 0);
   const etiketler = el("filler-dagilim");
@@ -1278,9 +1622,7 @@ function istatistikCiz(ozet) {
   }
 
   const duzenleme = ozet.duzenleme;
-  const varMi =
-    duzenleme &&
-    Object.values(duzenleme).some((v) => v > 0);
+  const varMi = duzenleme && Object.values(duzenleme).some((v) => v > 0);
   el("duzenleme-bolum").classList.toggle("gizli", !varMi);
   const dListe = el("duzenleme-kirilim");
   dListe.textContent = "";
@@ -1321,16 +1663,24 @@ for (const dugme of document.querySelectorAll(".goster")) {
 
 function yeniIs() {
   sseKapat();
+  onizlemeDurdur();
   durum.jobId = null;
-  document.body.classList.remove("review-modu");
+  durum.secili = null;
   const oynatici = el("oynatici");
   oynatici.pause();
   oynatici.removeAttribute("src");
   oynatici.load(); // önceki videonun tamponunu bırak
   review.gorunum = null;
   review.secili = null;
-  review.peaks = null;
-  ekranGoster("ekran-baslangic");
+  el("medya-bos").classList.remove("gizli");
+  el("medya-dolu").classList.add("gizli");
+  el("kosu-hata").classList.add("gizli");
+  el("ekran-yok").classList.add("gizli");
+  reviewHata(null);
+  dropNotu("", "");
+  zcSifirla();
+  listeyiCiz();
+  asamaAyarla("bos");
   gezginYukle(durum.yol); // listeyi tazele (yeni _temiz.mp4 görünsün)
 }
 
@@ -1363,7 +1713,6 @@ async function geriBildirim(notId) {
   not.appendChild(a);
   not.appendChild(document.createTextNode("."));
 }
-
 
 /* ── Kurulum sihirbazı (v1.2 Faz 2) ───────────────────────────────────
  *
@@ -1529,7 +1878,7 @@ async function kapat() {
    * ("headless zombi") ve konsol olmadığı için Ctrl+C de yoktu.
    *
    * Onay soruluyor: yanlışlıkla basmak koşan bir işi bekletir. */
-  const kosuyor = !el("ekran-kosu").classList.contains("gizli");
+  const kosuyor = durum.asama === "analiz" || durum.asama === "render";
   const soru = kosuyor
     ? "Bir iş koşuyor. Filler-Cut kapatılsın mı? (koşan iş yarıda kesilmez, " +
       "bitince süreç kapanır)"
@@ -1539,6 +1888,7 @@ async function kapat() {
   el("btn-kapat").disabled = true;
   if (durum.es) { durum.es.close(); durum.es = null; }
   kurulumYoklamaDurdur();
+  onizlemeDurdur();
   try {
     const cevap = await fetch("/api/kapat", { method: "POST" });
     if (!cevap.ok) {
@@ -1562,8 +1912,8 @@ el("btn-ust").addEventListener("click", () => {
   if (durum.ust !== null) gezginYukle(durum.ust);
 });
 el("btn-kapat").addEventListener("click", kapat);
-el("btn-baslat").addEventListener("click", baslat);
 el("btn-yeni").addEventListener("click", yeniIs);
+el("btn-yok-yeni").addEventListener("click", yeniIs);
 el("btn-hata-yeni").addEventListener("click", yeniIs);
 el("btn-geri-bildirim").addEventListener("click", () => geriBildirim("geri-bildirim-not"));
 el("btn-geri-bildirim-hata").addEventListener(
@@ -1579,4 +1929,5 @@ el("kurulum-model").addEventListener("change", () => {
 
 dropzoneKur();     // sürükle-bırak + dosya seçici (native/tarayıcı)
 gezginYukle(null); // kök: sunucudaki ev dizini
-kurulumBaslat(); // kurulum eksikse sihirbaz ekranı; değilse hiç görünmez
+kurulumBaslat();   // kurulum eksikse sihirbaz ekranı; değilse hiç görünmez
+asamaAyarla("bos");

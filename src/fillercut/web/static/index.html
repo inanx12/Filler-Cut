@@ -7,15 +7,23 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1117'/%3E%3Cpath d='M8 10h12M8 16h16M8 22h9' stroke='%233fb950' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<!-- Tek ekranlı proje görünümü (v1.3.0 Dalga A). Görünürlüğü DURUM sürer:
+     `data-asama` gövdede durur, panelleri CSS gösterir/gizler. Durum
+     makinesi: bos → yuklendi → analiz → analiz_tamam → render → sonuc. -->
+<body data-asama="bos">
 <header class="ust">
   <div class="marka"><span class="marka-isaret"></span>Filler-Cut</div>
-  <div class="marka-alt">filler + sessizlik temizliği · localhost</div>
-  <!-- Kapat: konsolsuz koşuda TEK çıkış yolu (KI-14). Sekmeyi kapatmak
-       sunucuyu durdurmaz; "Ctrl+C" de konsolsuz exe'de imkânsızdır. -->
-  <button id="btn-kapat" class="dugme ikincil dar kapat-dugme" title="Filler-Cut'ı kapat">
-    Kapat
-  </button>
+  <div id="ust-durum" class="ust-durum" aria-live="polite"></div>
+  <div class="ust-eylem">
+    <button id="btn-analiz" class="dugme ikincil" disabled>Kesimi Başlat</button>
+    <!-- Birincil eylem: analiz bitmeden pasif (durum makinesi sürer). -->
+    <button id="btn-onayla" class="dugme birincil" disabled>Render Al</button>
+    <!-- Kapat: konsolsuz koşuda TEK çıkış yolu (KI-14). Sekmeyi kapatmak
+         sunucuyu durdurmaz; "Ctrl+C" de konsolsuz exe'de imkânsızdır. -->
+    <button id="btn-kapat" class="dugme ikincil dar kapat-dugme" title="Filler-Cut'ı kapat">
+      Kapat
+    </button>
+  </div>
 </header>
 
 <!-- Kapanış sonrası yüzeyi: sunucu artık yok, buradan hiçbir istek atılamaz. -->
@@ -26,9 +34,23 @@
   </div>
 </div>
 
-<main>
-  <!-- Ekran 0 — Sihirbaz: whisper.cpp ikilisi + model indirme (ilk çalıştırma) -->
-  <section id="ekran-kurulum" class="ekran gizli">
+<!-- "İş bulunamadı" (sunucu yeniden başladıysa): perde, çünkü proje
+     görünümündeki veri artık yoktur ve hiçbir düzenleme gönderilemez. -->
+<div id="ekran-yok" class="perde gizli">
+  <div class="perde-kutu">
+    <h2>İş bulunamadı</h2>
+    <p>Bu iş artık sunucuda yok — işler bellekte tutulur, sunucu yeniden
+    başlatıldıysa kaybolur.</p>
+    <p class="soluk-metin">Video ve varsa üretilmiş dosyalar diskte durur.</p>
+    <button id="btn-yok-yeni" class="dugme birincil">Yeni video</button>
+  </div>
+</div>
+
+<!-- Ekran 0 — Sihirbaz: whisper.cpp ikilisi + model indirme (ilk çalıştırma).
+     Proje görünümünün ÜSTÜNDE tam ekran bir kapıdır: bu bitmeden iş
+     başlatılamaz (kilit sunucuda, `POST /api/jobs` 409). -->
+<section id="ekran-kurulum" class="ekran-kurulum gizli">
+  <div class="kurulum-govde">
     <h1>Son bir adım</h1>
     <p class="karsilama">
       Filler-Cut konuşmayı çözümlemek için whisper.cpp motorunu ve bir dil
@@ -61,204 +83,126 @@
         tercih ederseniz: <code>fillercut setup</code>
       </p>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- Ekran 1 — Başlangıç: dosya gezgini + mod + Başlat -->
-  <section id="ekran-baslangic" class="ekran">
-    <h1>Video seç</h1>
-    <p class="karsilama">
-      Bir video seçin; Filler-Cut konuşmadaki tamamlayıcı sözcükleri
-      (ııı, eee…) ve gereksiz sessizlikleri bulup kesim planı çıkarsın.
-      Kesmeden önce planı gözden geçirip düzenleyebilirsiniz.
-    </p>
-    <div id="dropzone" class="dropzone">
-      <p class="dropzone-baslik">Videoyu buraya sürükleyin</p>
-      <p class="dropzone-alt">
-        …ya da aşağıdaki klasörlerden seçin.
-        <button id="btn-dosya-sec" class="baglanti-dugme" type="button">Dosya seç…</button>
-      </p>
-      <p id="dropzone-not" class="dropzone-not" role="status"></p>
+<main class="proje">
+  <!-- ── SOL: medya kartı + Filler Listesi ───────────────────────────── -->
+  <aside class="panel sol">
+    <section class="kart medya-kart" id="medya-kart">
+      <div class="medya-bos" id="medya-bos">Henüz medya yok</div>
+      <div class="medya-dolu gizli" id="medya-dolu">
+        <img id="medya-kucuk-resim" class="kucuk-resim" alt="" hidden>
+        <div class="medya-bilgi">
+          <div id="medya-ad" class="medya-ad mono"></div>
+          <div id="medya-olcu" class="medya-olcu"></div>
+        </div>
+        <button id="btn-medya-degistir" class="dugme ikincil dar"
+                title="Başka bir video seç">Değiştir</button>
+      </div>
+    </section>
+
+    <section class="kart liste-kart">
+      <div class="liste-bas">
+        <span class="baslik-kucuk">Filler Listesi</span>
+        <span id="liste-sayi" class="liste-sayi"></span>
+      </div>
+      <ul id="kesim-listesi" class="kesim-listesi" aria-label="Kesim listesi"></ul>
+      <p id="liste-bos" class="bos">Analiz bitince kesimler burada listelenir.</p>
+    </section>
+  </aside>
+
+  <!-- ── ORTA: önizleme + taşıma (boş durumda dropzone) ──────────────── -->
+  <section class="orta">
+    <div class="sahne">
+      <video id="oynatici" class="oynatici" preload="metadata" playsinline></video>
+
+      <!-- Boş durum: CapCut'ın "İçe Aktar" boş hâlinin karşılığı. -->
+      <div id="bos-durum" class="bos-durum">
+        <div id="dropzone" class="dropzone">
+          <p class="dropzone-baslik">Videoyu buraya sürükleyin</p>
+          <p class="dropzone-alt">
+            …ya da aşağıdaki klasörlerden seçin.
+            <button id="btn-dosya-sec" class="baglanti-dugme" type="button">Dosya seç…</button>
+          </p>
+          <p id="dropzone-not" class="dropzone-not" role="status"></p>
+        </div>
+        <p class="karsilama">
+          Bir video seçin; Filler-Cut konuşmadaki tamamlayıcı sözcükleri
+          (ııı, eee…) ve gereksiz sessizlikleri bulup kesim planı çıkarsın.
+          Kesmeden önce planı gözden geçirip düzenleyebilirsiniz.
+        </p>
+
+        <div class="kart gezgin">
+          <div id="gezgin-kokler" class="kokler gizli" role="tablist" aria-label="Konumlar"></div>
+          <div class="gezgin-bas">
+            <button id="btn-ust" class="dugme ikincil dar" title="Üst dizine çık" aria-label="Üst dizine çık">&#8593;</button>
+            <nav id="gezgin-yol" class="yol" aria-label="Bulunulan klasör"></nav>
+          </div>
+          <ul id="gezgin-liste" class="liste" aria-label="Dizin içeriği"></ul>
+          <div id="gezgin-bos" class="bos gizli"></div>
+        </div>
+        <div id="baslangic-hata" class="hata-kutu gizli" role="alert"></div>
+      </div>
     </div>
 
-    <div class="kart gezgin">
-      <div id="gezgin-kokler" class="kokler gizli" role="tablist" aria-label="Konumlar"></div>
-      <div class="gezgin-bas">
-        <button id="btn-ust" class="dugme ikincil dar" title="Üst dizine çık" aria-label="Üst dizine çık">&#8593;</button>
-        <nav id="gezgin-yol" class="yol" aria-label="Bulunulan klasör"></nav>
-      </div>
-      <ul id="gezgin-liste" class="liste" aria-label="Dizin içeriği"></ul>
-      <div id="gezgin-bos" class="bos gizli"></div>
-    </div>
-
-    <div class="kart">
-      <h2>Kesim modu</h2>
-      <div class="modlar">
-        <label class="mod">
-          <input type="radio" name="mod" value="default" checked>
-          <span class="mod-govde">
-            <span class="mod-ad">Normal</span>
-            <span class="mod-acik">Kesin filler'lar (ııı, eee…) ve uzun sessizlikler kesilir.</span>
-          </span>
-        </label>
-        <label class="mod">
-          <input type="radio" name="mod" value="aggressive">
-          <span class="mod-govde">
-            <span class="mod-ad">Agresif</span>
-            <span class="mod-acik">Aday filler'lar da (şey, yani, hani, işte) kesilir.</span>
-          </span>
-        </label>
-      </div>
-    </div>
-
-    <div class="kart">
-      <h2>Dışa aktarım</h2>
-      <div class="modlar">
-        <label class="mod">
-          <input type="radio" name="cikti" value="mp4" checked>
-          <span class="mod-govde">
-            <span class="mod-ad">Hazır MP4</span>
-            <span class="mod-acik">Kesilmiş video doğrudan üretilir (yeniden kodlanır).</span>
-          </span>
-        </label>
-        <label class="mod">
-          <input type="radio" name="cikti" value="xml">
-          <span class="mod-govde">
-            <span class="mod-ad">NLE projesi (FCP7 XML)</span>
-            <span class="mod-acik">Premiere / DaVinci Resolve'a aktarılacak kesim listesi; video üretilmez.</span>
-          </span>
-        </label>
-      </div>
-      <label class="secenek">
-        <input type="checkbox" id="srt-iste">
-        <span>Altyazı dosyası (.srt) da üret</span>
+    <div class="oynatici-alt">
+      <button id="btn-oynat" class="dugme ikincil dar" aria-label="Oynat/Duraklat">&#9654;</button>
+      <span id="zaman" class="zaman mono">0:00.0 / 0:00.0</span>
+      <label class="anahtar" title="Kesilecek bölgeleri oynatmadan atla">
+        <input type="checkbox" id="atlamali" checked>
+        <span class="anahtar-govde"><span class="anahtar-top"></span></span>
+        <span>Atlamalı</span>
       </label>
-    </div>
-
-    <div id="baslangic-hata" class="hata-kutu gizli" role="alert"></div>
-
-    <div class="alt-cubuk">
-      <div id="secim-ozet" class="secim">Dosya seçilmedi</div>
-      <button id="btn-baslat" class="dugme birincil" disabled>Başlat</button>
+      <button id="btn-miknatis" class="dugme ikincil dar miknatis" aria-pressed="true"
+              title="Mıknatıs açık — sürükleme en yakın sessizlik kenarına yapışır (M)">
+        <span class="miknatis-ikon">&#129522;</span><span>Mıknatıs</span>
+      </button>
+      <span class="ipucu">Boşluk: oynat/dur · ←/→: 5 sn · Y: sessizliğe yasla · M: mıknatıs</span>
     </div>
   </section>
 
-  <!-- Ekran 2 — Koşu: 6 aşamalı ilerleme + SSE -->
-  <section id="ekran-kosu" class="ekran gizli">
-    <h1>İşleniyor</h1>
-    <div class="kart">
-      <div id="kosu-dosya" class="kosu-dosya mono"></div>
+  <!-- ── SAĞ: kesim özeti / analiz ilerlemesi / sonuç ─────────────────── -->
+  <aside class="panel sag">
+    <!-- bos + yuklendi: ne olacağını söyleyen kısa özet -->
+    <section class="kart sag-bolum" data-goster="bos yuklendi">
+      <h2 class="baslik-kucuk">Kesim özeti</h2>
+      <p id="ozet-bekleme" class="soluk-metin">
+        Analiz bitince kesim planı burada özetlenir.
+      </p>
+    </section>
+
+    <!-- analiz + render: 6 aşamalı ilerleme -->
+    <section class="kart sag-bolum" data-goster="analiz render">
+      <h2 class="baslik-kucuk">İşleniyor</h2>
       <ol id="asamalar" class="asamalar"></ol>
       <div id="kosu-durum" class="durum-satiri" aria-live="polite"></div>
-    </div>
-    <div id="kosu-hata" class="hata-kutu gizli" role="alert">
-      <div class="hata-baslik">Koşu başarısız</div>
-      <div id="hata-mesaj" class="hata-mesaj"></div>
-      <details id="hata-detay-kapsul" class="gizli">
-        <summary>Log detayı</summary>
-        <pre id="hata-detay" class="mono"></pre>
-      </details>
-      <div class="hata-eylem">
-        <button id="btn-hata-yeni" class="dugme ikincil">Yeni iş</button>
-        <button id="btn-geri-bildirim-hata" class="dugme ikincil">Geri bildirim gönder</button>
-      </div>
-      <div id="geri-bildirim-not-hata" class="geri-bildirim-not" role="status"></div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Ekran 3 — Review: oynatıcı + zaman çizelgesi + kesim listesi -->
-  <section id="ekran-review" class="ekran gizli">
-    <div class="review-bas">
-      <div>
-        <h1>Gözden geçir</h1>
-        <!-- Canlı özet: geri al/ekle/sürükle sonrası anında güncellenir -->
-        <div id="canli-ozet" class="canli-ozet" aria-live="polite"></div>
+    <!-- analiz_tamam: kesim özeti (mod + kademe + kazanç + plan) -->
+    <section class="kart sag-bolum" data-goster="analiz_tamam">
+      <h2 class="baslik-kucuk">Kesim özeti</h2>
+      <div id="ozet-mod" class="ozet-satir"></div>
+      <div id="ozet-kazanc" class="buyuk-sayi"></div>
+      <div class="sure-akis">
+        <span id="ozet-orijinal"></span><span class="ok">&#8594;</span>
+        <span id="ozet-yeni" class="yesil"></span>
       </div>
-      <div class="review-eylem">
-        <label class="anahtar" title="Kesilecek bölgeleri oynatmadan atla">
-          <input type="checkbox" id="atlamali" checked>
-          <span class="anahtar-govde"><span class="anahtar-top"></span></span>
-          <span>Atlamalı oynatma</span>
-        </label>
-        <button id="btn-miknatis" class="dugme ikincil dar miknatis" aria-pressed="true"
-                title="Mıknatıs açık — sürükleme en yakın sessizlik kenarına yapışır (M)">
-          <span class="miknatis-ikon">&#129522;</span><span>Mıknatıs</span>
-        </button>
-        <button id="btn-onayla" class="dugme birincil">Onayla ve render et</button>
-      </div>
-    </div>
-
-    <div id="review-hata" class="hata-kutu gizli" role="alert"></div>
-
-    <div class="kart oynatici-kart">
-      <video id="oynatici" class="oynatici" preload="metadata" playsinline></video>
-      <div class="oynatici-alt">
-        <button id="btn-oynat" class="dugme ikincil dar" aria-label="Oynat/Duraklat">&#9654;</button>
-        <span id="zaman" class="zaman mono">00:00.0 / 00:00.0</span>
-        <span class="ipucu">Boşluk: oynat/dur · ←/→: 5 sn · Y: sessizliğe yasla · M: mıknatıs</span>
-      </div>
-    </div>
-
-    <div class="kart">
-      <div class="timeline-bas">
-        <span class="baslik-kucuk">Zaman çizelgesi</span>
-        <span class="lejant">
-          <span class="nokta tur-kesin"></span>kesin
-          <span class="nokta tur-aday"></span>aday
-          <span class="nokta tur-sessizlik"></span>sessizlik
-          <span class="nokta tur-manuel"></span>elle
-        </span>
-      </div>
-      <div id="timeline" class="timeline">
-        <canvas id="dalga" class="dalga"></canvas>
-        <div id="kesim-katmani" class="kesim-katmani"></div>
-        <div id="playhead" class="playhead"></div>
-      </div>
-      <div class="timeline-ipucu">
-        Kesim kenarından sürükleyerek sınırı taşı · boş alanda sürükleyerek yeni kesim ekle
-        · mıknatıs kapalıyken sürükleme serbest
-      </div>
-    </div>
-
-    <div class="kart liste-kart">
-      <ul id="kesim-listesi" class="kesim-listesi" aria-label="Kesim listesi"></ul>
-    </div>
-  </section>
-
-  <!-- Ekran 4 — İş bulunamadı (sunucu yeniden başladıysa) -->
-  <section id="ekran-yok" class="ekran gizli">
-    <h1>İş bulunamadı</h1>
-    <div class="kart">
-      <p>Bu iş artık sunucuda yok — işler bellekte tutulur, sunucu yeniden
-      başlatıldıysa kaybolur.</p>
-      <p class="soluk-metin">Video ve varsa üretilmiş dosyalar diskte durur.</p>
-    </div>
-    <div class="alt-cubuk tek">
-      <button id="btn-yok-yeni" class="dugme birincil">Yeni iş</button>
-    </div>
-  </section>
-
-  <!-- Ekran 5 — Sonuç: çıktı yolu + süre özeti -->
-  <section id="ekran-sonuc" class="ekran gizli">
-    <h1>Tamamlandı</h1>
-    <div class="kart sonuc-ozet">
-      <div id="sonuc-kazanc" class="buyuk-sayi"></div>
-      <div class="sure-akis"><span id="sonuc-orijinal"></span><span class="ok">&#8594;</span><span id="sonuc-yeni" class="yesil"></span></div>
-      <div id="sonuc-kesim" class="sonuc-alt"></div>
-    </div>
-    <div class="kart">
-      <h2>Kesim dağılımı</h2>
       <ul id="tur-kirilim" class="kirilim"></ul>
-      <div id="filler-bolum" class="gizli">
-        <h2 class="ust-bosluk">Kesilen filler sözcükleri</h2>
-        <ul id="filler-dagilim" class="etiketler"></ul>
-      </div>
-      <div id="duzenleme-bolum" class="gizli">
-        <h2 class="ust-bosluk">Senin düzenlemelerin</h2>
-        <ul id="duzenleme-kirilim" class="kirilim"></ul>
-      </div>
-    </div>
+      <div id="ozet-plan" class="ozet-satir soluk-metin"></div>
+      <div id="review-hata" class="hata-kutu gizli" role="alert"></div>
+    </section>
 
-    <div class="kart">
+    <!-- sonuc: çıktı yolları + istatistik + yeni video -->
+    <section class="kart sag-bolum" data-goster="sonuc">
+      <h2 class="baslik-kucuk">Tamamlandı</h2>
+      <div id="sonuc-kazanc" class="buyuk-sayi"></div>
+      <div class="sure-akis">
+        <span id="sonuc-orijinal"></span><span class="ok">&#8594;</span>
+        <span id="sonuc-yeni" class="yesil"></span>
+      </div>
+      <div id="sonuc-kesim" class="sonuc-alt"></div>
+
       <div class="cikti-satir">
         <span class="etiket" id="sonuc-cikti-etiket">Çıktı</span>
         <span id="sonuc-cikti" class="mono"></span>
@@ -280,15 +224,133 @@
         <button class="dugme ikincil dar goster" data-hedef="sonuc-transkript">Klasörde göster</button>
       </div>
       <div id="goster-hata" class="hata-kutu gizli" role="alert"></div>
+
+      <details class="istatistik">
+        <summary>Ayrıntılı istatistik</summary>
+        <div id="filler-bolum" class="gizli">
+          <h3 class="baslik-kucuk ust-bosluk">Kesilen filler sözcükleri</h3>
+          <ul id="filler-dagilim" class="etiketler"></ul>
+        </div>
+        <div id="duzenleme-bolum" class="gizli">
+          <h3 class="baslik-kucuk ust-bosluk">Senin düzenlemelerin</h3>
+          <ul id="duzenleme-kirilim" class="kirilim"></ul>
+        </div>
+      </details>
+
+      <div class="sag-eylem">
+        <button id="btn-geri-bildirim" class="dugme ikincil">Geri bildirim gönder</button>
+        <button id="btn-yeni" class="dugme birincil">Yeni video</button>
+      </div>
+      <div id="geri-bildirim-not" class="geri-bildirim-not" role="status"></div>
+    </section>
+
+    <!-- Hata: analiz/render başarısız (her durumda görünebilir) -->
+    <section id="kosu-hata" class="kart sag-bolum hata-kutu gizli" role="alert">
+      <div class="hata-baslik">Koşu başarısız</div>
+      <div id="hata-mesaj" class="hata-mesaj"></div>
+      <details id="hata-detay-kapsul" class="gizli">
+        <summary>Log detayı</summary>
+        <pre id="hata-detay" class="mono"></pre>
+      </details>
+      <div class="hata-eylem">
+        <button id="btn-hata-yeni" class="dugme ikincil">Yeni video</button>
+        <button id="btn-geri-bildirim-hata" class="dugme ikincil">Geri bildirim gönder</button>
+      </div>
+      <div id="geri-bildirim-not-hata" class="geri-bildirim-not" role="status"></div>
+    </section>
+  </aside>
+
+  <!-- ── ALT: zaman çizelgesi ─────────────────────────────────────────── -->
+  <section class="alt-timeline">
+    <div class="timeline-bas">
+      <span class="baslik-kucuk">Zaman çizelgesi</span>
+      <span class="lejant">
+        <span class="nokta tur-kesin"></span>kesin
+        <span class="nokta tur-aday"></span>aday
+        <span class="nokta tur-sessizlik"></span>sessizlik
+        <span class="nokta tur-manuel"></span>elle
+      </span>
+      <label class="zoom">
+        <span class="zoom-etiket">Yakınlaştır</span>
+        <input type="range" id="zoom" min="1" max="16" step="0.5" value="1"
+               aria-label="Zaman çizelgesi yakınlaştırma">
+        <span id="zoom-deger" class="zoom-deger mono">1×</span>
+      </label>
     </div>
-    <div class="alt-cubuk">
-      <button id="btn-geri-bildirim" class="dugme ikincil">Geri bildirim gönder</button>
-      <button id="btn-yeni" class="dugme birincil">Yeni iş</button>
+    <div id="tl-viewport" class="tl-viewport">
+      <div id="tl-track" class="tl-track">
+        <div id="cetvel" class="cetvel"></div>
+        <!-- Dalga formu: wavesurfer.js (vendor, CDN yok) buraya çizer. -->
+        <div id="dalga" class="dalga"></div>
+        <div id="kesim-katmani" class="kesim-katmani"></div>
+        <div id="playhead" class="playhead"></div>
+      </div>
     </div>
-    <div id="geri-bildirim-not" class="geri-bildirim-not" role="status"></div>
+    <div class="timeline-ipucu">
+      Kesim kenarından sürükleyerek sınırı taşı · boş alanda sürükleyerek yeni kesim ekle
+      · mıknatıs kapalıyken sürükleme serbest
+    </div>
   </section>
 </main>
 
+<!-- ── Diyaloglar: mod (analiz öncesi) + format (render anında) ───────── -->
+<dialog id="dlg-analiz" class="dlg">
+  <form method="dialog">
+    <h2>Kesim modu</h2>
+    <div class="modlar">
+      <label class="mod">
+        <input type="radio" name="mod" value="default" checked>
+        <span class="mod-govde">
+          <span class="mod-ad">Normal</span>
+          <span class="mod-acik">Kesin filler'lar (ııı, eee…) ve uzun sessizlikler kesilir.</span>
+        </span>
+      </label>
+      <label class="mod">
+        <input type="radio" name="mod" value="aggressive">
+        <span class="mod-govde">
+          <span class="mod-ad">Agresif</span>
+          <span class="mod-acik">Aday filler'lar da (şey, yani, hani, işte) kesilir.</span>
+        </span>
+      </label>
+    </div>
+    <menu class="dlg-eylem">
+      <button value="iptal" class="dugme ikincil">Vazgeç</button>
+      <button value="tamam" class="dugme birincil">Analizi başlat</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="dlg-render" class="dlg">
+  <form method="dialog">
+    <h2>Dışa aktarım</h2>
+    <div class="modlar">
+      <label class="mod">
+        <input type="radio" name="cikti" value="mp4" checked>
+        <span class="mod-govde">
+          <span class="mod-ad">Hazır MP4</span>
+          <span class="mod-acik">Kesilmiş video doğrudan üretilir (yeniden kodlanır).</span>
+        </span>
+      </label>
+      <label class="mod">
+        <input type="radio" name="cikti" value="xml">
+        <span class="mod-govde">
+          <span class="mod-ad">NLE projesi (FCP7 XML)</span>
+          <span class="mod-acik">Premiere / DaVinci Resolve'a aktarılacak kesim listesi; video üretilmez.</span>
+        </span>
+      </label>
+    </div>
+    <label class="secenek">
+      <input type="checkbox" id="srt-iste">
+      <span>Altyazı dosyası (.srt) da üret</span>
+    </label>
+    <menu class="dlg-eylem">
+      <button value="iptal" class="dugme ikincil">Vazgeç</button>
+      <button value="tamam" class="dugme birincil">Render al</button>
+    </menu>
+  </form>
+</dialog>
+
+<script src="/static/vendor/wavesurfer.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

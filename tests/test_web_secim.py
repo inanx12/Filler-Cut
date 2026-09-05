@@ -203,11 +203,30 @@ class TestArayuzYuzeyi:
         assert "pywebview" in js
         assert "dosya_sec" in js
 
-    def test_js_birakmayi_aktif_ekrana_gateler(self) -> None:
-        """İş koşarken bırakma reddedilir — kuyruk tasarımı bu dalgada yok."""
+    def test_js_birakmayi_duruma_gateler(self) -> None:
+        """İş koşarken bırakma reddedilir — kuyruk tasarımı hâlâ kapsam dışı.
+
+        v1.3.0: ölçüt EKRAN değil DURUM. Tek ekranlı düzende "başlangıç ekranı
+        görünür mü" diye sorulamaz; kapı `medyaDegistirilebilir()`tir ve
+        yalnız `bos`/`yuklendi` durumlarında açıktır.
+        """
         js = self._js()
         assert "birakmaKabulEdilirMi" in js
-        assert "ekran-baslangic" in js
+        assert "medyaDegistirilebilir" in js
+        assert 'durum.asama === "bos"' in js
+        assert 'durum.asama === "yuklendi"' in js
+
+    def test_js_birakma_reddi_tek_metin_tek_yer(self) -> None:
+        """Native köprüsü ve tarayıcı drop'u AYNI cümleyi kurmalı.
+
+        v1.2.x'te iki çağrı yeri aynı metni ayrı ayrı yazıyordu; biri
+        değişirse iki mod farklı konuşurdu. Metin artık tek sabittir ve
+        reddi tek fonksiyon yazar.
+        """
+        js = self._js()
+        assert "const BIRAKMA_REDDI" in js
+        assert js.count('"Bir iş çalışıyor — bitmesini bekleyin."') == 1
+        assert "function birakmaReddet" in js
 
     def test_js_klasor_birakmayi_reddeder(self) -> None:
         js = self._js()

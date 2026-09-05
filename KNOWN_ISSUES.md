@@ -1512,3 +1512,44 @@ maliyeti ayrıca ölçülmeli, bu kayıtta ölçülmedi.
   `audio/probe.py`, `audio/silence.py`, `export/medya.py`, `render/encoder.py`,
   `render/render.py`, `transcribe/wcpp_backend.py`, `web/fs.py`. Kilitler
   `tests/test_surec.py` (14 test).
+
+---
+
+## KI-17 — `<dialog>` `close` olayı dispatch edilmiyor (ölçüldü) — **Önlem alındı (v1.3.0)**
+
+**Belirti.** v1.3.0 Dalga A'da mod ve format seçimi native `<dialog>`
+modallarına taşındı. İlk uygulama standart deseni kullanıyordu:
+`<form method="dialog">` + `dialog.addEventListener("close", …)` +
+`dialog.returnValue`. Diyalog açılıyor, düğmeye basınca **kapanıyor** ve
+`returnValue` **doğru** doluyor — ama `close` olayı **hiç ateşlenmiyor**.
+Sonuç: kullanıcı "Analizi başlat"a basar, modal kapanır ve ekranda
+**hiçbir şey olmaz**. Sessiz no-op'un üçüncü örneği (bkz. KI-13, KI-14).
+
+**Ölçüm (sayfa içinde, izole).** Sayfaya yeni bir `<dialog>` eklenip üç olay
+birden dinlendi:
+
+| Yol | `dialog.open` | `returnValue` | ateşlenen olaylar |
+|---|---|---|---|
+| `form method="dialog"` gönderimi | `true → false` | `"ok"` | `submit`, `form-submit` |
+| doğrudan `dialog.close("elle")` | `true → false` | `"elle"` | *(hiçbiri)* |
+
+Yani `close` iki yolda da gelmiyor; `submit` form gönderiminde **geliyor** ve
+`ev.submitter` gönderen düğmeyi veriyor.
+
+**Önlem.** Kanca `close` DEĞİL, formun `submit` olayıdır
+(`web/static/app.js::dialogKur`); karar `ev.submitter.value` ile okunur ve
+eylem `setTimeout(…, 0)` ile bir sonraki göreve bırakılır (modal tamamen
+kapanmadan durum değiştirmek odağı kapanan diyalogda bırakırdı). `submit`
+spec'te `method="dialog"` için tanımlıdır ve bu makinede ölçülerek doğrulandı.
+
+**Kapsam / kalan sınır.** Kusur bu makinedeki Chromium'da gözlendi
+(uygulamanın gerçek hedefi olan WebView2 aynı motor ailesindendir).
+WebView2'de `close`un çalışıp çalışmadığı **ölçülmedi** — gerek de yok:
+`submit` her iki hâlde de doğru davranır, o yüzden motor başına dallanma
+YOKTUR. Sınır kaydı, "neden `close` kullanılmıyor" sorusunun cevabı bir
+dosyada dursun diye açık tutuluyor; bir sonraki agent bunu "gereksiz
+karmaşa" sanıp `close`a geri dönmemeli.
+
+**Referans:** `src/fillercut/web/static/app.js::dialogKur`; diyaloglar
+`index.html` içinde `#dlg-analiz` ve `#dlg-render`. Kilit
+`tests/test_web_editor.py::TestDiyaloglar`.
