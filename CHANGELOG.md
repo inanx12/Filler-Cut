@@ -7,6 +7,107 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [1.3.0] — 2026-09-05
+
+**Artık bir editör: kesimleri oynatırken canlı önizleyin.**
+
+Arayüz tek ekranlı bir "proje" görünümüne dönüştü: video proje içinden eklenir, dalga formu anında görünür, kesimler
+oynatılırken canlı önizlenir, klavyeyle gezilir ve paneller kendi ölçünüze
+göre ayarlanır. **Kesim mantığı, kesim sonuçları ve komut satırı DEĞİŞMEDİ:**
+düzenlemesiz bir koşu, bu sürümden önceki referans videoyla **bit düzeyinde
+aynı** MP4 üretir (gerçek koşuda doğrulandı).
+
+### Eklendi
+
+- **Tek ekranlı editör düzeni.** Üst bar (Kesimi Başlat · Render Al · Kapat),
+  sol panel (medya kartı + **Filler Listesi**: zaman + kelime + tür; tıklayınca
+  oynatma başlığı oraya gider), orta önizleme, sağ panel (kesim özeti / aşama
+  ilerlemesi / sonuç) ve **kalıcı zaman çizelgesi**. Ayrı "başlangıç ekranı"
+  kalktı; video proje içinden seçilir (sürükle-bırak ve klasör gezgini aynen
+  duruyor).
+- **Dalga formu artık video seçilir seçilmez görünüyor.** Önceden analiz
+  bitene kadar beklemek gerekiyordu; ses zarfı ve süre şimdi arka planda
+  hesaplanıp dosya başına önbellekleniyor — aynı videoyu ikinci kez açmak
+  hiçbir şey hesaplamaz.
+- **Zaman çizelgesinde yakınlaştırma** (1×–16×) ve zaman cetveli. Yakınlaşınca
+  cetvel otomatik sıklaşır, oynatma başlığı görüş alanında tutulur.
+- **Kesim-atlamalı önizleme.** Oynat dediğinizde kaynak video oynar ama
+  **final videoyu görürsünüz**: kesilecek bölgeye gelindiğinde otomatik
+  atlanır. Atlama yalnız oynatma sırasındadır — duraklatılmışken kesimin
+  içine tıklayıp inceleyebilirsiniz. Kesim videonun sonuna kadar sürüyorsa
+  oynatma başlığı kesimin başına oturur ve durur (final videoda bulunmayan
+  bir kare donmaz).
+- **J/K/L mekiği.** J geri, K dur, L ileri; aynı yöne her basış hızı katlar
+  (1× → 2× → 4× …, en fazla 16×). Hız oynatıcı çubuğunda yazar. Geri sararken
+  de kesikler atlanır. Mevcut kısayollar (Boşluk, ←/→, Y, M) aynen duruyor.
+- **Panel ayırıcıları.** Sol panelin genişliği ve zaman çizelgesinin
+  yüksekliği sürükleyerek ayarlanır; ölçünüz hatırlanır. Çift tıklama
+  varsayılana döndürür.
+- **Koyu başlık çubuğu.** Masaüstü penceresinin başlık çubuğu artık
+  uygulamanın kendisi gibi koyu. Windows'u açık temada kullananlarda koyu
+  gövdenin üstünde açık gri bir şerit kalıyordu.
+- **Dışa aktarım biçimi artık "Render Al"a basınca soruluyor** (MP4 / NLE
+  projesi + altyazı kutusu). Önceden analizden ÖNCE seçmek gerekiyordu; artık
+  kesimleri gördükten sonra karar veriliyor.
+- Sağ panelde **canlı kesim özeti**: mod, tür bazında sayı, kazanılan süre ve
+  plan özeti. Sayılar `rapor.json`'a yazılacak olanların aynısıdır.
+
+### Değiştirildi
+
+- **Atlamalı oynatma yalnız oynarken atlıyor.** Duraklatılmışken de atladığı
+  için Filler Listesi'nden bir kesime tıklamak kullanıcıyı kesimin **sonuna**
+  fırlatıyordu; artık tıklanan yere gidiliyor.
+- Koşu sırasında video bırakıldığında verilen uyarı tek metne indirildi ve
+  üst bardaki durum satırında da görünüyor (dropzone o sırada gizli olduğu
+  için uyarı görünmüyordu).
+- **Hata mesajları insan diliyle.** Sessiz bir videoda görünen "PLAN
+  başarısız: kesim planı tüm videoyu kapsıyor — boş video üretilmez;
+  eşikleri gözden geçir" cümlesi yerine artık "Bu videoda kesilecek konuşma
+  bulunamadı (ses yok ya da tamamı sessizlik)." yazıyor. Teknik cümle
+  kaybolmuyor, "Log detayı" katlamasında duruyor.
+
+### Düzeltildi
+
+- **Bir şey ters gittiğinde ekran donuk kalıyordu.** Sessiz (ya da tamamı
+  sessizlik olan) bir videoda kesim planı üretilemez; iş sunucuda düzgün
+  başarısız oluyor ama arayüz "İŞLENİYOR"da asılı kalıyor, kullanıcıya
+  hiçbir şey söylenmiyordu. Artık sağ panelde ne olduğunu söyleyen bir hata
+  kartı, "Yeni video" düğmesi ve geri bildirim bağlantısı çıkıyor. Her hata
+  türü aynı yere düşüyor: kesim planı üretilemedi, ffmpeg bulunamadı, izin
+  verilen konumlar dışında dosya.
+- **Kurulum sihirbazı hiç açılmıyordu.** whisper.cpp motoru ya da dil modeli
+  eksik olan bir makinede indirme ekranı görünmüyor, arayüz boş proje
+  ekranında kalıyordu. (Yalnız bu sürümün geliştirme dalında oluşmuş bir
+  gerileme; yayınlanmış bir sürümü etkilemedi.)
+- **Boşluk tuşu düğmelere takılıyordu.** Bir düğmeye tıkladıktan sonra
+  Boşluk oynatmayı başlatmıyor, o düğmeyi yeniden basıyordu. Düğmeler artık
+  fareyle tıklandığında klavye odağını almıyor; Tab ile gezenler için
+  düğmeler eskisi gibi Boşlukla çalışıyor.
+- **Pasif "Render Al" basılabilir görünüyordu.** Düğme gerçekten pasifti ama
+  yeşil dolgusu koyu zeminde hâlâ bir eylem gibi okunuyordu; pasif düğmeler
+  artık dolgusuz.
+- **Diyaloglar sessizce hiçbir şey yapmıyordu (KI-17).** Tarayıcı motoru
+  `<dialog>` kapanış olayını hiç bildirmiyor; "Analizi başlat"a basınca modal
+  kapanıyor ama iş başlamıyordu.
+
+### Teknik
+
+- `wavesurfer.js` 7.12.11 (BSD-3-Clause) **vendor** edildi — CDN yok, uygulama
+  çevrimdışı çalışır. Sürüm ve SHA-256 `web/static/vendor/vendor.json`'da,
+  kilidi testte.
+- `ReviewKarari` **eklemeli** iki alan kazandı (`cikti`, `srt`): `None`
+  varsayılanı config'i geçerli kılar, yani CLI yolu bit-birebir korunur.
+- Yeni uçlar: `GET /api/medya/onizleme` (süre + zarf, arka planda + önbellekli)
+  ve `GET /api/medya/video` (iş başlamadan önizleme, HTTP Range ile).
+- `ReviewGorunumu` `tiers` ve kesim başına `kelimeler` taşıyor; ikisi de
+  mevcut reason-zinciri ayrıştırmasının TEK gövdesinden türer (KI-3 ailesi).
+- Görünürlüğün tek kaynağı `body[data-asama]`; `hata` yeni bir durum olarak
+  eklendi. Yeni statik kilit: `app.js` içinde tanımsız bir fonksiyona yapılan
+  çağrı kalırsa test kırmızıya döner (kurulum sihirbazı kusurunu bu yakalar).
+- Koyu başlık çubuğu `DwmSetWindowAttribute` ile kurulur ve pencere
+  görünmeden ÖNCE uygulanır; eski Windows sürümlerinde sessizce atlanır —
+  uygulama hiçbir koşulda düşmez.
+
 ## [1.2.4] — 2026-09-04
 
 **Hotfix: iş koşarken ekranda boş siyah pencereler açılıp kapanıyordu.**
@@ -492,6 +593,7 @@ sınırlar: `experiments/pywebview_spike/README.md`.
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
 
+[1.3.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.0
 [1.2.4]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.4
 [1.2.3]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.3
 [1.2.2]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.2

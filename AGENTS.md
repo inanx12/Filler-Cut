@@ -159,7 +159,109 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 "Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
 kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
-## Mevcut Durum (2026-09-02)
+## Mevcut Durum (2026-09-05)
+
+**v1.3.0 DALGA B TAMAMLANDI (2026-09-05) — epic'in son dalgası.** Sürüm
+1.2.4 → **1.3.0**; CHANGELOG bölümü açıldı (Dalga A taslağı buraya taşındı,
+Dalga B eklendi). Push/tag/release YOK — İnan onaylar.
+
+**Kapsam.** Kesim-atlamalı önizleme senkronu · J/K/L mekiği + düğme odağı kök
+çözümü · DWM koyu başlık çubuğu · panel ayırıcıları · bump. Pipeline
+davranışına dokunulmadı (bu dalgada `pipeline.py` HİÇ değişmedi).
+
+**`hata` DURUM MAKİNESİNİN YENİ YANI (İnan'ın Dalga A'dan taşıdığı kusur).**
+Sessiz videoda pipeline `CutPlanError` ateşliyor, iş sunucuda `failed`
+oluyordu — ama ekran "İŞLENİYOR"da asılı kalıyordu. **Kök neden ölçüldü:**
+hata kartı `gizli` sınıfı kaldırılarak açılmaya çalışılıyordu, oysa
+`.sag-bolum`un tabanı `display:none`dur ve kartın `data-goster`i YOKTU —
+`gizli`yi kaldırmak hiçbir şey yapmıyordu. SUNUCU TARAFI SAĞLAMDI (`failed`
+terminaldir, worker döner, kayıt yeni iş kabul eder — kilit testte); belirti
+yalnız arayüzdeydi. Kart artık `data-goster="hata"` ile açılır ve
+`hataGoster` `asamaAyarla("hata")` çağırır.
+
+**SESSİZ NO-OP AİLESİ BEŞE ÇIKTI** (KI-13, KI-14, KI-17 + bu turda ikisi):
+- **`ekranGoster` ölü çağrısı.** Dalga A beş ekranı birleştirirken fonksiyonu
+  sildi ama `kurulumYokla`daki iki çağrısı kaldı: modeli/ikilisi eksik bir
+  makinede sihirbaz kapısı `ReferenceError` yüzünden **hiç açılmıyordu**.
+  Bu makinede ikisi de kurulu olduğu için dal hiç koşmadı.
+- **İş başlatma hatası görünmez kutuya yazılıyordu.** `#baslangic-hata`
+  `#bos-durum`un içindedir ve `yuklendi`de `display:none`dur; sunucunun 400'ü
+  (kök dışı) ve 409'u (kurulum tamamlanmadı) oraya gidiyordu.
+Her ikisinin de kilidi statiktir; birincisininki **genel**: `app.js` içinde
+tanımsız bir fonksiyona çağrı kalırsa `TestOluCagriYok` kırmızıya döner
+(yorumlar/dizeler çıkarılır, tarayıcının kendisi sahte ihlalle kilitli —
+`test_surec.py` AST tarayıcısının deseni).
+
+**ATLAMA KENAR KARARI (rapora yazılması istenen).** "Playhead kesik bölgenin
+İÇİNDEN başlarsa en yakın TUTULAN sınıra otur" — [bas, bit) kesiminin iki
+sınırı EŞDEĞER DEĞİLDİR. `bit` kesimden sonraki tutulan malzemenin başıdır ve
+ileri oynatma ancak oradan sürebilir; `bas` ise ÖNCEKİ tutulan malzemenin
+sonudur ve oraya oturup oynatmak kendi kendini yer (bir sonraki karede aynı
+kesime girilir, atlama zaten `bit`e taşır). Yani **ileri yönde mesafe
+karşılaştırması sonucu değiştirmez**, yalnız bir karelik kesik ses duyurur —
+seçim her zaman `bit`tir. Mesafenin gerçekten belirleyici olduğu TEK durum
+kesimin videonun SONUNA kadar sürmesidir: ileride tutulan malzeme yoktur,
+sınır `bas`tır, playhead oraya oturur ve oynatma durur (eskiden yalnız
+`pause()` vardı ve playhead kesimin içinde kalıyordu). Geri mekikte ayna
+geçerlidir ve orada `bas` gerçekten doğrudur.
+
+**KARAR `play` ANINDA DA VERİLİR.** `timeupdate` saniyede ~4 kez ateşler;
+kesimin içinden başlatılan oynatma 250 ms'e kadar kesik SES duyurabiliyordu.
+
+**DÜĞME ODAĞI — KÖK ÇÖZÜM (v1.0'dan beri açık iş).** Eski çare "hedef BUTTON
+ise kısayolu atla" idi ve kusuru gidermiyor PEKİŞTİRİYORDU: kısayol
+yutuluyor, Boşluk düğmeyi yeniden tetikliyordu. Kök neden "bir editörde araç
+düğmesi düzenleyicinin klavye odağını çalmamalıdır"dır. İki katman:
+(1) düğmeler FARE ile odak almaz (`mousedown` → `preventDefault`; `click`i
+etkilemez, `pointerdown` iptali uyumluluk fare olaylarını da düşürürdü),
+(2) KLAVYEYLE odaklanmış düğmede Boşluk/Enter yine düğmenindir —ayrımı
+`:focus-visible` yapar, biz tahmin etmeyiz. Erişilebilirlik kaybedilmedi.
+
+**GERİ SARMA SİMÜLE (ölçülmüş kısıt).** HTML medya öğesi negatif
+`playbackRate` desteklemez; öğe duraklatılır ve `currentTime` 100 ms'lik
+tiklerle geri alınır (kat sayısı adım BÜYÜKLÜĞÜNÜ çarpar, sıklığını değil —
+daha sık arama oynatıcıyı boğardı).
+
+**DWM: HWND YOLU KURULU KAYNAKTAN DOĞRULANDI, EZBERDEN DEĞİL** (pywebview
+6.2.1): `window.py` "`self.native = None  # set in the gui after window
+creation`", `winforms.py` "`self.pywebview_window.native = self`", HWND
+idiyomu upstream'in kendi idiyomu `self.Handle.ToInt32()`. Üçü de kaynak
+kilidiyle testte (dosyalar OKUNUR, `winforms` IMPORT EDİLMEZ — MSHTML/registry
+riski). **pywebview zaten koyu yapıyor ama SİSTEM temasına göre**
+(`AppsUseLightTheme`); arayüzümüz her zaman koyudur ve bu makine açık temada
+(`AppsUseLightTheme = 1`), yani kusur burada canlıydı. Kanca `before_show`:
+`create_window` sırası `BrowserForm(...)` → `before_show.set()` →
+`browser.Show()` (native dolu, pencere görünmemiş) ve `before_show`
+`Event(self, True)`dır, yani GUI thread'inde SENKRON koşar — `shown` ayrı bir
+thread açar ve DWM çağrısı çapraz-thread olurdu. Nitelik 20 tanınmazsa 19
+denenir (eski Windows 10), ikisi de olmazsa sessizce geçilir.
+
+**AYIRICILAR IZGARANIN KENDİ SÜTUN/SATIRLARIDIR.** Mutlak konumlu bir tutamaç
+`.panel.sol`un `overflow-y: auto`suyla kırpılır ve içerikle KAYARDI. Ölçü tek
+yerde: `--sol-en` / `--tl-yukseklik`; JS hiçbir panelin `style`ına dokunmaz
+(kilit: `grid-area`/`grid-template` JS'te geçmez). Varsayılan yükseklik
+183 px BİLEREK: 1280×800'de görünür pencere tam 108 px çıkıyor, Dalga A'nın
+ölçüsüyle piksel piksel aynı. Klavyeyle boyutlandırma YOK (bilinçli): ayırıcı
+odaklanabilir olsaydı ok tuşları oynatıcının ±5 sn kısayoluyla çakışırdı.
+
+**Tuzak (bir sonraki agent için) — `window.innerWidth` 0 OLABİLİR.** Gizli bir
+pencerede/boyanmamış sekmede 0 gelir; ayırıcının pencere tavanı (`innerWidth
+* 0.45`) o an 0 olur ve panel kullanıcı hiç görmeden EN KÜÇÜK boyuta çöküp
+öyle KAYDEDİLİRDİ. Kendi kodumuzda gerçek ölçümle yakalandı. Ölçü
+bilinmiyorsa pencere tavanı uygulanmaz.
+
+**Tuzak — wavesurfer tuvali her kap boyutlanmasında bayatlar.** Dalga A bunu
+yalnız zoom'da kapatmıştı; ResizeObserver sadece cetveli yeniliyordu, yani
+PENCERE boyutlanmasında tuval zaten bayat kalıyordu. Yeniden yaratım ortak
+gövdeye alındı (`dalgaGecikmeliCiz`) ve üç yol da (zoom, ayırıcı, pencere)
+oradan geçiyor.
+
+**"RENDER AL" PASİFLİĞİ ÖNCE DOĞRULANDI (brief'in istediği sıra).** Düğme
+GERÇEKTEN pasif: `disabled` özniteliği HTML'de, `dugmeleriTazele` her geçişte
+yazıyor, tıklama hiçbir şey yapmıyor (yerel sunucuda ölçüldü). Kusur DURUMDA
+değil AFFORDANSTA: `opacity: .45` altındaki yeşil dolgu koyu zeminde hâlâ
+basılabilir okunuyordu. Tek `.dugme:disabled` kuralı iki varyantı da
+nötrleştirir (dolgu düşer, kenarlık + soluk metin kalır).
 
 **v1.3.0 DALGA A TAMAMLANDI (2026-09-05) — editör iskeleti.** Sürüm bump
 YOK (release ayrı iş); push/tag YOK.
@@ -289,66 +391,8 @@ durumda gizli çizelgenin bıraktığı ~200 px ölü alan ve taşan boş durumd
 `margin:auto`nun dropzone'u erişilemez kılması (`safe center`).
 
 
-**SÜRÜM BUMP YOK — CHANGELOG taslağı burada bekliyor.** v1.2.1'in deseni:
-Dalga A/B bump etmez, epic'in SON dalgası bump'lar ve CHANGELOG bölümünü
-yazar (`tests/test_release.py::test_unreleased_bolumu_kalmadi` `[Unreleased]`
-başlığını YASAKLAR — bölüm ancak sürümle birlikte açılır). Kullanıcı dilinde
-yazılmış taslak, bump dalgasında `## [1.3.0] — <ISO tarih>` başlığı altına
-olduğu gibi taşınacak:
-
-<!-- CHANGELOG-TASLAK:1.3.0-DALGA-A -->
-**v1.3.0 Dalga A — editör iskeleti.** Arayüz tek ekranlı bir "proje"
-görünümüne dönüştü. Kesim mantığı, kesim sonuçları ve komut satırı
-DEĞİŞMEDİ: düzenlemesiz bir koşu, düzeltmeden önceki referans videoyla
-**bit düzeyinde aynı** MP4 üretir (gerçek koşuda doğrulandı).
-
-### Eklendi
-
-- **Tek ekranlı editör düzeni.** Üst bar (Kesimi Başlat · Render Al · Kapat),
-  sol panel (medya kartı + **Filler Listesi**: zaman + kelime + tür; tıklayınca
-  oynatma başlığı oraya gider), orta önizleme, sağ panel (kesim özeti / aşama
-  ilerlemesi / sonuç) ve **kalıcı zaman çizelgesi**. Ayrı "başlangıç ekranı"
-  kalktı; video proje içinden seçilir (sürükle-bırak ve klasör gezgini aynen
-  duruyor).
-- **Dalga formu artık video seçilir seçilmez görünüyor.** Önceden analiz
-  bitene kadar beklemek gerekiyordu; ses zarfı ve süre şimdi arka planda
-  hesaplanıp dosya başına önbellekleniyor — aynı videoyu ikinci kez açmak
-  hiçbir şey hesaplamaz.
-- **Zaman çizelgesinde yakınlaştırma** (1×–16×) ve zaman cetveli. Yakınlaşınca
-  cetvel otomatik sıklaşır, oynatma başlığı görüş alanında tutulur.
-- **Dışa aktarım biçimi artık "Render Al"a basınca soruluyor** (MP4 / NLE
-  projesi + altyazı kutusu). Önceden analizden ÖNCE seçmek gerekiyordu; artık
-  kesimleri gördükten sonra karar veriliyor.
-- Sağ panelde **canlı kesim özeti**: mod, tür bazında sayı, kazanılan süre ve
-  plan özeti. Sayılar `rapor.json`'a yazılacak olanların aynısıdır.
-
-### Değiştirildi
-
-- **Atlamalı oynatma yalnız oynarken atlıyor.** Duraklatılmışken de atladığı
-  için Filler Listesi'nden bir kesime tıklamak kullanıcıyı kesimin **sonuna**
-  fırlatıyordu; artık tıklanan yere gidiliyor.
-- Koşu sırasında video bırakıldığında verilen uyarı tek metne indirildi ve
-  üst bardaki durum satırında da görünüyor (dropzone o sırada gizli olduğu
-  için uyarı görünmüyordu).
-
-### Düzeltildi
-
-- **Diyaloglar sessizce hiçbir şey yapmıyordu (KI-17).** Tarayıcı motoru
-  `<dialog>` kapanış olayını hiç bildirmiyor; "Analizi başlat"a basınca modal
-  kapanıyor ama iş başlamıyordu.
-
-### Teknik
-
-- `wavesurfer.js` 7.12.11 (BSD-3-Clause) **vendor** edildi — CDN yok, uygulama
-  çevrimdışı çalışır. Sürüm ve SHA-256 `web/static/vendor/vendor.json`'da,
-  kilidi testte.
-- `ReviewKarari` **eklemeli** iki alan kazandı (`cikti`, `srt`): `None`
-  varsayılanı config'i geçerli kılar, yani CLI yolu bit-birebir korunur.
-- Yeni uçlar: `GET /api/medya/onizleme` (süre + zarf, arka planda + önbellekli)
-  ve `GET /api/medya/video` (iş başlamadan önizleme, HTTP Range ile).
-- `ReviewGorunumu` `tiers` ve kesim başına `kelimeler` taşıyor; ikisi de
-  mevcut reason-zinciri ayrıştırmasının TEK gövdesinden türer (KI-3 ailesi).
-<!-- /CHANGELOG-TASLAK -->
+**CHANGELOG taslağı v1.3.0 bölümüne TAŞINDI** (Dalga B, 2026-09-05) —
+`CHANGELOG.md` `## [1.3.0]` altında, Dalga B eklemeleriyle birlikte.
 
 
 **v1.2.4 HOTFIX TAMAMLANDI (2026-09-04) — konsolsuz exe'de boş konsol
