@@ -222,27 +222,41 @@ _FILLER_KELIME_RE = re.compile(
 )
 
 
+def reason_kelimeleri(reason: str) -> list[str]:
+    """Bir reason zincirindeki filler kelimeleri — GÖRÜNTÜ formunda, sırayla.
+
+    KI-3 ailesinin kelime yarısının TEK kaynağıdır: kelime reason'a
+    ``detect/fillers.py`` tarafından ``repr()`` ile yazılmıştır, ayrı bir
+    veri yolu yoktur — "neden burayı kesti?" cevabıyla "neyi kesti?" cevabı
+    aynı dosyadan çıkar. Kelimeler ``goruntu_formu``ndan geçer: ``Eee,`` ile
+    ``eee`` aynı kovaya düşer, ``ııı`` ekranda ``ii`` OLMAZ.
+
+    Zincirdeki sıra korunur (birleşmiş kesim birden çok kelime taşıyabilir);
+    sessizlik/manuel/min_keep parçaları kelime taşımaz, atlanır. ``filler_dagilimi``
+    (rapor istatistiği) ve web review'un filler listesi aynı gövdeyi kullanır —
+    iki ayrı parse kopyası zamanla ayrışırdı.
+    """
+    kelimeler: list[str] = []
+    for parca in _PADDING_EKI_RE.sub("", reason).split(" + "):
+        eslesme = _FILLER_KELIME_RE.match(parca)
+        if eslesme is None:
+            continue
+        kelime = goruntu_formu(eslesme.group("kelime"))
+        if kelime:
+            kelimeler.append(kelime)
+    return kelimeler
+
+
 def filler_dagilimi(cuts: list[Segment]) -> list[tuple[str, int]]:
     """Kesilen filler kelimelerinin dökümü — ``[("eee", 3), ("şey", 1)]``.
 
-    Kaynak, kesimlerin reason zinciridir (KI-3 ailesi): kelime oraya
-    ``detect/fillers.py`` tarafından ``repr()`` ile yazılmıştır, ayrı bir
-    veri yolu yoktur — "neden burayı kesti?" cevabıyla "neyi kesti?" cevabı
-    aynı dosyadan çıkar. Kelimeler GÖRÜNTÜ formunda (``goruntu_formu``)
-    gruplanır: ``Eee,`` ile ``eee`` aynı kovaya düşer, ``ııı`` kendisi kalır.
-
-    Sıralama deterministiktir: önce çoktan aza, eşitlikte alfabetik.
-    Sessizlik/manuel/min_keep parçaları kelime taşımaz, atlanır.
+    Kelime çıkarımı ``reason_kelimeleri``dedir (tek kaynak); burası yalnız
+    sayar. Sıralama deterministiktir: önce çoktan aza, eşitlikte alfabetik.
     """
     sayac: dict[str, int] = {}
     for seg in cuts:
-        for parca in _PADDING_EKI_RE.sub("", seg.reason).split(" + "):
-            eslesme = _FILLER_KELIME_RE.match(parca)
-            if eslesme is None:
-                continue
-            kelime = goruntu_formu(eslesme.group("kelime"))
-            if kelime:
-                sayac[kelime] = sayac.get(kelime, 0) + 1
+        for kelime in reason_kelimeleri(seg.reason):
+            sayac[kelime] = sayac.get(kelime, 0) + 1
     return sorted(sayac.items(), key=lambda p: (-p[1], p[0]))
 
 

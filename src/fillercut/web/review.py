@@ -27,7 +27,12 @@ from pydantic import BaseModel, ConfigDict, StrictInt
 
 from fillercut.models import CutPlan, Segment
 from fillercut.plan.cutplan import MANUEL_REASON, apply_review_edits
-from fillercut.report.json_report import EditOzeti, reason_kategorileri
+from fillercut.report.json_report import (
+    EditOzeti,
+    TierCounts,
+    reason_kategorileri,
+    reason_kelimeleri,
+)
 
 #: Sürüklenen tutamaç bu mesafedeki sessizlik kenarına yapışır (ms).
 #: Değer hissedilir olmalı ama kullanıcının niyetini ezmemeli: 150 ms bir
@@ -120,6 +125,11 @@ class KesimGorunumu(BaseModel):
     duzenlendi: bool
     manuel: bool
     reason: str
+    #: Bu kesimde kesilen filler sözcükleri (GÖRÜNTÜ formunda, zincir sırasıyla).
+    #: Sol paneldeki Filler Listesi bunu gösterir; kaynağı reason zinciridir
+    #: (``reason_kelimeleri`` — rapor istatistiğiyle AYNI gövde, KI-3 ailesi).
+    #: Sessizlik ve elle eklenen kesimlerde boştur.
+    kelimeler: list[str] = []
 
 
 class ReviewGorunumu(BaseModel):
@@ -141,6 +151,12 @@ class ReviewGorunumu(BaseModel):
     kalan_ms: int
     min_keep_ms: int
     snap_esik_ms: int
+    #: Kademe dağılımı — sağ paneldeki kesim özetinin kaynağı. UYGULANMIŞ
+    #: plandan sayılır, yani rapor.json'a yazılacak ``tiers`` ile AYNI sayıdır
+    #: (ekran ile rapor ayrışamaz). KI-3 semantiği geçerli: tespit OLAYI
+    #: sayılır, kesim segmenti değil — birleşmiş bir kesim birden çok olay
+    #: taşıyabilir, o yüzden toplam kesim sayısına eşit ÇIKMAYABİLİR.
+    tiers: TierCounts
     #: Uygulanan plan geçersizse (her şey kesilmiş) Türkçe uyarı; onay da reddedilir.
     hata: str | None = None
 
@@ -573,6 +589,31 @@ def uygulanmis_plan(
     )
 
 
+def _tiers(uygulanan: CutPlan | None, adaylar: Sequence[_Aday]) -> TierCounts:
+    """Kademe sayımı — UYGULANMIŞ plandan, ``rapor.json`` ile AYNI gövdeyle.
+
+    Kaynak bilinçli olarak uygulanmış plandır: rapor da ondan yazılır, yani
+    sağ paneldeki sayı ile dosyadaki sayı ayrışamaz. Uygulanamayan planda
+    (her şey kesilmiş → ``hata``) ekran boş kalmasın diye AKTİF adaylardan
+    sayılır — o hâlde onay zaten reddedilir.
+
+    KI-3 semantiği: tespit OLAYI sayılır, kesim segmenti değil. Birleşmiş bir
+    kesim birden çok olay taşıyabilir (gerçek koşuda ölçüldü: tek kesimde
+    ``sessizlik 1524ms + sessizlik 595ms``), o yüzden toplam kesim sayısına
+    eşit ÇIKMAMASI kusur değildir.
+    """
+    reasonlar = (
+        [c.reason for c in uygulanan.cut]
+        if uygulanan is not None
+        else [a.reason for a in adaylar if a.aktif]
+    )
+    sayac = {"kesin_filler": 0, "aday_filler": 0, "manuel": 0, "silence": 0}
+    for reason in reasonlar:
+        for kategori in reason_kategorileri(reason):
+            sayac[kategori] += 1
+    return TierCounts(**sayac)
+
+
 def gorunum_kur(
     plan: CutPlan,
     overlay: Overlay,
@@ -602,6 +643,7 @@ def gorunum_kur(
             duzenlendi=a.duzenlendi,
             manuel=a.manuel,
             reason=a.reason,
+            kelimeler=reason_kelimeleri(a.reason),
         )
         for a in sorted(adaylar, key=lambda x: (x.bas, x.bit))
     ]
@@ -625,5 +667,6 @@ def gorunum_kur(
         kalan_ms=max(0, total_ms - kesilen),
         min_keep_ms=min_keep_ms,
         snap_esik_ms=SNAP_ESIK_MS,
+        tiers=_tiers(uygulanan, adaylar),
         hata=hata,
     )

@@ -784,6 +784,105 @@ class TestSnapToggle:
         assert m0["bit_ms"] != 14_950
 
 
+class TestKesimKelimeleri:
+    """v1.3.0 — sol paneldeki Filler Listesi'nin veri kaynağı.
+
+    Kelime AYRI bir veri yolundan gelmez: reason zincirinden çıkar
+    (``reason_kelimeleri``), yani "neden burayı kesti" ile "neyi kesti"
+    aynı dosyadan okunur ve rapor istatistiğiyle aynı gövdeyi paylaşır.
+    """
+
+    def test_kesin_ve_aday_kesimlerde_kelime_var(
+        self, client: TestClient, ev: Path
+    ) -> None:
+        job_id = _review_jobu(client, ev)
+        kesimler = client.get(f"/api/jobs/{job_id}/review").json()["kesimler"]
+        kelime = {k["id"]: k["kelimeler"] for k in kesimler}
+        assert kelime["k0"] == ["eee"]  # 'Eee,' → GÖRÜNTÜ formu
+        assert kelime["k2"] == ["yani"]
+
+    def test_sessizlik_kesiminde_kelime_bos(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        kesimler = client.get(f"/api/jobs/{job_id}/review").json()["kesimler"]
+        assert next(k for k in kesimler if k["id"] == "k1")["kelimeler"] == []
+
+    def test_elle_eklenen_kesimde_kelime_bos(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        cevap = client.post(
+            f"/api/jobs/{job_id}/review/edits",
+            json={"eklemeler": [{"bas_ms": 10_000, "bit_ms": 11_000}]},
+        )
+        manuel = next(k for k in cevap.json()["kesimler"] if k["manuel"])
+        assert manuel["kelimeler"] == []
+
+    def test_goruntu_formu_ii_yapmaz(self) -> None:
+        """``ııı`` ekranda ``ii`` OLMAZ — karşılaştırma formu değil görüntü formu."""
+        from fillercut.report.json_report import reason_kelimeleri
+
+        assert reason_kelimeleri("kesin filler: 'Ihh'") == ["ıhh"]
+        assert reason_kelimeleri("kesin filler: 'ııı,'") == ["ııı"]
+
+    def test_birlesmis_kesim_zincir_sirasini_korur(self) -> None:
+        from fillercut.report.json_report import reason_kelimeleri
+
+        zincir = (
+            "kesin filler: 'Eee,' [padding +80/-120ms] + sessizlik 500ms"
+            " + aday filler: 'yani'"
+        )
+        assert reason_kelimeleri(zincir) == ["eee", "yani"]
+
+
+class TestGorunumTiers:
+    """v1.3.0 — sağ paneldeki kesim özeti raporla AYNI sayıyı gösterir."""
+
+    def test_kademe_dagilimi_planla_uyusur(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        tiers = client.get(f"/api/jobs/{job_id}/review").json()["tiers"]
+        assert tiers == {
+            "kesin_filler": 1,
+            "aday_filler": 1,
+            "silence": 1,
+            "manuel": 0,
+        }
+
+    def test_geri_alinan_kesim_sayimdan_duser(self, client: TestClient, ev: Path) -> None:
+        """Sayım UYGULANMIŞ plandandır: devre dışı kesim rapora da girmez."""
+        job_id = _review_jobu(client, ev)
+        cevap = client.post(
+            f"/api/jobs/{job_id}/review/edits", json={"devre_disi": ["k0"]}
+        )
+        assert cevap.json()["tiers"]["kesin_filler"] == 0
+
+    def test_elle_eklenen_manuel_kovasina_girer(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        cevap = client.post(
+            f"/api/jobs/{job_id}/review/edits",
+            json={"eklemeler": [{"bas_ms": 10_000, "bit_ms": 11_000}]},
+        )
+        assert cevap.json()["tiers"]["manuel"] == 1
+
+    def test_ekran_ile_rapor_ayrisamaz(
+        self, client: TestClient, ev: Path, kosucu: _ReviewKosucu
+    ) -> None:
+        """Kilit: ekrandaki sayı, ONAYLANAN plandan yazılacak raporun sayısıdır.
+
+        Sahte koşucunun sabit özetiyle karşılaştırmak fixture'ı ölçerdi; asıl
+        invariant "aynı gövde, aynı girdi" olduğu için onaydan sonra
+        pipeline'a GİDEN plan alınır ve gerçek ``build_report`` ondan
+        koşturulur. Ekran ile dosya ancak bu iki gövde ayrışırsa ayrışır.
+        """
+        job_id = _review_jobu(client, ev)
+        ekran = client.post(
+            f"/api/jobs/{job_id}/review/edits", json={"devre_disi": ["k1"]}
+        ).json()["tiers"]
+        client.post(f"/api/jobs/{job_id}/approve")
+        assert kosucu.bitti.wait(5.0)
+        onaylanan = kosucu.karar.plan
+        assert onaylanan is not None
+        rapor = build_report(onaylanan, TOPLAM)
+        assert ekran == rapor.tiers.model_dump()
+
+
 class TestOnay:
     def test_onay_rendera_gecirir(
         self, client: TestClient, ev: Path, kosucu: _ReviewKosucu
