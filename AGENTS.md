@@ -250,8 +250,40 @@ ve `fill="currentColor"` düştü — ikonlar görünmez olurdu) ve `apiHatasi()
   yazıldı ve raporun `encoder` alanı **null** kaldı.
 - Test klasörü koşu öncesi hâline geri konuldu (yedekle-geri koy kuralı).
 
-**BEKLEYEN — Release Kontrol Listesi 5-9 (kurulu exe ile).** Bu dalga yerel
-sunucuda doğrulandı; kurucu üzerinden native pencere doğrulaması ayrı adımdır.
+**GERÇEK DOĞRULAMA — KURULU EXE (yerel build + Inno, üzerine kurulum):**
+- `build_exe.ps1` + `build_setup.ps1` → kurucu **var olan kurulumun ÜSTÜNE**
+  kuruldu (KI-15 yolu): exit 0, `_internal`de **tek** `fillercut-1.2.4.dist-info`,
+  `--version` 1.2.4. `vendor/wavesurfer.min.js` bundle'a girdi ve sha256'sı
+  repodakiyle **birebir** (`a943cbe7…`) — spec `web/static` dizinini komple
+  kopyaladığı için ek datas kuralı GEREKMEDİ.
+- **Madde 5-6:** `fillercut-ui.exe` çift tıklama koşuluyla (std tanıtıcı
+  devri YOK) başlatıldı → **native pencere** açıldı,
+  `MainWindowTitle='Filler-Cut'`, 1280×800; `/api/instance` 200.
+- **Madde 8 (KI-16) — GÖZCÜ İLE ÖLÇÜLDÜ:** analiz + render boyunca
+  **4801 örnekte 0 yeni konsol penceresi** (`taban=0 enCok=0`). Gözcü hem
+  `ConsoleWindowClass` hem `CASCADIA_HOSTING_WINDOW_CLASS` sayar.
+- **Madde 9 — uçtan uca, `izinli_kokler = "*"` ile `D:\`den:** Türkçe
+  karakterli ve parantezli yol (`…ses parçası (1önce).mp4`) seçildi; kök
+  çipleri `Ev / C:\ / D:\ / E:\` çıktı. Peaks analizden ÖNCE geldi
+  (37105 ms, 8000 bin). **Agresif** mod → 11 kesim, `tiers.silence = 11`,
+  %26.14 kazanım. **Render Al → MP4** yazıldı
+  (`…(1önce)_temiz.mp4`, 00:37 → 00:27).
+- **Madde 7 — yaşam döngüsü:** "Kapat" → süreç öldü, 8765 serbest kaldı,
+  kalan `fillercut*` süreci 0, **fillercut'a ait öksüz `msedgewebview2` 0**
+  (12 WebView2 süreci vardı, hepsi Windows kabuğunun).
+- Kurulu build'de zoom da doğrulandı: 8× → track 9696 px, tuval toplamı
+  19392 (= 2× track: wave + progress katmanı), cetvel 75 tike sıklaştı.
+- Kullanıcının `D:\` klasörü koşu öncesi hâline geri konuldu (iptalde
+  korunan transkript dahil).
+
+**GÖRSEL DOĞRULAMA.** Native pencerede üç durum gözle görüldü: `bos`
+(ortada dropzone + karşılama + gezgin, kök çipleri), `analiz_tamam`
+(sol: medya kartı + 11 satırlık Filler Listesi; orta: önizleme + taşıma;
+sağ: mod/kademe/kazanım/plan; alt: cetvel + dalga + mavi kesim blokları +
+zoom). **İki düzen kusuru bu görsel turda bulundu ve kapatıldı:** boş
+durumda gizli çizelgenin bıraktığı ~200 px ölü alan ve taşan boş durumda
+`margin:auto`nun dropzone'u erişilemez kılması (`safe center`).
+
 
 **SÜRÜM BUMP YOK — CHANGELOG taslağı burada bekliyor.** v1.2.1'in deseni:
 Dalga A/B bump etmez, epic'in SON dalgası bump'lar ve CHANGELOG bölümünü
