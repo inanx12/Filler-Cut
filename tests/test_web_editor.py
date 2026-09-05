@@ -375,6 +375,28 @@ class TestHataDurumu:
         govde = js[bas : js.index("\n}", bas)]
         assert 'durum.asama === "hata"' in govde
 
+    def test_is_baslatma_hatasi_da_ayni_duruma_duser(self) -> None:
+        """ÖLÇÜLMÜŞ: `#baslangic-hata` `yuklendi`de `display: none`dur.
+
+        Kutu `#bos-durum`un içindedir; iş başlatma 400'ü (kök dışı / geçersiz
+        yol) ya da 409'u (kurulum tamamlanmadı) oraya yazılıyordu — kullanıcı
+        "Kesimi Başlat"a basıyor ve hiçbir şey görmüyordu. Her hata türü TEK
+        yüzeye düşmeli.
+        """
+        js = _oku("app.js")
+        bas = js.index("async function analiziBaslat")
+        govde = js[bas : js.index("\n}\n", bas)]
+        assert govde.count("hataGoster(") == 2, "başlatma hatası hâlâ ayrı yüzeyde"
+        # Ölçüt KOD, yorum değil: gerekçeyi anlatan yorumda kutunun adı geçer
+        # ve geçmelidir de (`test_is_baslatma_formati_gondermez` ile aynı ders).
+        assert 'el("baslangic-hata")' not in govde
+
+    def test_baslangic_hata_kutusu_yalniz_bos_durumda_kullanilir(self) -> None:
+        """Gezgin hataları orada kalır — o durumda kutu GÖRÜNÜRDÜR."""
+        js = _oku("app.js")
+        bas = js.index("async function gezginYukle")
+        assert 'el("baslangic-hata")' in js[bas : js.index("\n}\n", bas)]
+
     def test_yeni_medya_eski_isin_izlerini_birakir(self) -> None:
         """Ölü jobId / eski review görünümü yeni akışa sızmamalı."""
         js = _oku("app.js")

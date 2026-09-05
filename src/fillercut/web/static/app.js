@@ -1047,9 +1047,14 @@ function tumAsamalarTamam() {
 }
 
 async function analiziBaslat() {
+  /* İŞ BAŞLATMA HATASI DA `hata` DURUMUNA DÜŞER. Eskiden mesaj
+     `#baslangic-hata` kutusuna yazılıyordu — ama o kutu `#bos-durum`un
+     içindedir ve `yuklendi`de `display: none`dur (ölçüldü). Yani sunucunun
+     400'ü (geçersiz yol / kök dışı) ya da 409'u (kurulum tamamlanmadı)
+     GÖRÜNMEYEN bir kutuya yazılıyor, kullanıcı "Kesimi Başlat"a basıyor ve
+     hiçbir şey olmuyordu. Aynı sessiz no-op ailesi; artık her hata türü —
+     CutPlanError, ffmpeg yok, kök dışı — TEK yüzeye düşer. */
   if (!durum.secili) return;
-  const hata = el("baslangic-hata");
-  hata.classList.add("gizli");
   durum.mod = document.querySelector('input[name="mod"]:checked').value;
   let cevap;
   try {
@@ -1065,14 +1070,11 @@ async function analiziBaslat() {
       }),
     });
   } catch (_) {
-    hata.textContent = "Sunucuya ulaşılamıyor — iş başlatılamadı.";
-    hata.classList.remove("gizli");
+    hataGoster("Sunucuya ulaşılamıyor — iş başlatılamadı.");
     return;
   }
   if (!cevap.ok) {
-    hata.textContent = await apiHatasi(cevap);
-    hata.classList.remove("gizli");
-    asamaAyarla("yuklendi");
+    hataGoster(await apiHatasi(cevap));
     return;
   }
   kosuBaslat(await cevap.json());
