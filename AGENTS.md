@@ -2094,7 +2094,7 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 |---|---|
 | `kurulum/yollar.py` — `config.json`'da `ui.izinli_kokler` okuma (`_ayar_ham_oku`, `ui_izinli_kokler_oku`) + `kurulum_yaz` bilinmeyen anahtarları korur; `test_kurulum_yollar.py::TestUiKokleri` (12 kilit) | `f45e123` |
 | `web/fs.py` + `app.py` + `cli.py` — `etkin_ham_kokler`/`etkin_kokler_coz` öncelik kapısı + `kok_genisletme_ipucu` (403 mesajı); `test_web_kok_ayari.py` (22 kilit) | `17a662e` |
-| README ×2 + CHANGELOG `[1.3.1]` + `pyproject.toml` **1.3.1** + `dist_pypi` (twine check ×2 PASSED) + AGENTS kaydı | `72d4e0a` |
+| README ×2 + CHANGELOG `[1.3.1]` + `pyproject.toml` **1.3.1** + `dist_pypi` (twine check ×2 PASSED) + AGENTS kaydı | `f87f3ba` |
 
 **v1.3.0 pre-release düzeltmesi (sürükleme regresyonu + başlık rengi)**
 
