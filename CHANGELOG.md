@@ -86,6 +86,17 @@ aynı** MP4 üretir (gerçek koşuda doğrulandı).
 - **Pasif "Render Al" basılabilir görünüyordu.** Düğme gerçekten pasifti ama
   yeşil dolgusu koyu zeminde hâlâ bir eylem gibi okunuyordu; pasif düğmeler
   artık dolgusuz.
+- **Kesim kenarından sürükleme çalışmıyordu.** Zaman çizelgesinde bir
+  kesimin kenarını tutup kapsamı değiştirmek bu sürümün geliştirme dalında
+  bozulmuştu (mıknatıs açık ya da kapalı, fark etmiyordu): dalga formu
+  katmanı, tıklamaları alması gereken kesim katmanının üstünde duruyordu.
+  Kenar sürükleme (iki yön), boş alanda sürükleyerek yeni kesim ve
+  mıknatısın iki modu yeniden çalışıyor. (Yayınlanmış bir sürümü
+  etkilemedi.)
+- **Başlık çubuğu vurgu renginde kalabiliyordu.** Windows'ta "Vurgu rengini
+  başlık çubuklarında göster" açık olan makinelerde pencere başlığı koyu
+  değil renkli çıkıyordu; artık rengi uygulama kendisi söylüyor. Eski
+  Windows sürümlerinde eskisi gibi davranır.
 - **Diyaloglar sessizce hiçbir şey yapmıyordu (KI-17).** Tarayıcı motoru
   `<dialog>` kapanış olayını hiç bildirmiyor; "Analizi başlat"a basınca modal
   kapanıyor ama iş başlamıyordu.
@@ -106,7 +117,14 @@ aynı** MP4 üretir (gerçek koşuda doğrulandı).
   çağrı kalırsa test kırmızıya döner (kurulum sihirbazı kusurunu bu yakalar).
 - Koyu başlık çubuğu `DwmSetWindowAttribute` ile kurulur ve pencere
   görünmeden ÖNCE uygulanır; eski Windows sürümlerinde sessizce atlanır —
-  uygulama hiçbir koşulda düşmez.
+  uygulama hiçbir koşulda düşmez. Windows 11'de başlık zemini ve metni
+  ayrıca açıkça yazılır (`DWMWA_CAPTION_COLOR` / `DWMWA_TEXT_COLOR`), çünkü
+  koyu kip niteliği tek başına vurgu rengine izin veriyor.
+- Zaman çizelgesindeki katmanların yığın sırası (`z-index`) artık açıkça
+  ilan ediliyor; bir kütüphanenin gölge DOM'u sıraya sessizce giremez.
+- Yeni test katmanı: sürükleme kilitleri **gerçek fare olaylarıyla** koşuyor
+  (Playwright + Chromium, `tarayici` marker'ı — CI'da koşmaz, tarayıcı yoksa
+  kendi kendine atlanır). Statik kilitler bu sınıf kusuru göremiyordu.
 
 ## [1.2.4] — 2026-09-04
 

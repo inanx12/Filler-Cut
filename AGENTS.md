@@ -172,6 +172,121 @@ kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
 ## Mevcut Durum (2026-09-05)
 
+**v1.3.0 PRE-RELEASE DÜZELTMESİ (2026-09-05) — sürükleme regresyonu (P0) +
+başlık çubuğu rengi (P2).** Sürüm bump YOK: 1.3.0 commit'li ama TAG ATILMADI,
+düzeltmeler 1.3.0'ın İÇİNE girdi. Push/tag/release YOK.
+
+**P0 — KESİM KENARI SÜRÜKLEME ÖLMÜŞTÜ.** İnan kurulu exe'de yakaladı: kesim
+kenarından kapsam değiştirme çalışmıyor, mıknatıs açık/kapalı fark etmiyor,
+v1.2.4'te çalışıyordu. **Kök neden tahmin değil ÖLÇÜM** (çalışan sayfada
+`elementsFromPoint` + gölge DOM taraması):
+
+- `#dalga` `position: absolute` + `z-index: auto`tur ve **yığın bağlamı
+  YARATMAZ**.
+- wavesurfer 7.12.11'in gölge ağacındaki `.wrapper` `position: relative;
+  z-index: 2; pointer-events: auto`tur ve track'in TAM GENİŞLİĞİNİ kaplar.
+- `z-index: auto` bir atada duran o `z-index: 2` en yakın ÜST yığın bağlamına
+  katılır — `#kesim-katmani`ın (z-index auto → 0) ÜSTÜNDE boyanır ve isabet
+  testini KAZANIR.
+- Sonuç: `pointerdown`ın `ev.target`i hep wavesurfer'ın gölge host'u olur,
+  `closest(".tutamac")` ve `closest(".kesim-blok")` `null` döner, kanca "boş
+  alan" dalına düşer. Kenar sürükleme HİÇ başlamaz; mıknatıs fark etmez çünkü
+  sürükleme TİPİ zaten yanlış seçilmiştir.
+
+Regresyon **Dalga A'ya aittir** — wavesurfer çizelgeye orada girdi. JS'te tek
+satır değişmemişti: `sinirGonder`, `yerelSnap`, kanca, hepsi yerindeydi.
+
+**DÜZELTME: katman sırası artık AÇIKÇA ilan ediliyor** (`.tl-track` üzerinde
+`--tl-kat-dalga: 0` / `kesim: 1` / `playhead: 2` / `cetvel: 3`). Dalganın
+`z-index: 0` olması ŞART, `auto` değil: sıfır orada bir yığın bağlamı yaratır
+ve kütüphanenin iç `z-index`ini İÇERİDE tutar. Dalgaya ayrıca
+`pointer-events: none` — dalga SÜSTÜR (`interact: false`) ve olay beklemez.
+Boşluklarda `#kesim-katmani` kendisi isabet hedefidir; "boş alanda
+sürükleyerek yeni kesim" o yüzden kırmızıyken de çalışıyordu.
+
+**MEVCUT SÜİT BU KUSURU GÖREMEZDİ — kanıt.** `test_web_editor.py`'nin 75
+statik kilidi METNE bakar; kusur DÜZENDEDİR (CSS yığın sırası). Kırmızı
+koşuda 9/11 sürükleme testi düştü ve geçen 2 test tam olarak "boş alan"
+dalıdır — İnan'ın "yeni kesim ekleme çalışıyor, kenar çalışmıyor"
+gözlemiyle birebir. Bu yüzden **yeni bir test katmanı** eklendi:
+`tests/test_web_surukleme.py` GERÇEK fare olaylarıyla koşar (Playwright +
+Chromium; `page.mouse` CDP üzerinden güvenilir olay üretir) ve dalga formu
+GERÇEKTEN çizilmiş olmalıdır — kusur ancak tuval varken görünür. Sunucu ve
+pipeline YOK: sayfa diskteki gerçek statiklerden `page.route` ile servis
+edilir, `fetch` yakalanıp üretilen overlay isteği okunur.
+
+**Playwright `dev`e KATILMADI** — ayrı `tarayici` extra'sı + marker: tarayıcı
+ikilisi ayrıca indirilir (`python -m playwright install chromium`), yoksa
+testler eyleme dökülebilir gerekçeyle skip eder (`ffmpeg`/`wcpp`/`exe`
+deseni). CI deselect: `-m "not tarayici"`.
+
+**KURULU EXE'DE GERÇEK FARE İLE DOĞRULANDI** (gerçek `test1.mp4` işi, 5 kesim):
+- `elementFromPoint` tutamacı veriyor (`tutamacMi: true`); `#dalga`
+  `pointer-events: none`, z-index 0; `#kesim-katmani` z-index 1.
+- **Sol kenar sürükleme:** `surukleme.tip = "sinir"`, `yan = "sol"` →
+  `k2` 15245 → **13875**.
+- **Sağ kenar sürükleme:** `tip = "sinir"`, `yan = "sag"` → 17364 → **18733**.
+- **Mıknatıs AÇIK:** bırakma noktası 15145 (kenarın 100 ms solu, eşik 150) →
+  **tam 15245'e yapıştı**. **KAPALI:** aynı bırakma → **15239** (serbest).
+- **Boş alanda yeni kesim + DEĞDİR→UNION:** var olan `k1` (11498) kesimine
+  değen yeni bir kesim çizildi → kesim sayısı 5 → 6 ve `aktif_araliklar`
+  tek aralık verdi: **[10598, 12611]** (birleşti).
+- Sayfa hatası: **0**.
+
+**P2 — BAŞLIK ÇUBUĞU VURGU RENGİNDE KALIYORDU.** Gerekçe niteliğin KENDİ SDK
+yorumunda yazılı: `DWMWA_USE_IMMERSIVE_DARK_MODE` — "*allows a window to
+either use the **accent color**, or dark, according to the user Color Mode
+preferences*". **İnan'ın makinesinde koşul ölçüldü:** HKCU `…\Windows\DWM`
+`ColorPrevalence = 1` (vurgu rengi başlık çubuklarında AÇIK),
+`AccentColor = 0xFFC3B700`, `AppsUseLightTheme = 1`. Yani attr 20 doğru
+uygulanmıştı ama vurgu rengine izin veriyordu.
+
+Çözüm: `DWMWA_CAPTION_COLOR` (35) = `--kart`, `DWMWA_TEXT_COLOR` (36) =
+`--metin`. **Numaralar ezberden DEĞİL**, Windows SDK 10.0.26100.0
+`um/dwmapi.h`ın `DWMWINDOWATTRIBUTE` sayımından: `DWMWA_WINDOW_CORNER_
+PREFERENCE = 33` açık çapadır, sonrası BORDER_COLOR(34) · CAPTION_COLOR(35)
+· TEXT_COLOR(36). Kilit test çapadan SAYARAK doğruluyor.
+
+**COLORREF BGR'DİR, RGB DEĞİL** (`windef.h`: `0x00bbggrr`) — çevrim ayrı ve
+test edilebilir bir fonksiyon: ters yazmak çökme üretmez, sessizce maviyle
+kırmızıyı değiştirirdi.
+
+**RENK `--zemin` DEĞİL `--kart` (bilinçli, brief'ten küçük sapma):** başlık
+çubuğunun hemen ALTINDA `.ust` şeridi durur ve o `--kart`tır; aynı rengi
+vermek pencereyi tek yüzey gibi gösterir. Palet iki yerde yaşadığı için
+DRIFT KİLİDİ var: test `style.css`ten `--kart`/`--metin`i okuyup Python
+sabitleriyle karşılaştırır.
+
+**Sessiz düşüş korundu:** 35/36 Windows 11 22000+ ister; altında
+`E_INVALIDARG` döner ve geçilir — attr 20 zaten uygulanmıştır. Metin rengi
+yazılamazsa "uygulanmadı" sayılır (koyu zemin + koyu yazı okunamazdı).
+
+**Ölçüldü (kurulu exe):** attr 20 GET → **1**. attr 35/36 GET →
+`0x80070057` çünkü SDK'da `[set]`tirler, okunmazlar. Aynı nitelikler
+pencereye DIŞARIDAN yazıldığında **HRESULT 0x00000000** — yani bu Windows
+build'i onları KABUL ediyor, Win11 kolu bu makinede canlı. **Görsel
+doğrulama İnan'da** (native pencerenin pikselini ölçmek foreground'u
+kullanıcıdan çalmayı gerektiriyor — KI-13'ün mekanizması).
+
+**SÜREÇ:** Release Kontrol Listesi'ne **10. madde** — kenar sürükleme (iki
+yön) + mıknatıs (iki mod) + boş alan sürükleme + değdir/birleş, kurulu
+exe'de ELLE doğrulanır. Otomatik kilit CI'da koşmaz (`tarayici` marker'ı);
+madde SONUCU pakette görür.
+
+**Tuzak (bir sonraki agent için) — KURUCU ÇALIŞAN UYGULAMAYI EZEMEZ.**
+Üzerine kurulum `exit=5` verdi ve dosyaları GÜNCELLEMEDİ; `--version` yine
+1.3.0 döndüğü için başarı sanılabilirdi. Sebep: arka planda pencere
+açmamış bir `fillercut-ui.exe` kalıntısı vardı. Kurulumdan sonra sürüme
+DEĞİL, dosyanın İÇERİĞİNE bakın (bu turda kurulu `style.css`te
+`--tl-kat-dalga` arandı).
+
+**Tuzak — uvicorn kapanışı fazladan istemciyi BEKLER.** "Kapat"tan sonra
+süreç 15 sn'de ölmezse "koşan bir iş bitmeyi bekliyor" satırı düşer; bu
+turda sebep koşan iş değil, sayfaya bağlı FAZLADAN bir tarayıcı sekmesinin
+canlı tuttuğu keep-alive bağlantılardı. Yalnız native pencere açıkken
+ölçüm temiz: süreç **2,1 sn**de öldü.
+
+
 **v1.3.0 DALGA B TAMAMLANDI (2026-09-05) — epic'in son dalgası.** Sürüm
 1.2.4 → **1.3.0**; CHANGELOG bölümü açıldı (Dalga A taslağı buraya taşındı,
 Dalga B eklendi). Push/tag/release YOK — İnan onaylar.
@@ -1814,10 +1929,11 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pyproject.toml` 1.0.0 + kurulu metadata bayatlık alarmı (red-first doğrulandı) | `424fc2e` |
 | `app.js`: REVIEW aşaması ara durum olaylarında donuyordu (E2E bulgusu) | `70ef7a4` |
 
-**Test sayısı:** 1568 collected (v1.3.0 Dalga B itibarıyla; passed/skipped
-dağılımı donanıma bağlıdır: encoder probe'ları ve wcpp env var'ları skip
-sayısını değiştirir). CI konvansiyonuyla (`-m "not exe and not ffmpeg and not
-wcpp and not ag"`) **1543 passed / 25 deselected**. Marker dağılımı: 16'sı
+**Test sayısı:** 1596 collected (v1.3.0 pre-release düzeltmesi itibarıyla;
+passed/skipped dağılımı donanıma bağlıdır: encoder probe'ları ve wcpp env
+var'ları skip sayısını değiştirir). CI konvansiyonuyla (`-m "not exe and not
+ffmpeg and not wcpp and not ag and not tarayici"`) **1560 passed / 36
+deselected**; `tarayici` dahil edilince **1571 passed**. Marker dağılımı: 16'sı
 `ffmpeg`, 3'ü `wcpp`, 1'i `ag` (gerçek ağ indirmesi), 7'si
 `exe` (PyInstaller artefaktı; yoksa skip gerekçesi "önce build_exe.ps1")
 marker'lı (gerçek ffmpeg / gerçek
@@ -1825,7 +1941,7 @@ whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı refe
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
 atlar (`ag` ve `exe` için de: `-m 'not ag and not exe'`),
 donanım/model/ağ/artefakt yoksa ilgili testler
-kendi kendine skip eder. `xml` (114) ve `web` (195) marker'ları SEÇİM marker'ıdır: dış kaynak
+kendi kendine skip eder. `xml` (114) ve `web` (212) marker'ları SEÇİM marker'ıdır: dış kaynak
 istemezler ve CI'da koşarlar. `ag` marker'lı tek test yalnız 23 MB'lık
 binary'yi indirir — manifest hash'inin CANLI kaynakla uyumunu doğrular; modeller
 (0.5–1 GB) test içinde İNDİRİLMEZ. Web testleri
@@ -1921,6 +2037,13 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/geri_bildirim.py` + `app.py` + `static/` — telemetrisiz geri bildirim düğmesi | `6934227` |
 | README ×2 — SmartScreen uyarısı normal + SignPath notu | `bf74afb` |
 | `pyproject.toml` + `test_paketleme_pypi.py` + CHANGELOG + KNOWN_ISSUES — PyPI metadata + **1.2.1 bump** | `9d12381` |
+
+**v1.3.0 pre-release düzeltmesi (sürükleme regresyonu + başlık rengi)**
+
+| Modül | Commit |
+|---|---|
+| `web/static/style.css` — `#tl-track` katman sırası açıkça (`--tl-kat-*`), dalga `z-index: 0` (yığın bağlamı) + `pointer-events: none`; `tests/test_web_surukleme.py` (11 kilit, GERÇEK fare olayları) + `TestCizelgeKatmanlari` (6 statik) + `pyproject` `tarayici` extra/marker + Release Kontrol Listesi md. 10 | `72493ec` |
+| `web/native.py` — `DWMWA_CAPTION_COLOR`/`TEXT_COLOR` (SDK'dan doğrulanmış numaralar), BGR `_colorref`, tek giriş `baslik_cubugunu_koyulastir`; `test_web_native.py` (11 kilit + SDK ve `style.css` drift kilitleri) | `2e01961` |
 
 **v1.3.0 Dalga B (canlı önizleme + klavye + pencere/panel cilası + bump)**
 
