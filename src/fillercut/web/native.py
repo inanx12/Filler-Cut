@@ -428,6 +428,109 @@ def surukle_birak_kur(pencere: Any) -> None:
         return
 
 
+#: ``DWMWA_USE_IMMERSIVE_DARK_MODE``. Windows 10 20H1 (build 19041) ve
+#: sonrasında **20**; 18985'ten önceki build'lerde aynı anlamı **19** taşıyordu
+#: ve 20 ``E_INVALIDARG`` döner. İkisi de denenir — eskisi ikinci sırada, çünkü
+#: yeni Windows'ta 19 farklı (ayrılmış) bir niteliktir ve ona yazmayı önce
+#: denemek istemeyiz.
+_DWMWA_KOYU_BASLIK = 20
+_DWMWA_KOYU_BASLIK_ESKI = 19
+
+
+def koyu_baslik_uygula(hwnd: int) -> bool:
+    """``hwnd``in başlık çubuğunu koyu temaya çevirir; başarılıysa ``True``.
+
+    **Neden gerekli — pywebview bunu ZATEN yapıyor ama SİSTEM temasına göre:**
+    kurulu 6.2.1'in kaynağında (``platforms/winforms.py``) ``BrowserForm``
+    kurulurken ``update_title_bar_theme()`` çağrılır ve o da
+    ``is_dark_theme()``e bakar — HKCU ``…\\Themes\\Personalize``
+    ``AppsUseLightTheme``. Arayüzümüz İSE HER ZAMAN KOYUDUR: Windows'u açık
+    temada kullanan kullanıcıda koyu bir gövdenin üstünde açık gri bir başlık
+    çubuğu duruyordu.
+
+    ``False`` bir HATA DEĞİLDİR: Windows dışı, ``dwmapi`` yok, ya da nitelik
+    bu build'de tanınmıyor (eski Windows 10 / Windows 8.1). Çağıran hiçbir
+    şey yapmaz — pencere açılmaya devam eder. Başlık çubuğunun rengi bir
+    süstür, uygulamayı düşürmesi kabul edilemez (kilit testi).
+    """
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    try:
+        dwmapi = ctypes.WinDLL("dwmapi", use_last_error=True)
+        fn = dwmapi.DwmSetWindowAttribute
+    except (OSError, AttributeError):  # pragma: no cover - dwmapi Vista+ hep var
+        return False
+    fn.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+    fn.restype = ctypes.c_long
+    deger = ctypes.c_int(1)
+    for nitelik in (_DWMWA_KOYU_BASLIK, _DWMWA_KOYU_BASLIK_ESKI):
+        try:
+            hr = fn(hwnd, nitelik, ctypes.byref(deger), ctypes.sizeof(deger))
+        except OSError:  # pragma: no cover - çağrı HRESULT döner, atmaz
+            return False
+        if hr == 0:
+            return True
+    return False
+
+
+def pencere_hwnd(pencere: Any) -> int | None:
+    """pywebview penceresinin HWND'si; alınamazsa ``None``.
+
+    **Yol EZBERDEN DEĞİL, kurulu sürümün KAYNAĞINDAN doğrulandı**
+    (pywebview 6.2.1): ``webview/window.py``de ``self.native = None  # set in
+    the gui after window creation``, ``platforms/winforms.py``de
+    ``self.pywebview_window.native = self`` — yani ``native`` bir WinForms
+    ``Form`` türevidir ve pywebview HWND'yi kendi içinde
+    ``self.Handle.ToInt32()`` ile alır (aynı dosyada onlarca çağrı). Aynı
+    idiyomu kullanmak, pywebview'in gördüğü pencereyle bizim gördüğümüzün
+    ayrışmamasını garanti eder.
+
+    ``native`` pencere GUI'de yaratıldıktan sonra dolar; erken çağrıda
+    ``None``dır (``before_show`` bu yüzden seçildi — bkz. `pencere_ac`).
+    """
+    native = getattr(pencere, "native", None)
+    tanitici = getattr(native, "Handle", None)
+    if tanitici is None:
+        return None
+    try:
+        return int(tanitici.ToInt32())
+    except Exception:  # noqa: BLE001 - pythonnet/IntPtr farkı pencereyi öldürmemeli
+        return None
+
+
+def _koyu_temayi_sabitle(pencere: Any, hwnd: int) -> bool:
+    """pywebview'in sistem-teması takibini koyuya sabitler (en iyi çaba).
+
+    Kurulu 6.2.1 ``SystemEvents.UserPreferenceChanged``e bağlanır ve tema
+    değişiminde ``update_title_bar_theme()``i yeniden çağırır: kullanıcı
+    Windows'u koyudan açığa alırsa başlık çubuğumuz da açığa DÖNERDİ.
+    Örnek üzerindeki metodu değiştirmek o yolu da koyuda tutar.
+
+    Başarısızlık zararsızdır: tek seferlik uygulama yine geçerlidir, yalnız
+    oturum içi tema değişimi izlenmemiş olur.
+    """
+    native = getattr(pencere, "native", None)
+    if native is None or not hasattr(native, "update_title_bar_theme"):
+        return False
+    try:
+        native.update_title_bar_theme = lambda: koyu_baslik_uygula(hwnd)
+    except Exception:  # noqa: BLE001 - .NET türevinde nitelik atanamayabilir
+        return False
+    return True
+
+
+def koyu_baslik_kur(pencere: Any) -> bool:
+    """Pencerenin başlık çubuğunu koyuya alır — HİÇBİR hata dışarı sızmaz."""
+    hwnd = pencere_hwnd(pencere)
+    if hwnd is None:
+        return False
+    _koyu_temayi_sabitle(pencere, hwnd)
+    return koyu_baslik_uygula(hwnd)
+
+
 def pencere_ac(
     url: str,
     *,
@@ -474,6 +577,14 @@ def pencere_ac(
         # `dom.get_element` DOM'u sorgular, erken kayıt None döner ve native
         # sürükle-bırak sessizce ölürdü.
         pencere.events.loaded += lambda: surukle_birak_kur(pencere)
+        # Koyu başlık çubuğu `before_show`da: kurulu 6.2.1'in kaynağında
+        # (`winforms.create_window`) bu olay `BrowserForm(...)` kurulduktan
+        # HEMEN SONRA, `browser.Show()`tan ÖNCE ateşlenir — yani `native`
+        # doludur ve pencere daha görünmemiştir (açık başlık çubuğu bir kare
+        # bile görünmez). Ayrıca `before_show` `Event(self, True)`dır, yani
+        # dinleyici GUI thread'inde SENKRON koşar; `shown` ayrı bir thread
+        # açardı ve DWM çağrısı çapraz-thread olurdu.
+        pencere.events.before_show += lambda: koyu_baslik_kur(pencere)
         if kapatici_kaydet is not None:
             kapatici_kaydet(pencere.destroy)
     try:

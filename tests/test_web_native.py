@@ -493,3 +493,206 @@ class TestBaslangicDizini:
         kopru = sahte.create_window.call_args.kwargs["js_api"]
         kopru.dosya_sec()
         assert pencere.create_file_dialog.call_args.kwargs["directory"] == r"D:\Videolar"
+
+
+class TestKoyuBaslikUpstreamKilidi:
+    """HWND yolu ve kanca noktası EZBERDEN DEĞİL, kurulu kaynaktan doğrulanır.
+
+    `TestPywebviewUyumKilidi` ile aynı desen: upstream davranışı değişirse
+    test PATLAR, ürün sessizce ayrışmaz. Dosyalar OKUNUR, modül import
+    EDİLMEZ (`winforms` import'u MSHTML yolunu ve registry mutasyonunu
+    tetikleyebilir — bkz. modül docstring'i).
+    """
+
+    def _kaynak(self, modul: str) -> str:
+        import importlib.util
+
+        pytest.importorskip("webview")
+        spec = importlib.util.find_spec(modul)
+        assert spec is not None and spec.origin is not None
+        return Path(spec.origin).read_text(encoding="utf-8")
+
+    def test_native_pencere_gui_de_baglaniyor(self) -> None:
+        """`Window.native` = WinForms `Form` — `pencere_hwnd`in dayandığı yol."""
+        assert "self.native = None" in self._kaynak("webview.window")
+        assert (
+            "self.pywebview_window.native = self"
+            in self._kaynak("webview.platforms.winforms")
+        )
+
+    def test_hwnd_idiyomu_upstreamin_kendi_idiyomu(self) -> None:
+        """pywebview HWND'yi `Handle.ToInt32()` ile alır; biz de öyle alıyoruz."""
+        assert "self.Handle.ToInt32()" in self._kaynak("webview.platforms.winforms")
+
+    def test_before_show_showdan_once_atesleniyor(self) -> None:
+        """Kanca noktası: `before_show` pencere GÖRÜNMEDEN önce gelir.
+
+        Sonra gelseydi, açık temalı Windows'ta başlık çubuğu bir kare de olsa
+        AÇIK görünür, sonra koyuya dönerdi.
+        """
+        kaynak = self._kaynak("webview.platforms.winforms")
+        bas = kaynak.index("def create_window(window):")
+        govde = kaynak[bas : bas + 1500]
+        assert "window.events.before_show.set()" in govde
+        assert govde.index("before_show.set()") < govde.index("browser.Show()")
+        # `native` o an DOLUDUR: BrowserForm kurucusu daha önce koştu.
+        assert govde.index("BrowserForm(") < govde.index("before_show.set()")
+
+    def test_before_show_senkron_calisir(self) -> None:
+        """`Event(self, True)` → dinleyici GUI thread'inde koşar.
+
+        `shown` (`Event(self)`) ayrı bir thread açardı ve DWM çağrısı
+        çapraz-thread olurdu (`event.py`: `should_lock` False ise
+        `threading.Thread`).
+        """
+        assert (
+            "self.events.before_show = Event(self, True)"
+            in self._kaynak("webview.window")
+        )
+
+    def test_pywebview_baslik_temasini_SISTEMDEN_aliyor(self) -> None:
+        """Bu testin varlık sebebi: pywebview zaten koyu yapıyor AMA sistem
+        temasına göre. Arayüzümüz her zaman koyudur — açık temalı Windows'ta
+        koyu gövdenin üstünde açık başlık çubuğu kalıyordu.
+        """
+        kaynak = self._kaynak("webview.platforms.winforms")
+        assert "def update_title_bar_theme(" in kaynak
+        assert "AppsUseLightTheme" in kaynak
+        koyu_cagri = (
+            f"DwmSetWindowAttribute(self.Handle.ToInt32(), "
+            f"{native._DWMWA_KOYU_BASLIK}, 1)"
+        )
+        assert koyu_cagri in kaynak
+        # Tema değişiminde yeniden uygulanıyor — bu yüzden metodu sabitliyoruz.
+        assert "SystemEvents.UserPreferenceChanged" in kaynak
+
+
+class TestKoyuBaslik:
+    """DWM koyu başlık çubuğu — HİÇBİR başarısızlık pencereyi düşürmez."""
+
+    def _pencere(self, hwnd: int = 1234) -> Any:
+        pencere = MagicMock()
+        pencere.native.Handle.ToInt32.return_value = hwnd
+        return pencere
+
+    def test_hwnd_okunur(self) -> None:
+        assert native.pencere_hwnd(self._pencere(4242)) == 4242
+
+    def test_native_yoksa_none(self) -> None:
+        """Pencere GUI'de yaratılmadan `native` None'dır — erken çağrı sessiz."""
+        pencere = MagicMock()
+        pencere.native = None
+        assert native.pencere_hwnd(pencere) is None
+
+    def test_handle_patlarsa_none(self) -> None:
+        pencere = MagicMock()
+        pencere.native.Handle.ToInt32.side_effect = RuntimeError("pythonnet")
+        assert native.pencere_hwnd(pencere) is None
+
+    def test_win32_disinda_uygulanmaz(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(sys, "platform", "linux")
+        assert native.koyu_baslik_uygula(1) is False
+
+    def test_basarida_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+        cagrilar: list[int] = []
+
+        def sahte_fn(hwnd: int, nitelik: int, *_: Any) -> int:
+            cagrilar.append(nitelik)
+            return 0
+
+        with patch("ctypes.WinDLL") as windll:
+            windll.return_value.DwmSetWindowAttribute = sahte_fn
+            assert native.koyu_baslik_uygula(7) is True
+        assert cagrilar == [native._DWMWA_KOYU_BASLIK], "yeni nitelik ÖNCE denenmeli"
+
+    def test_yeni_nitelik_taninmazsa_eskiye_dusulur(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Eski Windows 10 build'lerinde aynı anlamı 19 taşıyordu (20 E_INVALIDARG)."""
+        monkeypatch.setattr(sys, "platform", "win32")
+        cagrilar: list[int] = []
+
+        def sahte_fn(hwnd: int, nitelik: int, *_: Any) -> int:
+            cagrilar.append(nitelik)
+            return 0 if nitelik == native._DWMWA_KOYU_BASLIK_ESKI else -2147024809
+
+        with patch("ctypes.WinDLL") as windll:
+            windll.return_value.DwmSetWindowAttribute = sahte_fn
+            assert native.koyu_baslik_uygula(7) is True
+        assert cagrilar == [native._DWMWA_KOYU_BASLIK, native._DWMWA_KOYU_BASLIK_ESKI]
+
+    def test_ikisi_de_reddederse_false_ama_hata_yok(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """KİLİT: eski Windows'ta uygulama DÜŞMEZ, yalnız başlık açık kalır."""
+        monkeypatch.setattr(sys, "platform", "win32")
+        with patch("ctypes.WinDLL") as windll:
+            windll.return_value.DwmSetWindowAttribute = lambda *a: -2147024809
+            assert native.koyu_baslik_uygula(7) is False
+
+    def test_dwmapi_yuklenemezse_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+        with patch("ctypes.WinDLL", side_effect=OSError("dwmapi yok")):
+            assert native.koyu_baslik_uygula(7) is False
+
+    def test_kur_hwnd_yoksa_sessiz(self) -> None:
+        pencere = MagicMock()
+        pencere.native = None
+        assert native.koyu_baslik_kur(pencere) is False
+
+    def test_tema_degisimi_koyuda_kalir(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """pywebview tema değişiminde `update_title_bar_theme()`i yeniden çağırır.
+
+        Sabitlemeseydik kullanıcı Windows'u AÇIK temaya alınca başlık çubuğu
+        da açığa dönerdi (gövde koyu kalırken).
+        """
+        monkeypatch.setattr(sys, "platform", "win32")
+        uygulananlar: list[int] = []
+        def sahte_uygula(hwnd: int) -> bool:
+            uygulananlar.append(hwnd)
+            return True
+
+        monkeypatch.setattr(native, "koyu_baslik_uygula", sahte_uygula)
+
+        class SahteForm:
+            def __init__(self) -> None:
+                self.Handle = MagicMock()
+                self.Handle.ToInt32.return_value = 99
+
+            def update_title_bar_theme(self) -> None:  # pywebview'inki
+                raise AssertionError("sistem teması yeniden uygulandı")
+
+        pencere = MagicMock()
+        pencere.native = SahteForm()
+        assert native.koyu_baslik_kur(pencere) is True
+        pencere.native.update_title_bar_theme()  # pywebview'in tema kancası
+        assert uygulananlar == [99, 99], "tema değişiminde koyu yeniden uygulanmadı"
+
+    def test_nitelik_atanamazsa_tek_seferlik_uygulama_yine_gecerli(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setattr(native, "koyu_baslik_uygula", lambda hwnd: True)
+
+        class Kilitli:
+            Handle = MagicMock(**{"ToInt32.return_value": 5})
+
+            def update_title_bar_theme(self) -> None: ...
+
+            def __setattr__(self, ad: str, deger: Any) -> None:
+                raise AttributeError("salt okunur .NET türevi")
+
+        pencere = MagicMock()
+        pencere.native = Kilitli()
+        assert native.koyu_baslik_kur(pencere) is True
+
+    def test_pencere_ac_before_showa_baglanir(self) -> None:
+        sahte = MagicMock()
+        pencere = MagicMock()
+        sahte.create_window.return_value = pencere
+        with patch.dict(sys.modules, {"webview": sahte}):
+            native.pencere_ac("http://x/")
+        assert any("before_show.__iadd__" in str(c) for c in pencere.mock_calls), (
+            pencere.mock_calls
+        )
