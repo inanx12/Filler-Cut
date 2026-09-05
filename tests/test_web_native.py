@@ -12,6 +12,7 @@ düş" yaklaşımı hem bozuk bir pencere hem de sessiz bir registry mutasyonu
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -755,3 +756,145 @@ class TestKaliciDepolama:
         kaynak = self._kaynak("webview.util")
         bas = kaynak.index("def is_local_url")
         assert "url.startswith('http://')" in kaynak[bas : bas + 400]
+
+
+class TestBaslikRenkleri:
+    """Başlık çubuğunun rengini AÇIKÇA biz söyleriz (v1.3.0 pre-release, P2).
+
+    İnan'ın makinesinde attr 20 uygulanmış olmasına rağmen başlık çubuğu
+    VURGU rengindeydi. Gerekçe niteliğin kendi SDK yorumunda yazılı:
+    ``DWMWA_USE_IMMERSIVE_DARK_MODE`` — "*allows a window to either use the
+    accent color, or dark, according to the user Color Mode preferences*".
+    Windows'ta "Vurgu rengini başlık çubuklarında göster" açıksa attr 20
+    vurgu rengine İZİN VERİR. Kesin renk için caption/text yazılmalı.
+    """
+
+    #: Windows SDK 10.0.26100.0 `um/dwmapi.h`, `DWMWINDOWATTRIBUTE` sayımı.
+    #: `DWMWA_WINDOW_CORNER_PREFERENCE = 33` açık çapadır; sonrası sırayla
+    #: BORDER_COLOR(34) · CAPTION_COLOR(35) · TEXT_COLOR(36).
+    SDK_BASLIK = Path(
+        r"C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um\dwmapi.h"
+    )
+
+    def test_nitelik_numaralari_sdk_ile_ayni(self) -> None:
+        """Numaralar EZBERDEN DEĞİL — SDK başlığından sayılarak doğrulanır."""
+        if not self.SDK_BASLIK.is_file():
+            pytest.skip(f"Windows SDK başlığı yok: {self.SDK_BASLIK}")
+        kaynak = self.SDK_BASLIK.read_text(encoding="utf-8", errors="replace")
+        bas = kaynak.index("enum DWMWINDOWATTRIBUTE")
+        govde = kaynak[bas : kaynak.index("};", bas)]
+        # Çapa: açıkça numaralandırılmış son giriş.
+        assert "DWMWA_WINDOW_CORNER_PREFERENCE = 33" in govde
+        adlar = re.findall(r"^\s*(DWMWA_[A-Z0-9_]+)", govde, re.M)
+        capa = adlar.index("DWMWA_WINDOW_CORNER_PREFERENCE")
+        numara = {ad: 33 + i - capa for i, ad in enumerate(adlar[capa:], start=capa)}
+        assert numara["DWMWA_CAPTION_COLOR"] == native._DWMWA_CAPTION_COLOR
+        assert numara["DWMWA_TEXT_COLOR"] == native._DWMWA_TEXT_COLOR
+        # Attr 20 çapadan ÖNCE gelir ve başlıkta AÇIKÇA numaralıdır.
+        assert (
+            f"DWMWA_USE_IMMERSIVE_DARK_MODE = {native._DWMWA_KOYU_BASLIK}" in govde
+        )
+
+    def test_attr20_vurgu_rengine_izin_verdigini_sdk_soyluyor(self) -> None:
+        """Bu düzeltmenin VARLIK SEBEBİ upstream belgesinde yazılı."""
+        if not self.SDK_BASLIK.is_file():
+            pytest.skip("Windows SDK başlığı yok")
+        kaynak = self.SDK_BASLIK.read_text(encoding="utf-8", errors="replace")
+        satir = next(
+            s for s in kaynak.splitlines() if "DWMWA_USE_IMMERSIVE_DARK_MODE" in s
+        )
+        assert "accent color" in satir, (
+            "SDK yorumu değişmiş — attr 20'nin vurgu rengine izin verdiği "
+            f"varsayımı gözden geçirilmeli: {satir!r}"
+        )
+
+    def test_colorref_bgr_dir_rgb_degil(self) -> None:
+        """`windef.h`: COLORREF `0x00bbggrr`. Ters yazmak sessizce yanlış renk."""
+        assert native._colorref((0x12, 0x34, 0x56)) == 0x563412
+        # Saf kırmızı düşük bayta, saf mavi yüksek bayta gider.
+        assert native._colorref((0xFF, 0, 0)) == 0x0000FF
+        assert native._colorref((0, 0, 0xFF)) == 0xFF0000
+
+    def test_renkler_stylecss_ile_ayni(self) -> None:
+        """DRIFT KİLİDİ: palet iki yerde yaşıyor (CSS + Python)."""
+        css = (
+            Path(__file__).resolve().parent.parent
+            / "src" / "fillercut" / "web" / "static" / "style.css"
+        ).read_text(encoding="utf-8")
+
+        def _degisken(ad: str) -> tuple[int, int, int]:
+            m = re.search(rf"--{ad}:\s*#([0-9a-fA-F]{{6}})", css)
+            assert m, f"style.css'te --{ad} yok"
+            h = m.group(1)
+            return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+
+        assert native.BASLIK_ZEMIN_RGB == _degisken("kart"), (
+            "başlık zemini `.ust` şeridinin rengiyle (--kart) ayrışmış"
+        )
+        assert native.BASLIK_METIN_RGB == _degisken("metin")
+
+    def test_ikisi_de_yazilir(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        yazilanlar: list[tuple[int, int]] = []
+        def sahte_yaz(hwnd: int, nitelik: int, deger: int) -> bool:
+            yazilanlar.append((nitelik, deger))
+            return True
+
+        monkeypatch.setattr(native, "_dwm_nitelik_yaz", sahte_yaz)
+        assert native.baslik_renkleri_uygula(7) is True
+        assert [n for n, _ in yazilanlar] == [
+            native._DWMWA_CAPTION_COLOR,
+            native._DWMWA_TEXT_COLOR,
+        ]
+        assert yazilanlar[0][1] == native._colorref(native.BASLIK_ZEMIN_RGB)
+
+    def test_metin_yazilamazsa_uygulanmadi_sayilir(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Koyu zemin + koyu yazı okunamaz bir başlık olurdu."""
+        monkeypatch.setattr(
+            native,
+            "_dwm_nitelik_yaz",
+            lambda hwnd, nitelik, deger: nitelik == native._DWMWA_CAPTION_COLOR,
+        )
+        assert native.baslik_renkleri_uygula(7) is False
+
+    def test_win11_oncesinde_sessizce_gecilir(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """KİLİT: nitelikler tanınmıyorsa uygulama DÜŞMEZ, attr 20 kalır."""
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setattr(native, "koyu_baslik_uygula", lambda hwnd: True)
+        monkeypatch.setattr(native, "_dwm_nitelik_yaz", lambda *a: False)
+        assert native.baslik_renkleri_uygula(7) is False
+        assert native.baslik_cubugunu_koyulastir(7) is True  # attr 20 yetti
+
+    def test_hicbiri_tutmazsa_false_ama_hata_yok(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(native, "koyu_baslik_uygula", lambda hwnd: False)
+        monkeypatch.setattr(native, "_dwm_nitelik_yaz", lambda *a: False)
+        assert native.baslik_cubugunu_koyulastir(7) is False
+
+    def test_nitelik_yazma_win32_disinda_calismaz(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "platform", "linux")
+        assert native._dwm_nitelik_yaz(1, native._DWMWA_CAPTION_COLOR, 0) is False
+
+    def test_dwmapi_yuklenemezse_sessiz(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+        with patch("ctypes.WinDLL", side_effect=OSError("dwmapi yok")):
+            assert native._dwm_nitelik_yaz(1, native._DWMWA_CAPTION_COLOR, 0) is False
+
+    def test_kurulum_ortak_girisi_kullanir(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`koyu_baslik_kur` renkleri de uygulamalı — yalnız attr 20 değil."""
+        cagrilar: list[int] = []
+        def sahte_koyulastir(hwnd: int) -> bool:
+            cagrilar.append(hwnd)
+            return True
+
+        monkeypatch.setattr(native, "baslik_cubugunu_koyulastir", sahte_koyulastir)
+        pencere = MagicMock()
+        pencere.native.Handle.ToInt32.return_value = 4242
+        assert native.koyu_baslik_kur(pencere) is True
+        assert cagrilar == [4242]

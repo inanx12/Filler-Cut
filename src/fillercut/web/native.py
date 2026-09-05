@@ -453,6 +453,44 @@ def depolama_yolu() -> str:
 _DWMWA_KOYU_BASLIK = 20
 _DWMWA_KOYU_BASLIK_ESKI = 19
 
+#: ``DWMWA_CAPTION_COLOR`` ve ``DWMWA_TEXT_COLOR``. Numaralar EZBERDEN DEĞİL,
+#: Windows SDK 10.0.26100.0'ın ``um/dwmapi.h`` başlığındaki ``DWMWINDOWATTRIBUTE``
+#: sayımından okundu: ``DWMWA_WINDOW_CORNER_PREFERENCE = 33`` çapasından sonra
+#: sırayla ``DWMWA_BORDER_COLOR`` (34), ``DWMWA_CAPTION_COLOR`` (35),
+#: ``DWMWA_TEXT_COLOR`` (36). Windows 11 22000+ gerektirir; altında
+#: ``E_INVALIDARG`` döner ve sessizce geçilir.
+_DWMWA_CAPTION_COLOR = 35
+_DWMWA_TEXT_COLOR = 36
+
+#: **NEDEN attr 20 TEK BAŞINA YETMİYOR** — gerekçe aynı başlığın kendi
+#: yorumunda yazılı: ``DWMWA_USE_IMMERSIVE_DARK_MODE`` "*allows a window to
+#: either use the accent color, or dark, according to the user Color Mode
+#: preferences*". Yani kullanıcı Windows'ta "Vurgu rengini başlık çubuklarında
+#: göster"i AÇTIYSA başlık çubuğu koyu değil VURGU rengi olur — attr 20 buna
+#: izin verir. Rengi kesin olarak biz söylemek istiyorsak caption/text
+#: renklerini açıkça yazmak zorundayız (İnan'ın makinesinde görülen durum).
+
+#: Başlık çubuğu zemini — `style.css`'teki ``--kart`` ile AYNI olmalı.
+#: `--zemin` DEĞİL bilinçli: başlık çubuğunun hemen ALTINDA `.ust` şeridi
+#: durur ve o `--kart`tır; aynı rengi vermek pencereyi tek yüzey gibi
+#: gösterir, `--zemin` seçilseydi tam sınırda bir dikiş görünürdü.
+#: Drift kilidi `tests/test_web_native.py::TestBaslikRenkleri`.
+BASLIK_ZEMIN_RGB = (0x16, 0x1B, 0x22)
+
+#: Başlık metni — `style.css`'teki ``--metin``.
+BASLIK_METIN_RGB = (0xE6, 0xED, 0xF3)
+
+
+def _colorref(rgb: tuple[int, int, int]) -> int:
+    """``(r, g, b)`` → Win32 ``COLORREF``.
+
+    **BGR'dir, RGB DEĞİL** (``windef.h``: ``0x00bbggrr``). Sırayı ters yazmak
+    sessizce yanlış bir renk üretir — çökme yok, yalnız mavi ile kırmızı yer
+    değiştirir; bu yüzden çevrim ayrı ve test edilebilir bir fonksiyondur.
+    """
+    r, g, b = rgb
+    return (b << 16) | (g << 8) | r
+
 
 def koyu_baslik_uygula(hwnd: int) -> bool:
     """``hwnd``in başlık çubuğunu koyu temaya çevirir; başarılıysa ``True``.
@@ -491,6 +529,65 @@ def koyu_baslik_uygula(hwnd: int) -> bool:
         if hr == 0:
             return True
     return False
+
+
+def _dwm_nitelik_yaz(hwnd: int, nitelik: int, deger: int) -> bool:
+    """Tek bir DWM niteliği yazar (4 baytlık değer); HRESULT 0 ise ``True``.
+
+    Hiçbir hata dışarı sızmaz — başlık çubuğunun rengi bir süstür, uygulamayı
+    düşürmesi kabul edilemez.
+    """
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    try:
+        dwmapi = ctypes.WinDLL("dwmapi", use_last_error=True)
+        fn = dwmapi.DwmSetWindowAttribute
+    except (OSError, AttributeError):  # pragma: no cover - dwmapi Vista+ hep var
+        return False
+    fn.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+    fn.restype = ctypes.c_long
+    ham = ctypes.c_uint(deger)
+    try:
+        hr = fn(hwnd, nitelik, ctypes.byref(ham), ctypes.sizeof(ham))
+    except OSError:  # pragma: no cover - çağrı HRESULT döner, atmaz
+        return False
+    return bool(hr == 0)
+
+
+def baslik_renkleri_uygula(hwnd: int) -> bool:
+    """Başlık çubuğunun zeminini ve metnini AÇIKÇA uygular (Windows 11).
+
+    **Neden `koyu_baslik_uygula` yetmiyor:** ``DWMWA_USE_IMMERSIVE_DARK_MODE``
+    başlığın kendi SDK yorumunda "*allows a window to either use the **accent
+    color**, or dark*" der. Kullanıcı Windows'ta "Vurgu rengini başlık
+    çubuklarında göster"i açtıysa attr 20 vurgu rengine İZİN VERİR — koyu
+    gövdenin üstünde renkli bir şerit kalır (İnan'ın makinesinde görülen
+    durum). Rengi kesin söylemek için caption/text'i yazmak gerekir.
+
+    ``False``: Windows 11 22000 altı (nitelikler ``E_INVALIDARG`` döner) ya da
+    Windows dışı. Çağıran bir şey yapmaz; attr 20 zaten uygulanmıştır ve
+    vurgu rengi açık değilse sonuç yine koyudur.
+    """
+    zemin = _dwm_nitelik_yaz(hwnd, _DWMWA_CAPTION_COLOR, _colorref(BASLIK_ZEMIN_RGB))
+    metin = _dwm_nitelik_yaz(hwnd, _DWMWA_TEXT_COLOR, _colorref(BASLIK_METIN_RGB))
+    # Zemin yazılıp metin yazılamazsa koyu zemin üstünde koyu yazı kalırdı;
+    # ikisi birlikte başarılı değilse "uygulanmadı" sayılır.
+    return zemin and metin
+
+
+def baslik_cubugunu_koyulastir(hwnd: int) -> bool:
+    """Başlık çubuğuna TÜM koyu muameleyi uygular — tek giriş noktası.
+
+    Sıra bilinçli: önce attr 20 (Windows 10'dan beri var, koyu kip), sonra
+    caption/text renkleri (Windows 11, vurgu rengini de EZER). Biri
+    başarısızsa öteki yine geçerlidir.
+    """
+    koyu = koyu_baslik_uygula(hwnd)
+    renk = baslik_renkleri_uygula(hwnd)
+    return koyu or renk
 
 
 def pencere_hwnd(pencere: Any) -> int | None:
@@ -533,7 +630,7 @@ def _koyu_temayi_sabitle(pencere: Any, hwnd: int) -> bool:
     if native is None or not hasattr(native, "update_title_bar_theme"):
         return False
     try:
-        native.update_title_bar_theme = lambda: koyu_baslik_uygula(hwnd)
+        native.update_title_bar_theme = lambda: baslik_cubugunu_koyulastir(hwnd)
     except Exception:  # noqa: BLE001 - .NET türevinde nitelik atanamayabilir
         return False
     return True
@@ -545,7 +642,7 @@ def koyu_baslik_kur(pencere: Any) -> bool:
     if hwnd is None:
         return False
     _koyu_temayi_sabitle(pencere, hwnd)
-    return koyu_baslik_uygula(hwnd)
+    return baslik_cubugunu_koyulastir(hwnd)
 
 
 def pencere_ac(
