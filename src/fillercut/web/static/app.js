@@ -1736,6 +1736,22 @@ function kurulumYoklamaDurdur() {
   }
 }
 
+/* Kapıyı açar/kapatır ve DURUMUN DEĞİŞİP DEĞİŞMEDİĞİNİ döner.
+ *
+ * v1.3.0 Dalga A'da beş ekran tek proje görünümüne toplandı ve `ekranGoster`
+ * fonksiyonu silindi, AMA buradaki iki çağrısı kaldı: sihirbaz gerektiğinde
+ * `kurulumYokla` `ReferenceError`a çarpıyor ve **kapı hiç açılmıyordu** —
+ * modeli olmayan bir makinede arayüz sessizce boş proje ekranında kalırdı.
+ * Konsolsuz koşuda bunu gösterecek hiçbir yüzey yok (KI-11 ailesi); kilidi
+ * `tests/test_web_editor.py::TestOluCagriYok`. */
+function kurulumKapisi(acik) {
+  const ekran = el("ekran-kurulum");
+  const zatenAcik = !ekran.classList.contains("gizli");
+  if (zatenAcik === acik) return false;
+  ekran.classList.toggle("gizli", !acik);
+  return true;
+}
+
 function kurulumModelleriDoldur(modeller) {
   if (kurulum.modellerYuklendi) return;
   const sec = el("kurulum-model");
@@ -1825,13 +1841,10 @@ async function kurulumYokla() {
 
   if (!v.gerekli || v.tamam) {
     kurulumYoklamaDurdur();
-    if (!el("ekran-kurulum").classList.contains("gizli")) {
-      ekranGoster("ekran-baslangic");
-      gezginYukle(durum.yol);
-    }
+    if (kurulumKapisi(false)) gezginYukle(durum.yol);
     return;
   }
-  ekranGoster("ekran-kurulum");
+  kurulumKapisi(true);
   kurulumEkraniCiz(v);
 }
 

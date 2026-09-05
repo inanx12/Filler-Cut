@@ -14,6 +14,7 @@ Ayrıca **ölçülmüş iki tuzak** kilitlenir: `<dialog>`ın `close` olayı
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -227,3 +228,77 @@ class TestKorunanEtkilesimler:
         """Mıknatıs kapalıysa sunucu da snap uygulamamalı (v1.x sözleşmesi)."""
         js = _oku("app.js")
         assert "snap: review.snap" in js
+
+
+class TestOluCagriYok:
+    """`app.js` içinde TANIMSIZ bir fonksiyona yapılan çağrı kalmamalı.
+
+    ÖLÇÜLMÜŞ KUSUR (Dalga B'de bulundu): Dalga A beş ekranı tek proje
+    görünümüne topladı ve `ekranGoster` silindi, ama `kurulumYokla` içindeki
+    iki çağrısı kaldı. Modeli olmayan bir makinede sihirbaz kapısı
+    `ReferenceError` yüzünden **hiç açılmıyordu** — arayüz sessizce boş proje
+    ekranında kalıyor, kullanıcı bir iş başlatamıyordu. Testler yeşildi;
+    konsolsuz koşuda hata yüzeyi zaten yok (KI-11 ailesi).
+
+    Tarama KABA ama YETERLİ: yorumlar ve dizeler çıkarılır, sonra çağrı
+    konumundaki (nokta ile nitelenmemiş) her tanıtıcı `function` / `const` /
+    `let` / `var` / `window.X =` bildirimleriyle karşılaştırılır. Kalanlar
+    yalnızca aşağıdaki tarayıcı global'leri olabilir — liste BİLİNÇLİ olarak
+    kısadır: yeni bir global kullanmak testi kırar ve bunu yazan kişi
+    listeye ekleyerek "evet, bu bir tarayıcı API'si" demiş olur.
+    """
+
+    #: Kullanılan tarayıcı/dil global'leri. Üye erişimi (`Math.max`,
+    #: `JSON.parse`, `window.…`) taramaya HİÇ girmez — nokta ile nitelenmiş
+    #: çağrılar dışarıda bırakılır.
+    GLOBALLER = frozenset({
+        "Error", "EventSource", "Float32Array", "Number", "ResizeObserver",
+        "Set", "String", "clearInterval", "clearTimeout", "encodeURIComponent",
+        "fetch", "setInterval",
+    })
+
+    #: Çağrı gibi görünen ama anahtar sözcük olanlar (`if (`, `catch (`, …).
+    ANAHTAR_SOZCUKLER = frozenset({
+        "async", "await", "case", "catch", "delete", "do", "else", "for",
+        "function", "if", "in", "instanceof", "new", "of", "return", "switch",
+        "throw", "typeof", "void", "while", "yield",
+    })
+
+    @staticmethod
+    def _kod(js: str) -> str:
+        """Yorumları ve dize gövdelerini siler — tarama yalnız KODU görsün."""
+        js = re.sub(r"/\*.*?\*/", " ", js, flags=re.S)
+        js = re.sub(r"//[^\n]*", " ", js)
+        js = re.sub(r'"(?:[^"\\\n]|\\.)*"', '""', js)
+        js = re.sub(r"'(?:[^'\\\n]|\\.)*'", "''", js)
+        return js
+
+    def _bilinmeyen_cagrilar(self) -> set[str]:
+        kod = self._kod(_oku("app.js"))
+        tanimli = set(re.findall(r"\bfunction\s+([A-Za-z_$][\w$]*)", kod))
+        tanimli |= set(re.findall(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)", kod))
+        tanimli |= set(re.findall(r"\bwindow\.([A-Za-z_$][\w$]*)\s*=", kod))
+        cagrilar = set(re.findall(r"(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(", kod))
+        return cagrilar - tanimli - self.ANAHTAR_SOZCUKLER - self.GLOBALLER
+
+    def test_tanimsiz_fonksiyon_cagrisi_yok(self) -> None:
+        eksik = self._bilinmeyen_cagrilar()
+        assert not eksik, (
+            "app.js tanımsız fonksiyon çağırıyor (çalışma anında ReferenceError, "
+            f"konsolsuz koşuda GÖRÜNMEZ): {sorted(eksik)}"
+        )
+
+    def test_tarayici_sahte_ihlali_yakalar(self) -> None:
+        """Tarayıcının kendisi kilitli: bulunmayan bir ad ELE GEÇMELİ.
+
+        Aksi hâlde regex'i sessizce bozan bir düzenleme testi yeşil bırakır
+        (AST tarayıcısında `test_surec.py`nin uyguladığı desenin aynısı).
+        """
+        sahte = self._kod("function a() { ekranGoster('x'); }")
+        tanimli = set(re.findall(r"\bfunction\s+([A-Za-z_$][\w$]*)", sahte))
+        cagrilar = set(re.findall(r"(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(", sahte))
+        assert "ekranGoster" in cagrilar - tanimli
+
+    def test_yorumdaki_ad_cagri_sayilmaz(self) -> None:
+        """Yorumda geçen bir fonksiyon adı ihlal DEĞİLDİR (yanlış-pozitif kilidi)."""
+        assert "olmayanBirSey" not in self._kod("/* olmayanBirSey() anlatiliyor */")
