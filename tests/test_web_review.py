@@ -883,6 +883,85 @@ class TestGorunumTiers:
         assert ekran == rapor.tiers.model_dump()
 
 
+class TestOnaydaFormatSecimi:
+    """v1.3.0 — format "Render Al"da sorulur, analizden ÖNCE değil.
+
+    İş ``cikti="mp4"`` varsayılanıyla başlar; kullanıcı kesimleri gördükten
+    sonra MP4/XML ve SRT seçer. Seçim ``ReviewKarari``ye biner (pipeline'ın
+    eklemeli kanalı) — gövde YOKSA v1.2.1 davranışı birebir korunur.
+    """
+
+    def test_secilen_format_karara_biner(
+        self, client: TestClient, ev: Path, kosucu: _ReviewKosucu
+    ) -> None:
+        job_id = _review_jobu(client, ev)
+        r = client.post(
+            f"/api/jobs/{job_id}/approve", json={"cikti": "xml", "srt": True}
+        )
+        assert r.status_code == 200
+        assert kosucu.bitti.wait(5)
+        assert kosucu.karar.cikti == "xml"
+        assert kosucu.karar.srt is True
+
+    def test_govdesiz_onay_none_tasir(
+        self, client: TestClient, ev: Path, kosucu: _ReviewKosucu
+    ) -> None:
+        """Geriye uyum: gövde yoksa karar "config geçerli" der (v1.2.1 yolu)."""
+        job_id = _review_jobu(client, ev)
+        assert client.post(f"/api/jobs/{job_id}/approve").status_code == 200
+        assert kosucu.bitti.wait(5)
+        assert kosucu.karar.cikti is None
+        assert kosucu.karar.srt is None
+
+    def test_srt_kapatma_none_degildir(
+        self, client: TestClient, ev: Path, kosucu: _ReviewKosucu
+    ) -> None:
+        """Kullanıcı kutuyu boşalttıysa config açık olsa bile altyazı yazılmaz."""
+        job_id = _review_jobu(client, ev)
+        client.post(f"/api/jobs/{job_id}/approve", json={"srt": False})
+        assert kosucu.bitti.wait(5)
+        assert kosucu.karar.srt is False
+
+    def test_gecersiz_format_400_ve_review_devam(
+        self, client: TestClient, ev: Path, kosucu: _ReviewKosucu
+    ) -> None:
+        """İş başlatma ucuyla AYNI kapı: bilinmeyen kol istemcide değil burada ölür."""
+        job_id = _review_jobu(client, ev)
+        r = client.post(f"/api/jobs/{job_id}/approve", json={"cikti": "avi"})
+        assert r.status_code == 400
+        assert "avi" in r.json()["detail"]
+        assert not kosucu.bitti.is_set()
+        assert client.get(f"/api/jobs/{job_id}").json()["durum"] == "review"
+
+    def test_bilinmeyen_alan_reddedilir(self, client: TestClient, ev: Path) -> None:
+        job_id = _review_jobu(client, ev)
+        r = client.post(f"/api/jobs/{job_id}/approve", json={"format": "xml"})
+        assert r.status_code == 422
+
+    def test_snapshot_secilen_kolu_gosterir(
+        self, client: TestClient, ev: Path
+    ) -> None:
+        """Koşu ekranı "render mı, XML mi" diyebilsin: snapshot doğruyu söyler."""
+        job_id = _review_jobu(client, ev)
+        veri = client.post(
+            f"/api/jobs/{job_id}/approve", json={"cikti": "xml", "srt": True}
+        ).json()
+        assert veri["cikti"] == "xml"
+        assert veri["srt"] is True
+
+    def test_secilmezse_snapshot_is_baslangicini_korur(
+        self, client: TestClient, ev: Path
+    ) -> None:
+        r = client.post(
+            "/api/jobs", json={"path": str(ev / "video.mp4"), "cikti": "xml", "srt": True}
+        )
+        job_id = str(r.json()["id"])
+        _durum_bekle(client, job_id, "review")
+        veri = client.post(f"/api/jobs/{job_id}/approve").json()
+        assert veri["cikti"] == "xml"
+        assert veri["srt"] is True
+
+
 class TestOnay:
     def test_onay_rendera_gecirir(
         self, client: TestClient, ev: Path, kosucu: _ReviewKosucu

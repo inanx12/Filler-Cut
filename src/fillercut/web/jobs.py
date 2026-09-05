@@ -199,6 +199,10 @@ class Job:
         self._iptal = False
         self._onaylanan: CutPlan | None = None
         self._onaylanan_ozet: EditOzeti | None = None
+        #: v1.3.0: "Render Al" anında seçilen çıktı kolu / altyazı tercihi.
+        #: ``None`` → koşu config'i geçerli (v1.2.1 yolu birebir korunur).
+        self._onaylanan_cikti: str | None = None
+        self._onaylanan_srt: bool | None = None
         #: Aşama sürelerinin referansı — olaylara işlenen `ms` bundan sayılır.
         self._baslangic = time.monotonic()
         self._olaylar: list[dict[str, object]] = []
@@ -247,13 +251,38 @@ class Job:
                 return ReviewKarari(plan=None)
             self._durum = "rendering"
             self._olay_ekle({"tip": "durum", "durum": "rendering"})
-            return ReviewKarari(plan=self._onaylanan, duzenleme=self._onaylanan_ozet)
+            return ReviewKarari(
+                plan=self._onaylanan,
+                duzenleme=self._onaylanan_ozet,
+                cikti=self._onaylanan_cikti,
+                srt=self._onaylanan_srt,
+            )
 
-    def onayla(self, plan: CutPlan, ozet: EditOzeti) -> None:
-        """Doğrulanmış planı teslim edip worker'ı serbest bırakır (HTTP thread)."""
+    def onayla(
+        self,
+        plan: CutPlan,
+        ozet: EditOzeti,
+        *,
+        cikti: str | None = None,
+        srt: bool | None = None,
+    ) -> None:
+        """Doğrulanmış planı teslim edip worker'ı serbest bırakır (HTTP thread).
+
+        v1.3.0: format da burada teslim edilir — "Render Al" anında seçilir,
+        iş çoktan başlamıştır. ``None`` geçilirse koşu config'i geçerlidir.
+        Snapshot da güncellenir ki koşu ekranı "render mı, XML mi" diyebilsin;
+        ``self.cikti``/``self.srt``yi worker ZATEN okumuştur (job başlarken),
+        buradaki yazma yalnız görüntüyü doğrular.
+        """
         with self._lock:
             self._onaylanan = plan
             self._onaylanan_ozet = ozet
+            self._onaylanan_cikti = cikti
+            self._onaylanan_srt = srt
+            if cikti is not None:
+                self.cikti = cikti
+            if srt is not None:
+                self.srt = srt
         self._onay.set()
 
     def iptal_et(self) -> None:
@@ -620,15 +649,47 @@ def review_yasla(job_id: str, istek: YaslaIstek, request: Request) -> ReviewGoru
     return _gorunum(job, baglam, min_keep_ms=min_keep_ms)
 
 
+class OnayIstek(BaseModel):
+    """``POST /api/jobs/{id}/approve`` gövdesi — v1.3.0 format seçimi.
+
+    İki alan da ``None`` varsayılanlıdır ve gövde tamamen opsiyoneldir:
+    gövdesiz bir onay v1.2.1 davranışını birebir korur (iş başlarken seçilen
+    kol geçerli kalır). Bu, yeni arayüzün "format Render Al'da sorulur"
+    kararının sunucu ucudur.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: ``CIKTI_SECENEKLERI`` üyesi; ``None`` → koşu config'i geçerli.
+    cikti: str | None = None
+    #: Altyazı da yazılsın mı; ``None`` → koşu config'i geçerli.
+    srt: bool | None = None
+
+
 @router.post("/api/jobs/{job_id}/approve")
-def review_onayla(job_id: str, request: Request) -> dict[str, object]:
+def review_onayla(
+    job_id: str, request: Request, istek: OnayIstek | None = None
+) -> dict[str, object]:
     """Onay: uygulanmış planı doğrulayıp RENDER'ı tetikler.
 
     Boş video yasağı BURADA uygulanır — plan tüm videoyu kesiyorsa onay
     reddedilir (Türkçe 400) ve pipeline beklemeye devam eder; kullanıcı
     düzenlemeye dönebilir.
+
+    v1.3.0: gövde varsa çıktı kolu/altyazı tercihi de teslim edilir. Geçersiz
+    kol İŞ BAŞLATMA ucuyla AYNI kapıdan reddedilir (400) ve iş review'da
+    KALIR — arayüzü atlayıp POST eden de aynı kilide çarpar.
     """
     job, baglam = _review_job(job_id, request)
+    secim = istek if istek is not None else OnayIstek()
+    if secim.cikti is not None and secim.cikti not in CIKTI_SECENEKLERI:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Geçersiz çıktı türü: {secim.cikti!r} — "
+                f"geçerli: {', '.join(CIKTI_SECENEKLERI)}."
+            ),
+        )
     try:
         plan = uygulanmis_plan(
             baglam.plan,
@@ -638,7 +699,12 @@ def review_onayla(job_id: str, request: Request) -> dict[str, object]:
         )
     except CutPlanError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
-    job.onayla(plan, ozet_cikar(baglam.plan, job.overlay))
+    job.onayla(
+        plan,
+        ozet_cikar(baglam.plan, job.overlay),
+        cikti=secim.cikti,
+        srt=secim.srt,
+    )
     return job.snapshot()
 
 
