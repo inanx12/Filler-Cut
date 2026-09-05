@@ -275,6 +275,10 @@ ve `fill="currentColor"` düştü — ikonlar görünmez olurdu) ve `apiHatasi()
   19392 (= 2× track: wave + progress katmanı), cetvel 75 tike sıklaştı.
 - Kullanıcının `D:\` klasörü koşu öncesi hâline geri konuldu (iptalde
   korunan transkript dahil).
+- **Donanım marker'ları:** `-m ffmpeg` **10 passed / 6 skipped** (yalnız
+  NVENC+QSV donanım yokluğu — bu makine AMD), `-m wcpp` **3 passed**
+  (gerçek whisper-cli + Vulkan). Üçlü yeşil: **1470 passed**, ruff ve mypy
+  temiz (tam kapsam, repo kökünden).
 
 **GÖRSEL DOĞRULAMA.** Native pencerede üç durum gözle görüldü: `bos`
 (ortada dropzone + karşılama + gezgin, kök çipleri), `analiz_tamam`
@@ -1665,17 +1669,20 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pyproject.toml` 1.0.0 + kurulu metadata bayatlık alarmı (red-first doğrulandı) | `424fc2e` |
 | `app.js`: REVIEW aşaması ara durum olaylarında donuyordu (E2E bulgusu) | `70ef7a4` |
 
-**Test sayısı:** 1053 collected (passed/skipped dağılımı donanıma bağlıdır:
-encoder probe'ları ve wcpp env var'ları skip sayısını değiştirir). Bunun 1033'ü
-marker'sız; 13'ü `ffmpeg`, 3'ü `wcpp`, 1'i `ag` (gerçek ağ indirmesi), 5'i
+**Test sayısı:** 1495 collected (v1.3.0 Dalga A itibarıyla; passed/skipped
+dağılımı donanıma bağlıdır: encoder probe'ları ve wcpp env var'ları skip
+sayısını değiştirir). CI konvansiyonuyla (`-m "not exe and not ffmpeg and not
+wcpp and not ag"`) **1470 passed / 25 deselected**. Marker dağılımı: 16'sı
+`ffmpeg`, 3'ü `wcpp`, 1'i `ag` (gerçek ağ indirmesi), 7'si
 `exe` (PyInstaller artefaktı; yoksa skip gerekçesi "önce build_exe.ps1")
 marker'lı (gerçek ffmpeg / gerçek
 whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı referans
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
 atlar (`ag` ve `exe` için de: `-m 'not ag and not exe'`),
 donanım/model/ağ/artefakt yoksa ilgili testler
-kendi kendine skip eder. `ag` marker'lı tek test yalnız 23 MB'lık binary'yi
-indirir — manifest hash'inin CANLI kaynakla uyumunu doğrular; modeller
+kendi kendine skip eder. `xml` (114) ve `web` (151) marker'ları SEÇİM marker'ıdır: dış kaynak
+istemezler ve CI'da koşarlar. `ag` marker'lı tek test yalnız 23 MB'lık
+binary'yi indirir — manifest hash'inin CANLI kaynakla uyumunu doğrular; modeller
 (0.5–1 GB) test içinde İNDİRİLMEZ. Web testleri
 (`test_web_app/fs/jobs.py`) marker'sızdır: FastAPI TestClient in-process çalışır,
 gerçek sunucu/video koşmaz.
