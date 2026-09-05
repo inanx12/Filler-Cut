@@ -81,6 +81,30 @@ class TestWavesurferVendor:
         assert ".WaveSurfer=" in metin, "UMD global ataması yok — ESM build mi alındı?"
 
 
+class TestSatirSonuKilidi:
+    """`.gitattributes` vendor baytlarını korumalı — yoksa sha256 kilidi yalan söyler.
+
+    Bu makinede `core.autocrlf=true`. O ayarla checkout LF'i CRLF'e çevirir:
+    dosya diskte DEĞİŞİR, `vendor.json`'daki sha256 tutmaz ve kilit **taze bir
+    klonda** kırmızıya döner — kusur kodda değil, satır sonu çevriminde olur.
+    Ölçülen kusurdur (ilk commit'te git uyarı bastı), o yüzden kural teste
+    bağlandı: `-text` kaldırılırsa burası kırmızı.
+    """
+
+    def test_gitattributes_vendor_dizinini_disliyor(self) -> None:
+        kok = Path(__file__).resolve().parent.parent
+        oznitelik = kok / ".gitattributes"
+        assert oznitelik.is_file(), ".gitattributes yok — vendor baytları korunmuyor"
+        satirlar = [
+            s.strip()
+            for s in oznitelik.read_text(encoding="utf-8").splitlines()
+            if s.strip() and not s.strip().startswith("#")
+        ]
+        assert any(
+            "web/static/vendor" in s and "-text" in s for s in satirlar
+        ), f"vendor dizini için `-text` kuralı yok: {satirlar}"
+
+
 #: Uzak kaynak arayan desenler: `src=`/`href=` içinde şema, ya da `import(...)`.
 _UZAK_DESEN = re.compile(r"""(?:src|href)\s*=\s*["']\s*(?:https?:)?//""", re.IGNORECASE)
 

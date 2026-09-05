@@ -1,0 +1,8 @@
+# Vendor edilmis ucuncu taraf istemci kodu BAYT BAYT korunur.
+#
+# Neden: `tests/test_web_vendor.py` dosyanin sha256'sini `vendor.json`daki
+# kayitla karsilastirir. `core.autocrlf=true` olan bir Windows makinesinde
+# checkout LF -> CRLF cevirirse dosya diskte DEGISIR ve kilit taze bir
+# klonda kirmiziya doner — kusur kodda degil satir sonu cevriminde olur.
+# `-text` cevrimi komple kapatir.
+src/fillercut/web/static/vendor/** -text
