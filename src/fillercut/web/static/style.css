@@ -416,11 +416,26 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 
 .birincil { background: var(--yesil-koyu); color: #fff; }
 .birincil:hover:not(:disabled) { filter: brightness(1.15); }
-.birincil:disabled { opacity: .45; cursor: not-allowed; }
 
 .ikincil { background: var(--kart-ust); color: var(--metin); border-color: var(--cizgi); }
 .ikincil:hover:not(:disabled) { filter: brightness(1.2); }
-.ikincil:disabled { opacity: .4; cursor: not-allowed; }
+
+/* PASİF EYLEM GERÇEKTEN PASİF GÖRÜNMELİ. Ölçüldü (boş durum, yerel sunucu):
+   "Render Al" `disabled` — öznitelik yerinde, tıklama hiçbir şey yapmıyor —
+   ama %45 opaklıktaki yeşil dolgu koyu zeminde hâlâ "basılabilir birincil
+   eylem" okunuyordu; kullanıcı denemek zorunda kalıyordu. Vurgu dolgusu
+   DÜŞER, kenarlık + soluk metin kalır: pasifken iki düğme de aynı dili
+   konuşur. Renk tek başına taşıyıcı değil (`cursor: not-allowed` + `disabled`
+   erişilebilirlik tarafını zaten söylüyor).
+   Kural birincil/ikincil'den SONRA gelir — aynı özgüllükte sıra kazanır. */
+.dugme:disabled {
+  background: transparent;
+  color: var(--soluk);
+  border-color: var(--cizgi);
+  opacity: .6;
+  cursor: not-allowed;
+  filter: none;
+}
 
 .dar { padding: 6px 12px; }
 

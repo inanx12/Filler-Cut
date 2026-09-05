@@ -370,3 +370,32 @@ class TestHataDurumu:
         assert "sseKapat()" in govde
         assert "durum.jobId = null" in govde
         assert "review.gorunum = null" in govde
+
+
+class TestPasifEylemGorunumu:
+    """Pasif birincil eylem PASİF GÖRÜNMELİ (v1.3.0 Dalga B).
+
+    Ölçüldü: boş durumda "Render Al" gerçekten `disabled` (öznitelik yerinde,
+    tıklama hiçbir şey yapmıyor) ama %45 opaklıktaki yeşil dolgu koyu zeminde
+    hâlâ basılabilir bir birincil eylem gibi okunuyordu — kullanıcı düğmeyi
+    denemek zorunda kalıyordu. Durum doğruydu, AFFORDANS yanlıştı.
+    """
+
+    def test_pasif_dugme_vurgu_dolgusunu_kaybeder(self) -> None:
+        css = _oku("style.css")
+        assert ".dugme:disabled" in css
+        bas = css.index(".dugme:disabled")
+        kural = css[bas : css.index("}", bas)]
+        assert "background: transparent" in kural
+        assert "cursor: not-allowed" in kural
+
+    def test_pasif_kurali_birincilden_sonra_gelir(self) -> None:
+        """Aynı özgüllükte (0,2,0) SIRA kazanır — önce gelirse dolgu geri döner."""
+        css = _oku("style.css")
+        assert css.index(".birincil {") < css.index(".dugme:disabled")
+        assert css.index(".ikincil {") < css.index(".dugme:disabled")
+
+    def test_eski_renk_koruyan_kurallar_kalmadi(self) -> None:
+        css = _oku("style.css")
+        assert ".birincil:disabled" not in css
+        assert ".ikincil:disabled" not in css
