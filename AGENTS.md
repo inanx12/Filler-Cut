@@ -153,9 +153,20 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 9. **MANUEL — bir gerçek video uçtan uca işlenir** (kurulu exe ile, repo'dan
    değil): dosya seçilir, 6 aşama koşar, review ekranı açılır, onaydan
    sonra çıktı yazılır.
-10. Tag + push + Release (`release.yml` Release'i CHANGELOG'dan kendi açar).
+10. **MANUEL — zaman çizelgesinde SÜRÜKLEME denenir** (kurulu exe'de, üç
+    hareket birden): **(a)** bir kesimin SOL ve SAĞ kenarından sürükleyip
+    kapsamı değiştir, **(b)** mıknatıs AÇIK ve KAPALI iken tekrarla —
+    açıkken sessizlik kenarına yapışmalı, kapalıyken serbest kalmalı,
+    **(c)** boş alanda sürükleyerek yeni kesim ekle ve var olan bir kesime
+    DEĞDİR (birleşmeli). Neden ayrı bir madde: v1.3.0 Dalga A'da kenar
+    sürükleme sessizce öldü ve 75 statik kilidin hiçbiri göremedi — kusur
+    JS'te değil **CSS yığın sırasındaydı** (wavesurfer'ın gölge ağacındaki
+    `z-index: 2` etkileşim katmanını örtüyordu). Otomatik kilit artık var
+    (`tests/test_web_surukleme.py`, gerçek fare olayları) ama `tarayici`
+    marker'lıdır ve CI'da koşmaz; bu madde SONUCU kurulu pakette görür.
+11. Tag + push + Release (`release.yml` Release'i CHANGELOG'dan kendi açar).
 
-**Kural:** 5-9 insan gözüyle yapılır ve sonucu ana sohbete yazılır.
+**Kural:** 5-10 insan gözüyle yapılır ve sonucu ana sohbete yazılır.
 "Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
 kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 

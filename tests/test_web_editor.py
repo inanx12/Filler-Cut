@@ -689,3 +689,73 @@ class TestPanelAyiricilari:
         assert "grid-template" not in js
         yazilanlar = set(re.findall(r'setProperty\(\s*tanim\.degisken', js))
         assert yazilanlar, "ayırıcı ölçüyü CSS değişkeni dışında bir yere yazıyor"
+
+
+class TestCizelgeKatmanlari:
+    """`#tl-track` katmanları z-index'i AÇIKÇA ilan eder (v1.3.0 pre-release).
+
+    ÖLÇÜLMÜŞ REGRESYON: Dalga A'da kesim kenarından sürükleme sessizce öldü.
+    Kök neden DOM sırası değil YIĞIN BAĞLAMIYDI — `#dalga` `z-index: auto`
+    olduğu için wavesurfer'ın gölge ağacındaki `.wrapper { z-index: 2 }` üst
+    yığın bağlamına kaçıyor ve `#kesim-katmani`ı örtüyordu.
+
+    Bu sınıf UCUZ ikinci ağdır; asıl kilit gerçek fare olaylarıyla koşar
+    (`tests/test_web_surukleme.py`). İkisi birlikte: biri niyeti, öteki
+    sonucu tutar.
+    """
+
+    #: Sıra: dalga en altta, etkileşim katmanı üstünde, playhead ve cetvel
+    #: onun da üstünde (ikisi de `pointer-events: none`).
+    KATMANLAR = ("--tl-kat-dalga", "--tl-kat-kesim", "--tl-kat-playhead", "--tl-kat-cetvel")
+
+    def _degiskenler(self) -> dict[str, int]:
+        css = _oku("style.css")
+        bas = css.index(".tl-track {")
+        govde = css[bas : css.index("}", bas)]
+        return {
+            ad: int(re.search(rf"{ad}:\s*(\d+)", govde).group(1))  # type: ignore[union-attr]
+            for ad in self.KATMANLAR
+        }
+
+    def test_dort_katman_da_ilan_edilir(self) -> None:
+        assert set(self._degiskenler()) == set(self.KATMANLAR)
+
+    def test_etkilesim_katmani_dalganin_ustunde(self) -> None:
+        d = self._degiskenler()
+        assert d["--tl-kat-kesim"] > d["--tl-kat-dalga"], (
+            "kesim katmanı dalganın altında — tutamaçlar tıklanamaz olur"
+        )
+
+    def test_sira_artan(self) -> None:
+        d = self._degiskenler()
+        degerler = [d[ad] for ad in self.KATMANLAR]
+        assert degerler == sorted(degerler), f"katman sırası bozuk: {degerler}"
+
+    def test_dalga_yigin_baglami_yaratir(self) -> None:
+        """`z-index: 0` ŞART, `auto` DEĞİL: sıfır kütüphanenin z-index'ini
+        içeride tutar, `auto` tutmaz — kusurun tam olarak kendisi."""
+        assert self._degiskenler()["--tl-kat-dalga"] == 0
+        css = _oku("style.css")
+        bas = css.index(".dalga {")
+        kural = css[bas : css.index("}", bas)]
+        assert "z-index: var(--tl-kat-dalga)" in kural
+        assert "position: absolute" in kural
+
+    def test_dalga_isabet_testine_girmez(self) -> None:
+        """Dalga SÜSTÜR (`interact: false`) — niyet CSS'te de yazılı."""
+        css = _oku("style.css")
+        bas = css.index(".dalga {")
+        assert "pointer-events: none" in css[bas : css.index("}", bas)]
+
+    def test_her_katman_degiskeni_kullanir(self) -> None:
+        """Sabit bir sayı yazmak sırayı iki kaynağa böler."""
+        css = _oku("style.css")
+        for secici, degisken in (
+            (".dalga {", "--tl-kat-dalga"),
+            (".kesim-katmani {", "--tl-kat-kesim"),
+            (".playhead {", "--tl-kat-playhead"),
+            (".cetvel {", "--tl-kat-cetvel"),
+        ):
+            bas = css.index(secici)
+            kural = css[bas : css.index("}", bas)]
+            assert f"z-index: var({degisken})" in kural, secici

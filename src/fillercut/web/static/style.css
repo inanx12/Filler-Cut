@@ -726,11 +726,33 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   height: 100%;
   cursor: crosshair;
   touch-action: none;
+  /* Katman sırası — gerekçesi aşağıdaki blokta. */
+  --tl-kat-dalga: 0;
+  --tl-kat-kesim: 1;
+  --tl-kat-playhead: 2;
+  --tl-kat-cetvel: 3;
 }
 
+/* ── #tl-track KATMAN SIRASI — HEPSİ AÇIKÇA İLAN EDİLİR ────────────────
+   ÖLÇÜLMÜŞ REGRESYON (v1.3.0 Dalga A → Dalga B'de bulundu): kesim kenarından
+   sürükleme sessizce ölmüştü. Kök neden DOM sırası DEĞİL, YIĞIN BAĞLAMIYDI.
+   `#dalga` `position: absolute` + `z-index: auto`tur ve **yığın bağlamı
+   YARATMAZ**; wavesurfer'ın gölge ağacındaki `.wrapper` ise
+   `position: relative; z-index: 2`dir. O `z-index: 2` en yakın ÜST yığın
+   bağlamına katılır, yani `#kesim-katmani`ın (z-index: auto → 0) ÜSTÜNDE
+   boyanır ve isabet testini KAZANIR: `pointerdown`ın hedefi hep wavesurfer
+   host'u olur, `closest(".tutamac")` null döner, kanca "boş alan" dalına
+   düşer. Mıknatıs açık/kapalı fark etmez — sürükleme tipi zaten yanlıştır.
+
+   Kural: bu şeritteki her katman z-index'ini AÇIKÇA yazar. `--tl-kat-*`
+   adları sırayı tek bakışta okunur kılar; yarın eklenecek bir katman
+   (kütüphane gölge DOM'u dahil) sıraya sessizce giremez. Kilidi
+   `tests/test_web_editor.py::TestCizelgeKatmanlari` (statik) ve
+   `tests/test_web_surukleme.py` (gerçek fare olayları). */
 /* cetvel: üst şerit, tik + etiket */
 .cetvel {
   position: absolute;
+  z-index: var(--tl-kat-cetvel);
   top: 0; left: 0; right: 0;
   height: 18px;
   border-bottom: 1px solid var(--cizgi);
@@ -755,8 +777,18 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   white-space: nowrap;
 }
 
-/* Dalga formu kabı — wavesurfer.js (vendor) buraya çizer. */
-.dalga { position: absolute; top: 18px; left: 0; right: 0; bottom: 0; }
+/* Dalga formu kabı — wavesurfer.js (vendor) buraya çizer.
+
+   `z-index` SIFIR OLMASI ŞART, `auto` DEĞİL: sıfır burada bir YIĞIN BAĞLAMI
+   yaratır ve kütüphanenin gölge ağacındaki `z-index: 2`yi İÇERİDE tutar.
+   `pointer-events: none` ise niyeti söyler — dalga SÜSTÜR (`interact: false`
+   ile yaratılır) ve hiçbir zaman olay beklemez. */
+.dalga {
+  position: absolute;
+  z-index: var(--tl-kat-dalga);
+  pointer-events: none;
+  top: 18px; left: 0; right: 0; bottom: 0;
+}
 
 /* zoom kaydırıcısı */
 .zoom { display: flex; align-items: center; gap: 8px; color: var(--soluk); font-size: 12px; }
@@ -764,7 +796,13 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 .zoom input { width: 130px; accent-color: var(--vurgu); }
 .zoom-deger { color: var(--metin); min-width: 34px; text-align: right; }
 
-.kesim-katmani { position: absolute; top: 18px; left: 0; right: 0; bottom: 0; }
+/* Etkileşim katmanı: bloklar + tutamaçlar burada, ve boşluklarda KENDİSİ
+   isabet hedefidir (boş alanda sürükleyerek yeni kesim o yüzden çalışır). */
+.kesim-katmani {
+  position: absolute;
+  z-index: var(--tl-kat-kesim);
+  top: 18px; left: 0; right: 0; bottom: 0;
+}
 
 .kesim-blok {
   position: absolute;
@@ -814,6 +852,7 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 
 .playhead {
   position: absolute;
+  z-index: var(--tl-kat-playhead);
   top: 18px; bottom: 0;
   width: 2px;
   background: #fff;

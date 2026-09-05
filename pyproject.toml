@@ -69,6 +69,16 @@ dev = [
 native = [
     "pywebview>=6",
 ]
+# v1.3.0 — zaman cizelgesi surukleme kilitleri GERCEK fare olaylariyla kosar.
+# OPSIYONELDIR ve `dev`e KATILMADI: tarayici ikilisi ayrica indirilir
+# (`python -m playwright install chromium`), yoksa `tarayici` marker'li
+# testler eyleme dokulebilir bir gerekceyle kendi kendine skip eder.
+# Neden gerekli: Dalga A'nin surukleme regresyonu CSS YIGIN SIRASINDAYDI —
+# 75 statik kilidin hicbiri goremezdi, ancak gercek duzen + gercek olay
+# gorur (bkz. tests/test_web_surukleme.py docstring'i).
+tarayici = [
+    "playwright>=1.44",
+]
 # CUDA (RTX 4050): CTranslate2'nin yüklediği cuBLAS/cuDNN DLL'leri bu pip
 # paketlerinden gelir — Windows'ta dizin kaydı fw_backend._register_nvidia_dll_dirs'de.
 cuda = [
@@ -111,4 +121,5 @@ markers = [
     "exe: PyInstaller build artefaktı gerektirir (dist/fillercut) — CI'da değil, build sonrası koşar (CI deselect: -m 'not exe')",
     "xml: FCP7 XML / SRT dışa aktarım kilitleri — SEÇİM marker'ıdır, dış kaynak gerektirmez ve CI'da koşar (yalnız bu takım: -m xml). Gerçek dosya okuyan tek test ayrıca 'ffmpeg' marker'lıdır.",
     "web: web arayuzu (fs/secim/native kopru) kilitleri — SECIM marker'idir, dis kaynak gerektirmez ve CI'da kosar (yalniz bu takim: -m web)",
+    "tarayici: gercek tarayici (Playwright + Chromium) gerektirir — zaman cizelgesi surukleme kilitleri GERCEK fare olaylariyla kosar; CI'da degil, kullanici makinesinde (CI deselect: -m 'not tarayici')",
 ]
