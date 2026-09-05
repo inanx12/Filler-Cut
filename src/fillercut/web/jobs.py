@@ -79,6 +79,39 @@ router = APIRouter()
 #: SSE yoklama aralığı (sn) — olay gecikmesinin üst sınırı.
 _SSE_BEKLEME_SN = 0.2
 
+#: Teknik pipeline mesajını **insan diline** çeviren tablo: ``(imza, metin)``.
+#: İmza pipeline mesajının İÇİNDE aranır (önek/sonek eklenebilir), eşleşirse
+#: ekranın başlığı `metin` olur ve teknik cümle "Log detayı" katlamasına iner.
+#:
+#: NEDEN BURADA, pipeline'da DEĞİL: `_fail`in bastığı kırmızı konsol satırı
+#: CLI çıktısıdır ve DEĞİŞMEZ (kilitli kural). Çeviri sunum katmanının işidir.
+#:
+#: DRIFT KİLİDİ `tests/test_web_jobs.py::TestInsanMesaji` — imzayı gerçek bir
+#: `build_cutplan` hatasından türetir; cutplan'ın metni değişirse test kırılır,
+#: eşleşme sessizce kaybolmaz.
+_INSAN_MESAJLARI: tuple[tuple[str, str], ...] = (
+    (
+        "tüm videoyu kapsıyor",
+        "Bu videoda kesilecek konuşma bulunamadı "
+        "(ses yok ya da tamamı sessizlik).",
+    ),
+)
+
+
+def insan_mesaji(mesaj: str, detay: str | None = None) -> tuple[str, str | None]:
+    """``(başlık, detay)`` — bilinen bir hata imzası varsa başlığı insanlaştırır.
+
+    Eşleşme yoksa girdi olduğu gibi döner: bilinmeyen hatalar SUSTURULMAZ,
+    kullanıcı pipeline'ın kendi Türkçe cümlesini görür.
+
+    Eşleşirse teknik cümle KAYBOLMAZ, `detay`a iner — geri bildirimde ve hata
+    ayıklamada asıl işe yarayan odur.
+    """
+    for imza, insan in _INSAN_MESAJLARI:
+        if imza in mesaj:
+            return insan, mesaj if detay is None else f"{mesaj}\n{detay}"
+    return mesaj, detay
+
 #: Bu kadar sessizlikten sonra keepalive ``: ping`` yorumu gönderilir.
 _SSE_PING_SN = 15.0
 
@@ -421,7 +454,9 @@ class JobKayit:
         except PipelineError as exc:
             # _fail'in Türkçe, eyleme dökülebilir mesajı (sunucu konsoluna
             # kırmızı satırı pipeline zaten bastı — log detayı orada).
-            job.basarisiz(exc.mesaj)
+            # Bilinen imzalar insan diline çevrilir; teknik cümle `detay`a iner.
+            baslik, ayrinti = insan_mesaji(exc.mesaj)
+            job.basarisiz(baslik, detay=ayrinti)
         except typer.Exit as exc:
             # `typer.Exit` click'te RuntimeError türevidir, yani aşağıdaki
             # `except Exception` onu YUTARDI: review'da vazgeçen kullanıcı

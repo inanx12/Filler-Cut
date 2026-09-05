@@ -244,8 +244,11 @@
       <div id="geri-bildirim-not" class="geri-bildirim-not" role="status"></div>
     </section>
 
-    <!-- Hata: analiz/render başarısız (her durumda görünebilir) -->
-    <section id="kosu-hata" class="kart sag-bolum hata-kutu gizli" role="alert">
+    <!-- hata: analiz/render başarısız. Görünürlüğü `data-goster` sürer — bir
+         zamanlar `gizli` sınıfıyla JS'ten açılıyordu ve `.sag-bolum`un
+         `display:none` tabanı yüzünden HİÇ AÇILMIYORDU (v1.3.0 Dalga B). -->
+    <section id="kosu-hata" class="kart sag-bolum hata-kutu" data-goster="hata"
+             role="alert">
       <div class="hata-baslik">Koşu başarısız</div>
       <div id="hata-mesaj" class="hata-mesaj"></div>
       <details id="hata-detay-kapsul" class="gizli">

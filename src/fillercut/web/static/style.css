@@ -134,7 +134,8 @@ body[data-asama="yuklendi"] .sag-bolum[data-goster~="yuklendi"],
 body[data-asama="analiz"] .sag-bolum[data-goster~="analiz"],
 body[data-asama="analiz_tamam"] .sag-bolum[data-goster~="analiz_tamam"],
 body[data-asama="render"] .sag-bolum[data-goster~="render"],
-body[data-asama="sonuc"] .sag-bolum[data-goster~="sonuc"] { display: block; }
+body[data-asama="sonuc"] .sag-bolum[data-goster~="sonuc"],
+body[data-asama="hata"] .sag-bolum[data-goster~="hata"] { display: block; }
 
 /* Boş durumda ortada dropzone + gezgin; medya varsa oynatıcı. */
 body[data-asama="bos"] #oynatici { display: none; }

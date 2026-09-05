@@ -27,8 +27,11 @@ STATIK = Path(__file__).resolve().parent.parent / "src" / "fillercut" / "web" / 
 
 #: Durum makinesinin adları — `app.js`, `style.css` ve `index.html` üçü de
 #: bu sözlüğü paylaşır. Sıra akıştır: boş → medya → analiz → düzenleme →
-#: render → sonuç.
-ASAMA_ADLARI = ("bos", "yuklendi", "analiz", "analiz_tamam", "render", "sonuc")
+#: render → sonuç. `hata` akışın DIŞINDA bir yandır (v1.3.0 Dalga B):
+#: `analiz`/`render`dan girilir, yalnız yeni bir medyayla çıkılır.
+ASAMA_ADLARI = (
+    "bos", "yuklendi", "analiz", "analiz_tamam", "render", "sonuc", "hata",
+)
 
 
 def _oku(ad: str) -> str:
@@ -302,3 +305,68 @@ class TestOluCagriYok:
     def test_yorumdaki_ad_cagri_sayilmaz(self) -> None:
         """Yorumda geçen bir fonksiyon adı ihlal DEĞİLDİR (yanlış-pozitif kilidi)."""
         assert "olmayanBirSey" not in self._kod("/* olmayanBirSey() anlatiliyor */")
+
+
+class TestHataDurumu:
+    """`hata` durum makinesinin AYRI bir yanıdır (v1.3.0 Dalga B).
+
+    ÖLÇÜLMÜŞ KUSUR: hata kartı `gizli` sınıfı kaldırılarak açılmaya
+    çalışılıyordu, ama `.sag-bolum`un tabanı `display:none`tur ve kartın
+    `data-goster`i yoktu — kart HİÇ AÇILMADI. Sessiz videoda pipeline
+    `CutPlanError` veriyor, iş sunucuda `failed` oluyor, ekran ise
+    "İŞLENİYOR"da asılı kalıyordu: kullanıcıya hiçbir şey söylenmiyordu.
+    Sessiz no-op ailesinin dördüncü örneği (KI-13, KI-14, KI-17).
+    """
+
+    def test_js_hata_asamasini_tanir(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("const ASAMA_ADLARI")
+        assert '"hata"' in js[bas : js.index("];", bas)]
+
+    def test_hata_gostermek_asama_ayarlar(self) -> None:
+        """Kart `gizli` ile DEĞİL, durumla açılır — görünürlüğün tek kaynağı."""
+        js = _oku("app.js")
+        bas = js.index("function hataGoster")
+        govde = js[bas : js.index("\n}", bas)]
+        assert 'asamaAyarla("hata")' in govde
+        assert 'el("kosu-hata")' not in govde, (
+            "hata kartı hâlâ JS'ten gösteriliyor — iki görünürlük kaynağı"
+        )
+
+    def test_hata_karti_asamasini_ilan_eder(self) -> None:
+        html = _oku("index.html")
+        bas = html.index('id="kosu-hata"')
+        etiket = html[bas : html.index(">", bas)]
+        assert 'data-goster="hata"' in etiket
+        assert "gizli" not in etiket, "`gizli` `data-goster`ı ezer (!important)"
+
+    def test_css_hata_asamasini_surer(self) -> None:
+        css = _oku("style.css")
+        assert 'body[data-asama="hata"] .sag-bolum[data-goster~="hata"]' in css
+
+    def test_hata_kartinda_yeni_video_ve_geri_bildirim_var(self) -> None:
+        """Çıkış yolu ve bildirme yolu aynı kartta — kullanıcı çıkmaz sokakta kalmaz."""
+        html = _oku("index.html")
+        bas = html.index('id="kosu-hata"')
+        kart = html[bas : html.index("</section>", bas)]
+        assert 'id="btn-hata-yeni"' in kart
+        assert 'id="btn-geri-bildirim-hata"' in kart
+        assert 'id="hata-mesaj"' in kart
+        js = _oku("app.js")
+        assert 'el("btn-hata-yeni").addEventListener("click", yeniIs)' in js
+
+    def test_hatadan_sonra_medya_degistirilebilir(self) -> None:
+        """Koşu bitmiştir; kullanıcı doğrudan başka bir video bırakabilir."""
+        js = _oku("app.js")
+        bas = js.index("function medyaDegistirilebilir")
+        govde = js[bas : js.index("\n}", bas)]
+        assert 'durum.asama === "hata"' in govde
+
+    def test_yeni_medya_eski_isin_izlerini_birakir(self) -> None:
+        """Ölü jobId / eski review görünümü yeni akışa sızmamalı."""
+        js = _oku("app.js")
+        bas = js.index("function medyaYukle")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "sseKapat()" in govde
+        assert "durum.jobId = null" in govde
+        assert "review.gorunum = null" in govde

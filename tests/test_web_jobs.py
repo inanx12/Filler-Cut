@@ -21,7 +21,14 @@ from fastapi.testclient import TestClient
 from fillercut.pipeline import ASAMALAR, PipelineError
 from fillercut.report.json_report import TierCounts
 from fillercut.web.app import create_app
-from fillercut.web.jobs import Job, JobKayit, JobOzet, Kosucu
+from fillercut.web.jobs import (
+    _INSAN_MESAJLARI,
+    Job,
+    JobKayit,
+    JobOzet,
+    Kosucu,
+    insan_mesaji,
+)
 
 OZET = JobOzet(
     output_path="video_temiz.mp4",
@@ -502,3 +509,93 @@ class TestOzetCiktiAlanlari:
         """Eski çağrı biçimi (alanlar verilmeden) hâlâ geçerli."""
         assert OZET.cikti == "mp4"
         assert OZET.srt_path is None
+
+
+class TestInsanMesaji:
+    """Teknik pipeline cümlesi ekranda İNSAN DİLİNE çevrilir (v1.3.0 Dalga B).
+
+    Gerçek koşuda yakalanan kusur: sessiz (ya da tamamı sessizlik olan) bir
+    videoda pipeline `CutPlanError` veriyor, iş `failed` oluyor ve kullanıcı
+    "PLAN başarısız: kesim planı tüm videoyu kapsıyor — boş video üretilmez;
+    eşikleri gözden geçir" cümlesini görüyordu. Doğru cümle ama kullanıcının
+    dili değil: "eşik" diye bir kavramı arayüzde hiç görmedi.
+    """
+
+    def test_cutplan_imzasi_gercek_hatadan_dogrulanir(self) -> None:
+        """DRIFT KİLİDİ: imza `cutplan`ın GERÇEK metninden doğrulanır.
+
+        `_INSAN_MESAJLARI` bir dize eşleşmesidir; cutplan'ın cümlesi
+        değiştiğinde eşleşme sessizce kaybolur ve kullanıcı yeniden teknik
+        metni görürdü. Bu test aradaki bağı görünür tutar.
+        """
+        from fillercut.models import Segment
+        from fillercut.plan.cutplan import CutPlanError, build_cutplan
+
+        with pytest.raises(CutPlanError) as hata:
+            build_cutplan(
+                [Segment(start_ms=0, end_ms=5_000, kind="silence", reason="test")],
+                total_duration_ms=5_000,
+            )
+        imzalar = [imza for imza, _ in _INSAN_MESAJLARI]
+        assert any(imza in str(hata.value) for imza in imzalar), (
+            f"cutplan'ın metni değişmiş, çeviri tablosu bayat: {hata.value}"
+        )
+
+    def test_bilinen_imza_insanlastirilir_teknik_cumle_detaya_iner(self) -> None:
+        baslik, detay = insan_mesaji(
+            "PLAN başarısız: kesim planı tüm videoyu kapsıyor — boş video "
+            "üretilmez; eşikleri gözden geçir"
+        )
+        assert baslik == (
+            "Bu videoda kesilecek konuşma bulunamadı (ses yok ya da tamamı sessizlik)."
+        )
+        assert detay is not None and "kapsıyor" in detay  # teknik cümle KAYBOLMADI
+
+    def test_bilinmeyen_mesaj_oldugu_gibi_kalir(self) -> None:
+        """Bilinmeyen hata SUSTURULMAZ — pipeline'ın kendi Türkçesi görünür."""
+        assert insan_mesaji("TRANSCRIBE başarısız: model bulunamadı") == (
+            "TRANSCRIBE başarısız: model bulunamadı",
+            None,
+        )
+
+    def test_var_olan_detay_korunur(self) -> None:
+        _, detay = insan_mesaji(
+            "PLAN başarısız: kesim planı tüm videoyu kapsıyor", "ek log satırı"
+        )
+        assert detay is not None
+        assert "kapsıyor" in detay and "ek log satırı" in detay
+
+    def test_ucta_insan_cumlesi_gorunur(self, ev: Path) -> None:
+        """Uçtan uca: koşucu CutPlanError metniyle patlar → UI insan cümlesi alır."""
+        teknik = (
+            "PLAN başarısız: kesim planı tüm videoyu kapsıyor — boş video "
+            "üretilmez; eşikleri gözden geçir"
+        )
+
+        def patlayan(job: Job, ilerleme: Callable[[str], None]) -> JobOzet:
+            raise PipelineError(teknik)
+
+        client = _client(ev, patlayan)
+        job_id = _job_baslat(client, ev)
+        veri = _bitene_kadar_bekle(client, job_id)
+        assert veri["durum"] == "failed"
+        assert veri["hata"].startswith("Bu videoda kesilecek konuşma bulunamadı")
+        assert veri["hata_detay"] == teknik
+        assert "Traceback" not in str(veri)
+
+    def test_hata_isi_sunucuda_terminaldir(self, ev: Path) -> None:
+        """İş ASILI KALMAZ: `failed` terminaldir, worker thread döner.
+
+        İnan'ın raporladığı belirti "UI İŞLENİYOR'da asılı kalıyor, iş iptal
+        edilmiyor"du; ölçüm bunun SUNUCU tarafında değil arayüzde olduğunu
+        gösteriyor — kayıt hemen yeni iş kabul ediyor.
+        """
+        def patlayan(job: Job, ilerleme: Callable[[str], None]) -> JobOzet:
+            raise PipelineError("PLAN başarısız: kesim planı tüm videoyu kapsıyor")
+
+        client = _client(ev, patlayan)
+        job_id = _job_baslat(client, ev)
+        veri = _bitene_kadar_bekle(client, job_id)
+        assert veri["durum"] == "failed"
+        # Terminal olduğu için SSE akışı da kapanır (üretici sonlanır).
+        assert _sse_olaylari(client, job_id)[-1][1]["tip"] == "hata"

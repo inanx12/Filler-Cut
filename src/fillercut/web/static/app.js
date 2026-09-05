@@ -15,6 +15,7 @@
  *   analiz_tamam → kesimler düzenlenebilir; "Render Al" aktif
  *   render     → onay verildi, RENDER/XML koşuyor
  *   sonuc      → çıktı yolları + "Yeni video" (aynı ekranda)
+ *   hata       → koşu başarısız; sağda hata kartı + "Yeni video"
  *
  * Güvenlik: sunucudan/diskten gelen HER metin textContent ile yazılır —
  * innerHTML'e veri girmez. SSE kopuşunda EventSource kendi kendine yeniden
@@ -40,7 +41,15 @@ const ASAMALAR = [
 const el = (id) => document.getElementById(id);
 
 /* Durum makinesinin adları — `data-asama` ve CSS `[data-goster]` ile aynı
-   sözlük. Sıra bilgi amaçlıdır; geçişler açıkça yazılır. */
+   sözlük. Sıra bilgi amaçlıdır; geçişler açıkça yazılır.
+
+   `hata` akışın DIŞINDA bir yandır: `analiz` ya da `render`dan girilir ve
+   yalnız "Yeni video" (ya da yeni bir medya seçimi) ile çıkılır. Ayrı bir
+   aşama olması ŞART — v1.3.0 Dalga A'da hata kartı `gizli` sınıfıyla
+   açılmaya çalışılıyordu ama `.sag-bolum`un tabanı `display:none` olduğu
+   için HİÇ görünmüyordu: pipeline `CutPlanError` veriyor, iş sunucuda
+   `failed` oluyor, ekran "İŞLENİYOR"da asılı kalıyordu (gerçek koşuda
+   sessiz videoda yakalandı). */
 const ASAMA_ADLARI = [
   "bos",
   "yuklendi",
@@ -48,6 +57,7 @@ const ASAMA_ADLARI = [
   "analiz_tamam",
   "render",
   "sonuc",
+  "hata",
 ];
 
 const durum = {
@@ -124,6 +134,7 @@ const DURUM_METNI = {
   analiz_tamam: "Kesimleri gözden geçirin, sonra Render Al.",
   render: "Çıktı üretiliyor…",
   sonuc: "Tamamlandı.",
+  hata: "Koşu başarısız — ayrıntı sağdaki kartta.",
 };
 
 function asamaAyarla(yeni) {
@@ -145,8 +156,13 @@ function dugmeleriTazele() {
 function medyaDegistirilebilir() {
   /* İş koşarken medya DEĞİŞTİRİLEMEZ: pipeline o dosyayı okuyor ve sessizce
      ikinci bir iş başlatmak kullanıcıyı şaşırtırdı. Ölçüt EKRAN değil DURUM
-     (v1.2.x'te ekran görünürlüğüne bakılıyordu — tek ekranda o ölçüt yok). */
-  return durum.asama === "bos" || durum.asama === "yuklendi";
+     (v1.2.x'te ekran görünürlüğüne bakılıyordu — tek ekranda o ölçüt yok).
+
+     `hata` İZİNLİDİR: koşu bitmiştir (sunucuda iş `failed`, worker thread
+     dönmüştür) ve kullanıcının ilk refleksi başka bir video denemektir —
+     onu "Yeni video" düğmesine mecbur etmek gereksiz bir adımdır. */
+  return durum.asama === "bos" || durum.asama === "yuklendi" ||
+    durum.asama === "hata";
 }
 
 /* ── medya seçimi + önizleme ─────────────────────────────────────────── */
@@ -172,6 +188,12 @@ function medyaOlcuTazele() {
 }
 
 function medyaYukle(girdi) {
+  /* `hata`dan doğrudan yeni medya bırakılabilir; biten işin izleri BURADA
+     bırakılır — aksi hâlde ölü bir jobId ve eski review görünümü kalırdı. */
+  sseKapat();
+  durum.jobId = null;
+  review.gorunum = null;
+  review.secili = null;
   durum.secili = girdi;
   medyaKartiCiz(girdi);
   zcSifirla();
@@ -899,8 +921,9 @@ async function analiziBaslat() {
 }
 
 function kosuBaslat(snapshot) {
+  /* Hata kartını gizlemeye gerek YOK: görünürlüğü `data-asama` sürer ve
+     `asamaAyarla("analiz")` onu kendiliğinden kapatır (tek kaynak). */
   durum.jobId = snapshot.id;
-  el("kosu-hata").classList.add("gizli");
   el("kosu-durum").textContent = "Başlatılıyor…";
   el("kosu-durum").classList.remove("uyari");
   asamalariKur();
@@ -978,6 +1001,11 @@ function olayIsle(olay) {
 }
 
 function hataGoster(mesaj, detay) {
+  /* Hata AYRI BİR DURUMDUR, "gizli sınıfı kaldırılan bir kutu" değil.
+     Kartı `data-goster="hata"` açar; `asamaAyarla` aynı anda ilerleme
+     panelini kapatır, üst bara durumu yazar ve düğmeleri tazeler. Eskiden
+     yalnız `gizli` kaldırılıyordu: `.sag-bolum`un tabanı `display:none`
+     olduğu için kart AÇILMIYOR, ekran "İŞLENİYOR"da asılı kalıyordu. */
   el("kosu-durum").textContent = "";
   el("hata-mesaj").textContent = mesaj;
   const kapsul = el("hata-detay-kapsul");
@@ -987,7 +1015,7 @@ function hataGoster(mesaj, detay) {
   } else {
     kapsul.classList.add("gizli");
   }
-  el("kosu-hata").classList.remove("gizli");
+  asamaAyarla("hata");
 }
 
 /* ── review: kesim listesi + bloklar + özet ──────────────────────────── */
@@ -1674,7 +1702,6 @@ function yeniIs() {
   review.secili = null;
   el("medya-bos").classList.remove("gizli");
   el("medya-dolu").classList.add("gizli");
-  el("kosu-hata").classList.add("gizli");
   el("ekran-yok").classList.add("gizli");
   reviewHata(null);
   dropNotu("", "");
