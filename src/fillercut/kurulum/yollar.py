@@ -35,7 +35,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from fillercut.config import AsrConfig
+from fillercut.config import AsrConfig, ConfigError
 
 #: Sihirbaz ayar dosyasının şema sürümü.
 AYAR_VERSION = 1
@@ -46,6 +46,13 @@ ENV_MODEL = "FILLERCUT_WCPP_MODEL"
 
 #: Uygulama dizin adı — hem veri hem ayar kökünde.
 _UYGULAMA = "fillercut"
+
+#: ``config.json`` içindeki KULLANICI TERCİHİ isim alanı (v1.3.1). Sihirbazın
+#: KURULUM anahtarları (``binary``/``model``) top-level durur; tercihler bu
+#: nesnenin altına girer. İki şey ayrı: biri kurulumun ürettiği veridir,
+#: diğerini kullanıcı elle yazar — aynı dosyada ama aynı isim alanında DEĞİL.
+_UI_BOLUMU = "ui"
+_UI_KOKLER = "izinli_kokler"
 
 
 def veri_dizini() -> Path:
@@ -105,12 +112,13 @@ class KurulumAyari:
     model: str = ""
 
 
-def kurulum_oku() -> KurulumAyari | None:
-    """Sihirbaz ayarını okur; yoksa ya da BOZUKSA ``None``.
+def _ayar_ham_oku() -> dict[str, object] | None:
+    """``config.json``'u ham dict olarak okur; yok/bozuk/dict değilse ``None``.
 
-    Bozuk dosyada exception FIRLATILMAZ: ayar kullanıcı tarafından
-    yazılmadığı için "düzelt" demenin anlamı yok — sihirbaz yeniden koşup
-    üstüne yazabilsin diye yok sayılır.
+    Tek okuma noktası: hem sihirbaz anahtarları hem kullanıcı tercihleri aynı
+    dosyada yaşar, iki ayrı ``json.loads`` zamanla ayrışırdı. Hatanın nasıl
+    ELE ALINACAĞI çağırana bırakılır — sihirbaz sessizce yok sayar, kullanıcı
+    tercihleri açık hata verir (gerekçe ``ui_izinli_kokler_oku``'da).
     """
     try:
         ham = json.loads(ayar_dosyasi().read_text(encoding="utf-8"))
@@ -118,9 +126,91 @@ def kurulum_oku() -> KurulumAyari | None:
         return None
     if not isinstance(ham, dict):
         return None
+    return ham
+
+
+def kurulum_oku() -> KurulumAyari | None:
+    """Sihirbaz ayarını okur; yoksa ya da BOZUKSA ``None``.
+
+    Bozuk dosyada exception FIRLATILMAZ: ayar kullanıcı tarafından
+    yazılmadığı için "düzelt" demenin anlamı yok — sihirbaz yeniden koşup
+    üstüne yazabilsin diye yok sayılır.
+    """
+    ham = _ayar_ham_oku()
+    if ham is None:
+        return None
     return KurulumAyari(
         binary=str(ham.get("binary", "")), model=str(ham.get("model", ""))
     )
+
+
+def ui_izinli_kokler_oku(*, dogrula: bool = True) -> list[str]:
+    """``config.json`` → ``ui.izinli_kokler`` (v1.3.1); yoksa boş liste.
+
+    **Neden bu dosya:** kurulu kullanıcının ``filler-cut.toml``'u YOKTUR (o
+    repo dosyasıdır, kurulu exe onu bulamaz) — ``D:\\`` gibi ikinci bir sürücüyü
+    açmak için elindeki tek yerel dosya budur. v1.2.1 C.2'nin "config.json'a
+    karıştırma" kararı sihirbazın KURULUM verisi içindi (binary/model yolları);
+    izinli kökler kullanıcı TERCİHİdir ve ayrı bir isim alanında (``"ui"``)
+    yaşar — sihirbaz anahtarlarına DOKUNULMAZ.
+
+    **Güvenlik invariant'ı DEĞİŞMEDİ:** kökler hâlâ yalnızca YEREL config
+    dosyalarından gelir; onları değiştiren bir API ucu ya da CLI bayrağı
+    YOKTUR. ``config.json`` da ``filler-cut.toml`` gibi yerel bir dosyadır —
+    tehdit modeli aynı kalır.
+
+    Şekil doğrulanır (boş olmayan metin listesi); ``"*"`` sıradan bir metin
+    girdisidir, anlamı ``web/fs`` katmanında çözülür. Kökün diskte VAR olup
+    olmadığına da orada bakılır (``izinli_kokler_coz``).
+
+    Args:
+        dogrula: ``True`` (startup) → bozuk JSON / yanlış şekil ``ConfigError``
+            verir. Sihirbaz ayarının aksine SESSİZ DEĞİL: ``binary``/``model``'i
+            sihirbaz yazar, bunu kullanıcı ELLE yazar — yok sayılan bir yazım
+            hatası "ekledim ama hâlâ göremiyorum" sınıfı çözümsüz bir tuzaktır.
+            ``False`` (istek başına çözüm) → her sorunda boş liste; dosya koşu
+            sırasında bozulsa bile route 500 değil temiz 403 verir.
+
+    Raises:
+        ConfigError: ``dogrula`` iken dosya bozuk ya da şekil yanlış.
+    """
+    yol = ayar_dosyasi()
+    ham = _ayar_ham_oku()
+    if ham is None:
+        if dogrula and yol.exists():
+            raise ConfigError(
+                f"kullanıcı ayar dosyası okunamadı ya da geçerli JSON değil: {yol} "
+                "(dosyayı düzeltin ya da silin)"
+            )
+        return []
+    bolum = ham.get(_UI_BOLUMU)
+    if bolum is None:
+        return []
+    if not isinstance(bolum, dict):
+        if not dogrula:
+            return []
+        raise ConfigError(
+            f'{yol} içindeki "{_UI_BOLUMU}" bir nesne olmalı, '
+            f"{type(bolum).__name__} verildi"
+        )
+    kokler = bolum.get(_UI_KOKLER)
+    if kokler is None:
+        return []
+    if not isinstance(kokler, list) or not all(isinstance(k, str) for k in kokler):
+        if not dogrula:
+            return []
+        raise ConfigError(
+            f'{yol} içindeki "{_UI_BOLUMU}.{_UI_KOKLER}" metin listesi olmalı: {kokler!r}'
+        )
+    for kok in kokler:
+        if not kok.strip():
+            if not dogrula:
+                return []
+            raise ConfigError(
+                f'{yol} içindeki "{_UI_BOLUMU}.{_UI_KOKLER}" girişleri boş olmayan '
+                f"metin olmalı: {kok!r}"
+            )
+    return list(kokler)
 
 
 def kurulum_yaz(*, binary: str | None = None, model: str | None = None) -> None:
@@ -129,19 +219,22 @@ def kurulum_yaz(*, binary: str | None = None, model: str | None = None) -> None:
     Kısmi yazma şart: binary eksik ama model varken yalnız binary indirilir
     (brief §5); tam üzerine yazmak mevcut model kaydını silerdi.
     """
+    # Bilinmeyen anahtarlar KORUNUR: v1.3.1'den beri aynı dosyada kullanıcının
+    # kendi yazdığı `"ui"` bölümü de yaşıyor — sıfırdan sözlük yazmak sihirbazın
+    # bir sonraki indirmesinde kullanıcının köklerini SESSİZCE uçururdu (kilit:
+    # `TestUiKokleri::test_sihirbaz_yazmasi_ui_bolumunu_KORUR`).
+    ham = _ayar_ham_oku() or {}
     mevcut = kurulum_oku() or KurulumAyari()
     yeni = KurulumAyari(
         binary=mevcut.binary if binary is None else binary,
         model=mevcut.model if model is None else model,
     )
     ayar_dizini().mkdir(parents=True, exist_ok=True)
+    ham.update(
+        {"config_version": AYAR_VERSION, "binary": yeni.binary, "model": yeni.model}
+    )
     ayar_dosyasi().write_text(
-        json.dumps(
-            {"config_version": AYAR_VERSION, "binary": yeni.binary, "model": yeni.model},
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
+        json.dumps(ham, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 

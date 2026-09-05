@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from fillercut.config import AsrConfig
+from fillercut.config import AsrConfig, ConfigError
 from fillercut.kurulum import yollar
 
 
@@ -189,3 +189,100 @@ class TestCozumlemeOnceligi:
         c = yollar.cozumle(AsrConfig())  # backend = faster-whisper
         assert c.eksikler == ()
         assert c.tamam is True
+
+
+class TestUiKokleri:
+    """`config.json` içindeki KULLANICI TERCİHİ isim alanı (v1.3.1).
+
+    Kurulu kullanıcının `filler-cut.toml`'u yoktur (repo dosyasıdır); `D:\`
+    eklemek için elinde yalnız `%APPDATA%\fillercut\config.json` vardır.
+    `[ui].izinli_kokler` oraya da yazılabilir — **sihirbazın KURULUM
+    anahtarlarına (`binary`/`model`) dokunmadan**, ayrı bir `"ui"` nesnesi
+    altında.
+
+    Sihirbaz ayarından ayrılan tek davranış BOZUK dosyadır: `binary`/`model`
+    kullanıcı yazmaz (sihirbaz yazar) ve bozuğu sessizce yok saymak
+    doğrudur; `ui.izinli_kokler`'i kullanıcı ELLE yazar — sessiz yok sayma,
+    "D:\ ekledim ama hâlâ göremiyorum" sınıfı çözümsüz bir tuzaktır.
+    """
+
+    def _yaz(self, ham: object) -> None:
+        yollar.ayar_dizini().mkdir(parents=True, exist_ok=True)
+        yollar.ayar_dosyasi().write_text(
+            json.dumps(ham, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def test_dosya_yoksa_bos(self, izole_ev: Path) -> None:
+        assert yollar.ui_izinli_kokler_oku() == []
+
+    def test_ui_bolumu_yoksa_bos(self, izole_ev: Path) -> None:
+        yollar.kurulum_yaz(binary="C:/x/w.exe", model="C:/m/a.bin")
+        assert yollar.ui_izinli_kokler_oku() == []
+
+    def test_kokler_okunur(self, izole_ev: Path) -> None:
+        self._yaz({"config_version": 1, "ui": {"izinli_kokler": ["D:\\", "E:\Video"]}})
+        assert yollar.ui_izinli_kokler_oku() == ["D:\\", "E:\Video"]
+
+    def test_yildiz_da_okunur(self, izole_ev: Path) -> None:
+        """`"*"` anlamı `fs` katmanında çözülür — okuma onu düz metin sayar."""
+        self._yaz({"ui": {"izinli_kokler": ["*"]}})
+        assert yollar.ui_izinli_kokler_oku() == ["*"]
+
+    def test_sihirbaz_anahtarlari_yaninda_yasar(self, izole_ev: Path) -> None:
+        self._yaz(
+            {
+                "config_version": 1,
+                "binary": "C:/x/w.exe",
+                "model": "C:/m/a.bin",
+                "ui": {"izinli_kokler": ["D:\\"]},
+            }
+        )
+        assert yollar.ui_izinli_kokler_oku() == ["D:\\"]
+        kurulum = yollar.kurulum_oku()
+        assert kurulum is not None
+        assert kurulum.binary == "C:/x/w.exe"
+        assert kurulum.model == "C:/m/a.bin"
+
+    def test_sihirbaz_yazmasi_ui_bolumunu_KORUR(self, izole_ev: Path) -> None:
+        """Sihirbazın indirmesi kullanıcının köklerini SİLMEMELİ.
+
+        `kurulum_yaz` dosyayı baştan yazar; bilinmeyen anahtarlar korunmazsa
+        sihirbazın bir sonraki koşusu `D:\`yi sessizce uçururdu.
+        """
+        self._yaz({"config_version": 1, "ui": {"izinli_kokler": ["D:\\"]}})
+        yollar.kurulum_yaz(binary="C:/x/w.exe")
+        assert yollar.ui_izinli_kokler_oku() == ["D:\\"]
+
+    def test_bozuk_json_ACIK_hata(self, izole_ev: Path) -> None:
+        yollar.ayar_dizini().mkdir(parents=True, exist_ok=True)
+        yollar.ayar_dosyasi().write_text("{bozuk", encoding="utf-8")
+        with pytest.raises(ConfigError) as hata:
+            yollar.ui_izinli_kokler_oku()
+        assert str(yollar.ayar_dosyasi()) in str(hata.value)
+
+    def test_bozuk_json_dogrulamasiz_sessiz(self, izole_ev: Path) -> None:
+        """İstek başına çözümde bozuk dosya route'u 500 yapmamalı."""
+        yollar.ayar_dizini().mkdir(parents=True, exist_ok=True)
+        yollar.ayar_dosyasi().write_text("{bozuk", encoding="utf-8")
+        assert yollar.ui_izinli_kokler_oku(dogrula=False) == []
+
+    def test_ui_liste_degilse_ACIK_hata(self, izole_ev: Path) -> None:
+        self._yaz({"ui": {"izinli_kokler": "D:\\"}})
+        with pytest.raises(ConfigError):
+            yollar.ui_izinli_kokler_oku()
+
+    def test_ui_tablo_degilse_ACIK_hata(self, izole_ev: Path) -> None:
+        self._yaz({"ui": "D:\\"})
+        with pytest.raises(ConfigError):
+            yollar.ui_izinli_kokler_oku()
+
+    def test_bos_dize_girdisi_ACIK_hata(self, izole_ev: Path) -> None:
+        self._yaz({"ui": {"izinli_kokler": ["D:\\", "  "]}})
+        with pytest.raises(ConfigError):
+            yollar.ui_izinli_kokler_oku()
+
+    def test_sihirbaz_okumasi_bozuk_dosyada_HALA_sessiz(self, izole_ev: Path) -> None:
+        """Regresyon: `ui` katı diye sihirbazın toleransı DEĞİŞMEMELİ."""
+        yollar.ayar_dizini().mkdir(parents=True, exist_ok=True)
+        yollar.ayar_dosyasi().write_text("{bozuk", encoding="utf-8")
+        assert yollar.kurulum_oku() is None
