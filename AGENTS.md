@@ -263,6 +263,96 @@ değil AFFORDANSTA: `opacity: .45` altındaki yeşil dolgu koyu zeminde hâlâ
 basılabilir okunuyordu. Tek `.dugme:disabled` kuralı iki varyantı da
 nötrleştirir (dolgu düşer, kenarlık + soluk metin kalır).
 
+**GERÇEK DOĞRULAMA — KURULU EXE (yerel build + Inno, ÜZERİNE kurulum, 1.3.0):**
+- **Madde 2-4:** `--version` **1.3.0**, `_internal`de **tek**
+  `fillercut-1.3.0.dist-info` (KI-15 yükseltme yolu temiz),
+  `vendor/wavesurfer.min.js` sha256 repodakiyle **birebir** (`A943CBE7…`).
+- **Madde 5-6:** `fillercut-ui.exe` çift tıklama koşuluyla başlatıldı (std
+  tanıtıcı devri YOK) → **native pencere**, `MainWindowTitle='Filler-Cut'`,
+  1280×800, `/api/instance` 200. `fillercut.exe ui --tani`:
+  `WebView2: var`, `pywebview: var`, `native pencere: hazir`.
+- **KOYU BAŞLIK ÇUBUĞU — A/B ile ölçüldü.** `DwmGetWindowAttribute(hwnd, 20)`
+  Filler-Cut penceresinde **1**; aynı anda yaratılan, dokunulmamış bir
+  WinForms penceresinde **0**. Makine açık temada (`AppsUseLightTheme = 1`),
+  yani düzeltme olmasaydı pywebview 0 yazacaktı — okunan 1, kancanın
+  `before_show`ta gerçekten koştuğunun kanıtı.
+- **Madde 8 (KI-16) — GÖZCÜ İLE ÖLÇÜLDÜ:** analiz + render boyunca
+  **1392 örnekte 0 yeni konsol penceresi** (`taban=0 enCok=0`). Gözcü hem
+  `ConsoleWindowClass` hem `CASCADIA_HOSTING_WINDOW_CLASS` sayar.
+- **Madde 9 — uçtan uca (kurulu exe, `test1.mp4`):** peaks analizden ÖNCE
+  geldi (25677 ms, 8000 bin), **5 kesim**, `tiers.silence = 6`, **%21.67
+  kazanım** — Dalga A'nın sayılarıyla birebir. Render Al → MP4 yazıldı.
+- **PARİTE:** `test1_temiz.mp4` SHA-256
+  `f5185e7e…d89004` — kayıtlı referansla **BİREBİR AYNI**. Dalga B pipeline
+  davranışına dokunmadı.
+- **Madde 7 — yaşam döngüsü:** "Kapat" → süreç **2,1 sn**de öldü, 8765
+  serbest, kalan `fillercut*` **0**, öksüz `msedgewebview2` **0**. İkinci
+  başlatma yeni süreç DOĞURMADI (`once=1 sonra=1`, portta aynı pid).
+- Kullanıcının `Filler-Cut-Test` klasörü koşu öncesi hâline geri konuldu
+  (yedekle-geri koy kuralı; geri konan MP4'ün hash'i doğrulandı).
+
+**TAŞIMA (transport) DAVRANIŞI KURULU PAKETTEN ÖLÇÜLDÜ** (kurulu sunucunun
+servis ettiği `app.js`/`style.css` ile; ikisinin de Dalga B içeriği taşıdığı
+`fetch` ile doğrulandı):
+- duraklamışken Filler Listesi'nden `[15245,17364)` kesimine tıklandı →
+  playhead **15245** (Dalga A'da 17364'e fırlıyordu).
+- 15300'den (kesiğin İÇİ) oynat → `play` anında **17364**'e oturdu.
+- sona kadar süren sentetik kesim `[20000,25677]` → playhead **20000**,
+  oynatma DURDU.
+- `atlamalı` kapalı → hedef `null`; kesik dışında → `null`.
+- Boşluk oynattı/durdurdu · L,L → **2×** + rozet "▶▶ 2×" · K → 1×, rozet
+  boş, duraklattı · J → geri, 600 ms'de tam **600 ms** geri gitti, rozet
+  "◀◀ 1×" · M mıknatısı çevirdi · →/← 10000→15000→10000 ms.
+- **Gerçek FARE tıklaması:** "Mıknatıs" düğmesine tıklandı, düğme çalıştı ve
+  `document.activeElement` **BODY** kaldı — düğme odağı ALMADI (kök çözümün
+  birinci katmanı).
+- INPUT odaklıyken Boşluk oynatmadı.
+
+**KALICI DEPOLAMA — GERÇEK WEBVIEW2 ÜZERİNDE A/B:** ürünün kendi
+`start(private_mode=False, storage_path=…)` çağrısıyla açılan pencere
+`fillercut.sol-en = 444` yazdı; **AYRI BİR SÜREÇ** aynı sayfayı açtığında
+`localStorage` **"444"**, `--sol-en` **444px** ve sol panel **444 px**
+ölçüldü. Negatif kontrol — eski çağrı (`webview.start()`, gizli kip): aynı
+sayfada `localStorage` **null**, panel varsayılan **290px**. Kurulu koşuda
+WebView2 komut satırı da doğrulandı:
+`--user-data-dir=%LOCALAPPDATA%\fillercut\webview\EBWebView`, InPrivate
+bayrağı YOK. Test profili sonra silindi (tur öncesi de yoktu).
+
+**AYIRICILAR — YEREL SUNUCUDA ÖLÇÜLDÜ (1280×800):** varsayılan 290 px /
+183 px, görünür pencere tam **108 px** (Dalga A ölçüsü), taşma 0. Sürükle →
+410 px ve `localStorage`a yazıldı; yeniden yüklemede geri geldi. Çok sağa →
+**520** (enCok), çok sola → **200** (enAz), çift tık → **290**. Bozuk
+("saçma") ve negatif ("-50") değer → varsayılan; "9999" → 520. Çizelge
+183 → 303 px büyütüldüğünde dalga tuvalleri **1228×88 → 1228×208** oldu
+(gecikmeli yeniden yaratım).
+
+**SESSİZ VİDEO — UÇTAN UCA:** 6 sn tamamen sessiz mp4 → pipeline
+`CutPlanError` → iş `failed` → ekranda `analiz` paneli `block`→`none`, hata
+kartı `none`→`block`, başlık **"Bu videoda kesilecek konuşma bulunamadı (ses
+yok ya da tamamı sessizlik)."**, teknik cümle "Log detayı"nda, SSE kapalı,
+"Değiştir" aktif. "Yeni video" → temiz `bos` (jobId/seçili/görünüm null).
+Kök dışı yolla "Kesimi Başlat" → aynı hata kartı, sunucunun kendi Türkçesi.
+
+**Üçlü yeşil:** **1543 passed**, ruff ve mypy temiz (tam kapsam, repo
+kökünden). Donanım/artefakt marker'ları: `-m ffmpeg` **10 passed / 6
+skipped** (yalnız NVENC+QSV donanım yokluğu — bu makine AMD), `-m wcpp`
+**3 passed** (gerçek whisper-cli + Vulkan), `-m exe` **7 passed**.
+Marker dağılımı: `web` 195, `xml` 114, `ffmpeg` 16, `exe` 7, `wcpp` 3,
+`ag` 1 (toplam koleksiyon 1568).
+
+**BU TURDA DOĞRULANAMAYAN TEK ŞEY — İNAN'IN GÖZÜ GEREKİYOR.** Native
+pencereye **fiziksel klavye** ile tuş göndermek ve pencereyi öne getirip
+görsel doğrulamak yapılmadı: her ikisi de foreground'u kullanıcıdan çalmayı
+gerektiriyor (Windows foreground kilidi — KI-13'ün mekanizması) ve kullanıcı
+makineyi kullanıyordu. Otomasyonun `computer key` kanalı da `ev.code`
+DOLDURMUYOR (yalnız `key`), o yüzden kısayollar doğru kurulmuş
+`KeyboardEvent`lerle ölçüldü. Kalan risk düşük: `ev.code` sözleşmesi
+Boşluk/←/→/Y/M ile v1.0'dan beri aynıdır ve o kısayollar kurulu sürümde
+zaten çalışıyor. **İnan'ın bakması gereken üç şey:** (1) native pencerede
+J/K/L fiziksel klavyeden, (2) bir düğmeye tıkladıktan sonra Boşluk,
+(3) ayırıcıyı sürükleyip uygulamayı kapat–aç: ölçü hatırlanmalı.
+
+
 **v1.3.0 DALGA A TAMAMLANDI (2026-09-05) — editör iskeleti.** Sürüm bump
 YOK (release ayrı iş); push/tag YOK.
 
@@ -1713,10 +1803,10 @@ Tamamlanan modüller (hepsi `main` dalında, testli):
 | `pyproject.toml` 1.0.0 + kurulu metadata bayatlık alarmı (red-first doğrulandı) | `424fc2e` |
 | `app.js`: REVIEW aşaması ara durum olaylarında donuyordu (E2E bulgusu) | `70ef7a4` |
 
-**Test sayısı:** 1495 collected (v1.3.0 Dalga A itibarıyla; passed/skipped
+**Test sayısı:** 1568 collected (v1.3.0 Dalga B itibarıyla; passed/skipped
 dağılımı donanıma bağlıdır: encoder probe'ları ve wcpp env var'ları skip
 sayısını değiştirir). CI konvansiyonuyla (`-m "not exe and not ffmpeg and not
-wcpp and not ag"`) **1470 passed / 25 deselected**. Marker dağılımı: 16'sı
+wcpp and not ag"`) **1543 passed / 25 deselected**. Marker dağılımı: 16'sı
 `ffmpeg`, 3'ü `wcpp`, 1'i `ag` (gerçek ağ indirmesi), 7'si
 `exe` (PyInstaller artefaktı; yoksa skip gerekçesi "önce build_exe.ps1")
 marker'lı (gerçek ffmpeg / gerçek
@@ -1724,7 +1814,7 @@ whisper-cli+model) — 2 test İKİ marker'ı birden taşır (re-anchor'lı refe
 kıyası hem whisper-cli hem ffmpeg ister). CI `-m "not ffmpeg and not wcpp"` ile
 atlar (`ag` ve `exe` için de: `-m 'not ag and not exe'`),
 donanım/model/ağ/artefakt yoksa ilgili testler
-kendi kendine skip eder. `xml` (114) ve `web` (151) marker'ları SEÇİM marker'ıdır: dış kaynak
+kendi kendine skip eder. `xml` (114) ve `web` (195) marker'ları SEÇİM marker'ıdır: dış kaynak
 istemezler ve CI'da koşarlar. `ag` marker'lı tek test yalnız 23 MB'lık
 binary'yi indirir — manifest hash'inin CANLI kaynakla uyumunu doğrular; modeller
 (0.5–1 GB) test içinde İNDİRİLMEZ. Web testleri
@@ -1820,6 +1910,20 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/geri_bildirim.py` + `app.py` + `static/` — telemetrisiz geri bildirim düğmesi | `6934227` |
 | README ×2 — SmartScreen uyarısı normal + SignPath notu | `bf74afb` |
 | `pyproject.toml` + `test_paketleme_pypi.py` + CHANGELOG + KNOWN_ISSUES — PyPI metadata + **1.2.1 bump** | `9d12381` |
+
+**v1.3.0 Dalga B (canlı önizleme + klavye + pencere/panel cilası + bump)**
+
+| Modül | Commit |
+|---|---|
+| `web/static/app.js` + `test_web_editor.py` — ölü `ekranGoster` çağrısı (sihirbaz kapısı hiç açılmıyordu) + **genel** tanımsız-çağrı tarayıcısı | `b502331` |
+| `web/jobs.py` (insan diline çeviri + drift kilidi) + `static/` (`data-goster="hata"`, `asamaAyarla("hata")`) + `test_web_jobs.py` / `test_web_editor.py` — `hata` durumu | `cfa66b0` |
+| `web/static/style.css` + `test_web_editor.py` — pasif düğme vurgu dolgusunu kaybeder (affordans) | `4bd5730` |
+| `web/static/` — atlama kararı tek fonksiyonda + `play` anında karar + sona kadar süren kesimde `bas`a oturma; J/K/L mekiği; düğme odağı kök çözümü (`mousedown` + `:focus-visible`) + 18 kilit | `a71337a` |
+| `web/native.py` + `test_web_native.py` — `DWMWA_USE_IMMERSIVE_DARK_MODE` (`before_show`, eski nitelik yedeği, sessiz geçiş) + pywebview kaynak kilitleri | `e8aea56` |
+| `web/static/` + `test_web_editor.py` — panel ayırıcıları (ızgara sütun/satırı, CSS değişkeni, `localStorage`, min/max + pencere tavanı) + dalga yeniden yaratımının ortak gövdesi | `7e76008` |
+| `web/static/app.js` + `test_web_editor.py` — iş başlatma hatası da `hata` durumuna düşer (görünmez kutu kapandı) | `3d68d57` |
+| `pyproject.toml` **1.3.0** + `CHANGELOG.md` `[1.3.0]` + AGENTS taslak bloğunun taşınması + `dist_pypi` | `1818902` |
+| `web/native.py` + `test_web_native.py` — `private_mode=False` + `storage_path`: native pencerede `localStorage` kalıcı | `fb30496` |
 
 **v1.3.0 Dalga A (editör iskeleti)**
 
