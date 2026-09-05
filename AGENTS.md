@@ -253,6 +253,68 @@ ve `fill="currentColor"` düştü — ikonlar görünmez olurdu) ve `apiHatasi()
 **BEKLEYEN — Release Kontrol Listesi 5-9 (kurulu exe ile).** Bu dalga yerel
 sunucuda doğrulandı; kurucu üzerinden native pencere doğrulaması ayrı adımdır.
 
+**SÜRÜM BUMP YOK — CHANGELOG taslağı burada bekliyor.** v1.2.1'in deseni:
+Dalga A/B bump etmez, epic'in SON dalgası bump'lar ve CHANGELOG bölümünü
+yazar (`tests/test_release.py::test_unreleased_bolumu_kalmadi` `[Unreleased]`
+başlığını YASAKLAR — bölüm ancak sürümle birlikte açılır). Kullanıcı dilinde
+yazılmış taslak, bump dalgasında `## [1.3.0] — <ISO tarih>` başlığı altına
+olduğu gibi taşınacak:
+
+<!-- CHANGELOG-TASLAK:1.3.0-DALGA-A -->
+**v1.3.0 Dalga A — editör iskeleti.** Arayüz tek ekranlı bir "proje"
+görünümüne dönüştü. Kesim mantığı, kesim sonuçları ve komut satırı
+DEĞİŞMEDİ: düzenlemesiz bir koşu, düzeltmeden önceki referans videoyla
+**bit düzeyinde aynı** MP4 üretir (gerçek koşuda doğrulandı).
+
+### Eklendi
+
+- **Tek ekranlı editör düzeni.** Üst bar (Kesimi Başlat · Render Al · Kapat),
+  sol panel (medya kartı + **Filler Listesi**: zaman + kelime + tür; tıklayınca
+  oynatma başlığı oraya gider), orta önizleme, sağ panel (kesim özeti / aşama
+  ilerlemesi / sonuç) ve **kalıcı zaman çizelgesi**. Ayrı "başlangıç ekranı"
+  kalktı; video proje içinden seçilir (sürükle-bırak ve klasör gezgini aynen
+  duruyor).
+- **Dalga formu artık video seçilir seçilmez görünüyor.** Önceden analiz
+  bitene kadar beklemek gerekiyordu; ses zarfı ve süre şimdi arka planda
+  hesaplanıp dosya başına önbellekleniyor — aynı videoyu ikinci kez açmak
+  hiçbir şey hesaplamaz.
+- **Zaman çizelgesinde yakınlaştırma** (1×–16×) ve zaman cetveli. Yakınlaşınca
+  cetvel otomatik sıklaşır, oynatma başlığı görüş alanında tutulur.
+- **Dışa aktarım biçimi artık "Render Al"a basınca soruluyor** (MP4 / NLE
+  projesi + altyazı kutusu). Önceden analizden ÖNCE seçmek gerekiyordu; artık
+  kesimleri gördükten sonra karar veriliyor.
+- Sağ panelde **canlı kesim özeti**: mod, tür bazında sayı, kazanılan süre ve
+  plan özeti. Sayılar `rapor.json`'a yazılacak olanların aynısıdır.
+
+### Değiştirildi
+
+- **Atlamalı oynatma yalnız oynarken atlıyor.** Duraklatılmışken de atladığı
+  için Filler Listesi'nden bir kesime tıklamak kullanıcıyı kesimin **sonuna**
+  fırlatıyordu; artık tıklanan yere gidiliyor.
+- Koşu sırasında video bırakıldığında verilen uyarı tek metne indirildi ve
+  üst bardaki durum satırında da görünüyor (dropzone o sırada gizli olduğu
+  için uyarı görünmüyordu).
+
+### Düzeltildi
+
+- **Diyaloglar sessizce hiçbir şey yapmıyordu (KI-17).** Tarayıcı motoru
+  `<dialog>` kapanış olayını hiç bildirmiyor; "Analizi başlat"a basınca modal
+  kapanıyor ama iş başlamıyordu.
+
+### Teknik
+
+- `wavesurfer.js` 7.12.11 (BSD-3-Clause) **vendor** edildi — CDN yok, uygulama
+  çevrimdışı çalışır. Sürüm ve SHA-256 `web/static/vendor/vendor.json`'da,
+  kilidi testte.
+- `ReviewKarari` **eklemeli** iki alan kazandı (`cikti`, `srt`): `None`
+  varsayılanı config'i geçerli kılar, yani CLI yolu bit-birebir korunur.
+- Yeni uçlar: `GET /api/medya/onizleme` (süre + zarf, arka planda + önbellekli)
+  ve `GET /api/medya/video` (iş başlamadan önizleme, HTTP Range ile).
+- `ReviewGorunumu` `tiers` ve kesim başına `kelimeler` taşıyor; ikisi de
+  mevcut reason-zinciri ayrıştırmasının TEK gövdesinden türer (KI-3 ailesi).
+<!-- /CHANGELOG-TASLAK -->
+
+
 **v1.2.4 HOTFIX TAMAMLANDI (2026-09-04) — konsolsuz exe'de boş konsol
 pencereleri (KI-16).** Sürüm 1.2.3 → **1.2.4**. Push/tag/release YOK.
 
