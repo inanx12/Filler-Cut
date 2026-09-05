@@ -161,6 +161,98 @@ kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
 ## Mevcut Durum (2026-09-02)
 
+**v1.3.0 DALGA A TAMAMLANDI (2026-09-05) — editör iskeleti.** Sürüm bump
+YOK (release ayrı iş); push/tag YOK.
+
+**Kapsam.** Tek ekranlı proje görünümü: üst bar + sol panel (medya kartı +
+Filler Listesi) + orta önizleme + sağ panel (kesim özeti / aşama ilerlemesi /
+sonuç) + kalıcı zaman çizelgesi (cetvel + dalga + bloklar + playhead + zoom).
+Başlangıç ekranı kalktı; dropzone/gezgin bileşenleri AYNEN yeniden kullanıldı
+(ev hapsi ve `"*"` kökleri değişmedi). Her panel işlevli — boş sekme yok.
+
+**GÖRÜNÜRLÜĞÜN TEK KAYNAĞI `body[data-asama]`.** JS yalnız o özniteliği yazar
+(`asamaAyarla`), CSS `[data-asama]` + `data-goster` ile panelleri açar. Durum
+makinesi: `bos → yuklendi → analiz → analiz_tamam → render → sonuc`. İki
+yerde birden gösterme/gizleme yapmak "hangi ekran açık" sorusunu
+belirsizleştirirdi; eski `ekran-*` bölmeleri bu yüzden öldü (`ekran-yok` ve
+`ekran-kurulum` PERDE olarak kaldı).
+
+**ZAMAN ÇİZELGESİ ÖLÇEK MODELİ.** `#tl-viewport` görünür pencere, `#tl-track`
+zoom kadar GENİŞ iç şerittir (`width: zoom*100%`). Bütün konumlar track'in
+YÜZDESİDİR — zoom tek bir genişlik güncellemesiyle dalgayı, blokları,
+playhead'i ve cetveli birlikte taşır ve **sürükleme matematiği hiç değişmez**.
+Bir sonraki agent bunu "görünür pencereye göre yeniden hesaplayalım" diye
+sadeleştirmemeli: v1.0'ın snap/clamp/union aynası o an kırılır.
+
+**PIPELINE'A EKLEMELİ TEK DOKUNUŞ (İnan onaylı).** `ReviewKarari.cikti/.srt`
+— `None` "config geçerli" demektir. Gerekçe: format "Render Al"da sorulur
+(onaylanmış varyant 1), pipeline ise çıktı kolunu review kancasından SONRA
+okur ve `Config` frozen'dır. Kilitli kuralın metni de güncellendi (bkz. İş
+Akışı): **"Pipeline DAVRANIŞINA dokunma yok; eklemeli karar kanalları
+serbest."** Bedeli: `review_cb` bekleyen koşuda encoder probe'u formattan
+ÖNCE koşar (kullanıcı XML'den MP4'e dönebilir). Rapor yine YALAN SÖYLEMEZ —
+`_encoder_bilgisi` alanı yalnız gerçekten encode eden kolda doldurur
+(gerçek XML koşusunda `encoder: null` ölçüldü).
+
+**PEAKS ARTIK ANALİZDEN ÖNCE** (`web/medya.py`). Yeni ffmpeg sözleşmesi YOK:
+`probe_duration_ms` + `extract_audio` + `peaks_from_wav` besteleniyor, yani
+`surec` kapısı ve KI-16 garantisi kendiliğinden geliyor. Önbellek anahtarı
+yol DEĞİL **(yol, mtime_ns, boyut)** — aynı yola yeni dosya yazılabilir.
+Süre ZORUNLU, dalga YAN: zarf üretilemezse kayıt yine `hazir` olur.
+Bedeli bilinçli: ses bir kez burada, bir kez EXTRACT'ta çözülür; alternatifi
+(pipeline'ın WAV'ını beklemek) tam olarak kaldırdığımız gecikmedir.
+
+**ÜÇ KUSUR GERÇEK KOŞUDA YAKALANDI (hiçbiri yeşil testte görünmedi):**
+- **KI-17 — `<dialog>` `close` olayı HİÇ dispatch edilmiyor.** Diyalog
+  kapanıyor, `returnValue` doğru doluyor, olay yok; hem form gönderiminde
+  hem elle `close()`ta. "Analizi başlat"a basınca modal kapanıyor ve
+  **hiçbir şey olmuyordu** — sessiz no-op'un üçüncü örneği (KI-13, KI-14).
+  Kanca `submit` + `ev.submitter` oldu.
+- **wavesurfer kabını YARATILDIĞI anda ölçüyor.** Kap sonradan
+  genişlediğinde tuvalleri yenilemiyor: zoom 8×'te 9824 px'lik şeride
+  1228 px'lik tuval kalıyordu. `setOptions` düzeltmedi; `zoom()` düzeltti
+  ama ikinci bir tuval katmanı ekledi. Tek temiz yol örneği **yeniden
+  yaratmaktır** (gecikmeli — kaydırıcı sürüklenirken her karede değil).
+  Ölçüm: zoom 1/4/8/16'da tuval toplamı = 2 × track genişliği (wave +
+  progress katmanı), hepsinde birebir.
+- **Atlamalı oynatma duraklamışken de atlıyordu.** Filler Listesi'nden bir
+  kesime tıklamak kullanıcıyı kesimin SONUNA fırlatıyordu (ölçüldü:
+  15245 ms'e tıklandı, oynatıcı 17364 ms'e düştü) — yani "tıkla, oraya git"
+  hiç çalışmıyordu. Atlama artık yalnız `!oynatici.paused` iken.
+
+**Tuzak (bir sonraki agent için) — ekranı yeniden yazarken orijinali DIFF'LE.**
+Bu turda `app.js` yeniden yapılandırıldı ve üç blok farkında olmadan
+"hatırlayarak" yazıldı: sihirbaz (`/api/kurulum/basla` diye yanlış uç, yanlış
+gövde şeması, kayıp ilerleme alanları), `simge()` (SVG yolları yeniden çizildi
+ve `fill="currentColor"` düştü — ikonlar görünmez olurdu) ve `apiHatasi()`
+(hata metni gereksizce değişti). İkisi testlerde GÖRÜNMEDİ; fonksiyon bazlı
+`git show HEAD:… | diff` taramasıyla yakalandı. **Korunacak her blok, commit
+öncesi eski sürümle fonksiyon fonksiyon karşılaştırılmalı.**
+
+**GERÇEK DOĞRULAMA (yerel sunucu + gerçek video, wcpp/Vulkan + AMF):**
+- `bos → yuklendi`: `test1.mp4` seçildi, süre **25677 ms** (ffprobe) ve
+  **8000 binlik zarf** analizden ÖNCE geldi; wavesurfer tuvali gerçekten
+  boyandı (piksel örneklemesiyle doğrulandı).
+- Zoom 1/4/8/16 → track 1228/4912/9824/19648 px, tuval toplamı her seferinde
+  tam eşleşti; cetvel 13 → 103 tike sıklaştı.
+- `analiz` (Normal): 5 kesim, `tiers.silence = 6` (KI-3: birleşmiş kesim iki
+  olay taşıyor), kazanım %21.67.
+- Korunan etkileşimler ölçüldü: geri al 5→4 kesim (−695 ms) ve `tiers`
+  6→5; geri ver tam geri döndü; **sessizliğe yasla iki yönde de tavanda
+  durdu** (`11498-12611` → `10998-13111`, ±500 ms); mıknatıs anahtarı
+  `aria-pressed`i çeviriyor.
+- **Koşarken bırakma:** native köprüsü ve tarayıcı drop'u AYNI metni verdi
+  (dropzone notu + üst bar durum satırı), seçim değişmedi.
+- **PARİTE:** düzenlemesiz MP4 koşusu → `test1_temiz.mp4` SHA-256
+  `F5185E7E…D89004` — kayıtlı referansla **birebir aynı**.
+- **Format Render Al'da:** ikinci koşu XML + SRT seçildi → `test1.xml`
+  (xmeml, 5 clipitem) + `test1.srt` (kesilmiş çizgide, 00:00:00'dan başlıyor)
+  yazıldı ve raporun `encoder` alanı **null** kaldı.
+- Test klasörü koşu öncesi hâline geri konuldu (yedekle-geri koy kuralı).
+
+**BEKLEYEN — Release Kontrol Listesi 5-9 (kurulu exe ile).** Bu dalga yerel
+sunucuda doğrulandı; kurucu üzerinden native pencere doğrulaması ayrı adımdır.
+
 **v1.2.4 HOTFIX TAMAMLANDI (2026-09-04) — konsolsuz exe'de boş konsol
 pencereleri (KI-16).** Sürüm 1.2.3 → **1.2.4**. Push/tag/release YOK.
 
@@ -1583,6 +1675,19 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/geri_bildirim.py` + `app.py` + `static/` — telemetrisiz geri bildirim düğmesi | `6934227` |
 | README ×2 — SmartScreen uyarısı normal + SignPath notu | `bf74afb` |
 | `pyproject.toml` + `test_paketleme_pypi.py` + CHANGELOG + KNOWN_ISSUES — PyPI metadata + **1.2.1 bump** | `9d12381` |
+
+**v1.3.0 Dalga A (editör iskeleti)**
+
+| Modül | Commit |
+|---|---|
+| `web/static/vendor/` — wavesurfer.js 7.12.11 UMD + lisans + `vendor.json` (sha256 kaydı, sürüm paketin kendi `package.json`'ından) + `test_web_vendor.py` (CDN yasağı, sha256, UMD kilidi) | `8ff9d62` |
+| `.gitattributes` — vendor baytları `-text` (autocrlf taze klonda sha256 kilidini kırıyordu) | `8d5dfef` |
+| `pipeline.py` — `ReviewKarari.cikti/.srt` (eklemeli, `None` = config), `probe_gerekli` genişlemesi, `_encoder_bilgisi` (XML kolunda alan boş kalır) + 12 kilit | `8722cc5` |
+| `AGENTS.md` — "pipeline'a dokunma yok" kuralının kapsamı (davranış ≠ eklemeli kanal) | `e867c09` |
+| `web/medya.py` — analizden ÖNCE peaks + süre, arka planda, (yol, mtime, boyut) anahtarlı önbellek; `GET /api/medya/onizleme` + `/api/medya/video`; `fs.medya_mime` tek kaynak + 19 test | `d7caca8` |
+| `json_report.reason_kelimeleri` (KI-3 kelime yarısı tek gövde) + `KesimGorunumu.kelimeler` + `ReviewGorunumu.tiers` (uygulanmış plandan) + 9 kilit | `cfc0306` |
+| `web/jobs.py` — `OnayIstek` (approve gövdesi: `cikti`/`srt`), `Job.onayla` format teslimi + 7 kilit | `7719476` |
+| `web/static/` — tek ekranlı editör düzeni (index/style/app), durum makinesi, wavesurfer'lı çizelge + zoom, iki diyalog; `test_web_editor.py` (31 kilit) + KI-17 | `d1faccc` |
 
 **v1.2.1 Mikro C.2 (izinli_kokler "*" otomatik sürücü modu)**
 
