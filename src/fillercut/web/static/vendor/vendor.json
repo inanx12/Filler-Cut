@@ -1,0 +1,15 @@
+{
+  "_aciklama": "Vendor edilmis ucuncu taraf istemci kutuphaneleri. CDN YOK: uygulama cevrimdisi calisir ve konsolsuz exe'de basarisiz bir CDN istegi sessiz kalirdi. Surum ve sha256 PAKETIN KENDISINDEN uretildi (ezberden yazilmadi); tests/test_web_vendor.py sha256'yi dosyayla karsilastirir.",
+  "paketler": [
+    {
+      "ad": "wavesurfer.js",
+      "surum": "7.12.11",
+      "lisans": "BSD-3-Clause",
+      "kaynak": "npm pack wavesurfer.js@7.12.11 -> package/dist/wavesurfer.min.js",
+      "dosya": "wavesurfer.min.js",
+      "sha256": "a943cbe71700ae910d1c6db28fc56e06327f2a890e93fa22e4d736aa2f5797da",
+      "lisans_dosyasi": "wavesurfer.LICENSE.txt",
+      "kullanim": "review zaman cizelgesindeki dalga formu (web/static/app.js)"
+    }
+  ]
+}

@@ -30,6 +30,7 @@ Filler-Cut MIT lisansıyla dağıtılır (bkz. `LICENSE`). Uygulama aşağıdaki
 | [NumPy](https://numpy.org/) | BSD 3-Clause | Dalga formu analizi |
 | [RapidFuzz](https://github.com/rapidfuzz/RapidFuzz) | MIT | Bulanık filler eşleştirme |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) | MIT | faster-whisper VAD'ı |
+| [wavesurfer.js](https://github.com/katspaugh/wavesurfer.js) | BSD 3-Clause | Gözden geçirme ekranının dalga formu; `web/static/vendor/` altına **vendor** edilmiştir (CDN YOK — uygulama çevrimdışı çalışır). Sürüm ve sha256 `vendor/vendor.json`'da. |
 | [Microsoft Edge WebView2 Evergreen Bootstrapper](https://developer.microsoft.com/microsoft-edge/webview2/) | Microsoft yeniden dağıtım izni | Kurucuya gömülür; yalnız WebView2 çalışma zamanı **eksikse** çalıştırılır. Microsoft bootstrapper'ın uygulamayla paketlenmesine açıkça izin verir. |
 
 ## İlk çalıştırmada indirilen (kurucu indirmez)
