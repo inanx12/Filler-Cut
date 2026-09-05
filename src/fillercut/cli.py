@@ -754,14 +754,15 @@ def ui(
         return
     try:
         cfg = load_config(config)
-        # İzinli kökleri BURADA çöz (socket açılmadan): var olmayan bir kök
-        # ConfigError verir ve aynı temiz Türkçe hata yoluna girer. Çözülmüş
+        # İzinli kökleri BURADA çöz (socket açılmadan): var olmayan bir kök,
+        # bozuk bir kullanıcı `config.json`'u (v1.3.1) ConfigError verir ve aynı
+        # temiz Türkçe hata yoluna girer. Çözülmüş
         # liste create_app'e geçer (orada yeniden çözülmez) ve native diyaloğun
         # açılış klasörünü besler. Tembel import: `fs` fastapi çeker, düz CLI
         # yolu ödememeli (bu dal zaten `ui` komutu).
         from fillercut.web import fs as _fs
 
-        izinli_kokler = _fs.izinli_kokler_coz(cfg.ui.izinli_kokler, Path.home())
+        izinli_kokler = _fs.etkin_kokler_coz(cfg.ui.izinli_kokler, Path.home())
     except ConfigError as exc:
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc

@@ -30,7 +30,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 
 from fillercut import surec
-from fillercut.config import ConfigError
+from fillercut.config import ConfigError, paketlenmis_mi
+from fillercut.kurulum import yollar as kurulum_yollari
 
 _log = logging.getLogger(__name__)
 
@@ -235,6 +236,49 @@ def izinli_kokler_coz(
     return sonuc
 
 
+def etkin_ham_kokler(
+    cfg_kokler: Sequence[str], *, dogrula: bool = True
+) -> list[str]:
+    """Etkin HAM kök listesi — iki yerel config kaynağının öncelik kapısı (v1.3.1).
+
+    **Öncelik: proje ``filler-cut.toml``'u > kullanıcı ``config.json``'u.**
+    Toml doluysa ``config.json`` HİÇ okunmaz (bozuk olsa bile startup'ı
+    düşürmez). Gerekçe: toml kullanıcının koşunun YANINA açıkça koyduğu
+    dosyadır ve reponun kendi zinciri de ("CLI > config dosyası > default")
+    açık olanı üstte tutar; ayrıca toml'u zaten olan bir kurulumda davranış
+    BİREBİR aynı kalır — sessiz genişleme yok. İki liste BİRLEŞTİRİLMEZ:
+    birleştirme, kullanıcının toml'dan sildiği bir kökün makine ayarından
+    geri gelmesi demekti.
+
+    ``config.json`` neden gerekli: kurulu exe'nin ``filler-cut.toml``'u YOKTUR
+    (o repo dosyasıdır), yani kurulu kullanıcı v1.3.0'a kadar ikinci bir
+    sürücüyü HİÇ açamıyordu.
+
+    **Güvenlik invariant'ı DEĞİŞMEDİ:** iki kaynak da YEREL config
+    dosyasıdır; kökleri değiştiren bir API ucu ya da CLI bayrağı YOKTUR.
+
+    Boş toml listesi "ayarlanmadı" sayılır — "açıkça hiçbir ek kök" demenin
+    ayrı bir yolu yoktur (gerekirse ``config.json``'daki bölüm silinir).
+    """
+    if cfg_kokler:
+        return list(cfg_kokler)
+    return kurulum_yollari.ui_izinli_kokler_oku(dogrula=dogrula)
+
+
+def etkin_kokler_coz(
+    cfg_kokler: Sequence[str], ev: Path, *, dogrula: bool = True
+) -> list[Path]:
+    """Kaynak seçimi + disk çözümü tek çağrıda (çağıranların TEK kapısı).
+
+    ``etkin_ham_kokler`` hangi dosyanın konuştuğuna karar verir,
+    ``izinli_kokler_coz`` sonucu diske bağlar. ``dogrula`` ikisine de aynen
+    geçer: startup'ta açık hata, istek başına sessiz atlama.
+    """
+    return izinli_kokler_coz(
+        etkin_ham_kokler(cfg_kokler, dogrula=dogrula), ev, dogrula=dogrula
+    )
+
+
 def guvenli_yol(
     istek: str | None, ev: Path, *, izinli_kokler: Sequence[Path] = ()
 ) -> Path | None:
@@ -380,6 +424,26 @@ def izinli_kokler_state(request: Request) -> list[Path]:
     return cast("list[Path]", cozucu())
 
 
+def kok_genisletme_ipucu() -> str:
+    """403 mesajının "nasıl genişletirim?" yarısı — KOŞUYA GÖRE değişir (v1.3.1).
+
+    Kurulu kullanıcıya ``filler-cut.toml``'u göstermek ÇÖZÜMSÜZ bir yoldu:
+    o dosya repoda yaşar, kurulu exe onu ne okur ne de kullanıcı nerede
+    olduğunu bilir. Paketlenmiş koşuda bu yüzden ``config.json``'un TAM yolu
+    ve yazılacak anahtar verilir; pip/kaynak koşusunda toml doğru cevaptır
+    (CWD'de aranır ve kullanıcı onu zaten yazmıştır).
+    """
+    if paketlenmis_mi():
+        # JSON'da ters bölü KAÇIRILIR: kullanıcı bu satırı olduğu gibi
+        # kopyalayacak, geçerli JSON olmalı (kilit: örnek parse edilir).
+        ornek = '"ui": {"izinli_kokler": ["D:\\\\"]}'
+        return (
+            f"Başka bir sürücüyü açmak için {kurulum_yollari.ayar_dosyasi()} "
+            f"dosyasına şunu ekleyin: {{{ornek}}}"
+        )
+    return "filler-cut.toml [ui].izinli_kokler ile genişletilir."
+
+
 def _izinli_konumlar_metni(ev: Path, izinli_kokler: Sequence[Path]) -> str:
     """403 mesajı için izinli kökleri sayan metin ("Ev dizini, D:\\, E:\\")."""
     parcalar = ["Ev dizini"]
@@ -412,8 +476,8 @@ def secimi_dogrula(
             status_code=403,
             detail=(
                 "İzin verilen konumlar dışındaki dosya işlenemez — yol reddedildi. "
-                f"İzinli konumlar: {_izinli_konumlar_metni(ev, izinli_kokler)} "
-                "(filler-cut.toml [ui].izinli_kokler ile genişletilir)."
+                f"İzinli konumlar: {_izinli_konumlar_metni(ev, izinli_kokler)}. "
+                f"{kok_genisletme_ipucu()}"
             ),
         )
     if hedef.is_dir():

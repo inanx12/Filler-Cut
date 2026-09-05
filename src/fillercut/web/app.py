@@ -136,10 +136,11 @@ def create_app(
             içindir (tmp_path hapsi). Job başlatma da AYNI hapisten geçer.
         izinli_kokler: Ev DIŞINDAKİ izinli kökler (v1.2.1 B.2). Verilirse
             olduğu gibi (çözülerek) kullanılır — TEST ENJEKSİYONU yolu.
-            ``None`` ise ``config.ui.izinli_kokler``ten çözülür ve varlığı
-            doğrulanır (``fs.izinli_kokler_coz``; var olmayan kök
-            ``ConfigError``). Üretimde ``cli.ui`` çözülmüş listeyi geçirir —
-            hata orada, socket açılmadan yakalanır.
+            ``None`` ise ``config.ui.izinli_kokler``ten VE kullanıcının
+            ``config.json``'undan çözülür (``fs.etkin_kokler_coz``; öncelik
+            proje toml'u > config.json, v1.3.1) ve varlığı doğrulanır (var
+            olmayan kök ``ConfigError``). Üretimde ``cli.ui`` çözülmüş
+            listeyi geçirir — hata orada, socket açılmadan yakalanır.
         kayit: Job kaydı; verilmezse gerçek pipeline koşucusuyla kurulur.
             Route testleri sahte/kontrollü koşuculu kayıt enjekte eder —
             testlerde gerçek video koşusu YOK (handoff).
@@ -168,10 +169,10 @@ def create_app(
         def fs_kok_cozucu() -> list[Path]:
             return sabit_kokler
     else:
-        fs.izinli_kokler_coz(cfg.ui.izinli_kokler, ev, dogrula=True)  # startup doğrulaması
+        fs.etkin_kokler_coz(cfg.ui.izinli_kokler, ev, dogrula=True)  # startup doğrulaması
 
         def fs_kok_cozucu() -> list[Path]:
-            return fs.izinli_kokler_coz(cfg.ui.izinli_kokler, ev, dogrula=False)
+            return fs.etkin_kokler_coz(cfg.ui.izinli_kokler, ev, dogrula=False)
 
     job_kayit = kayit if kayit is not None else JobKayit(kosucu=_pipeline_kosucu(cfg))
     kurulum_yoneticisi = (
