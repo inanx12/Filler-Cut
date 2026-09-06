@@ -269,8 +269,8 @@ class TestOluCagriYok:
     #: çağrılar dışarıda bırakılır.
     GLOBALLER = frozenset({
         "Error", "EventSource", "Float32Array", "Number", "ResizeObserver",
-        "Set", "String", "clearInterval", "clearTimeout", "encodeURIComponent",
-        "fetch", "setInterval",
+        "Set", "String", "cancelAnimationFrame", "clearInterval", "clearTimeout",
+        "encodeURIComponent", "fetch", "requestAnimationFrame", "setInterval",
     })
 
     #: Çağrı gibi görünen ama anahtar sözcük olanlar (`if (`, `catch (`, …).

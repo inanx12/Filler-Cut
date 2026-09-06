@@ -797,6 +797,51 @@ function playheadGorunurTut(ms) {
   }
 }
 
+/* ── playhead: rAF döngüsü ─────────────────────────────────────────────
+ *
+ * Konum eskiden `timeupdate`e bağlıydı ve o olay saniyede ~4 kez ateşlenir
+ * (aynı oran bu dosyada `play` yorumunda zaten ölçülüydü) — beyaz çubuk gözle
+ * SEKEREK ilerliyordu. Artık oynarken her karede `requestAnimationFrame` ile
+ * tazelenir.
+ *
+ * **İNTERPOLASYON YOK.** Her karede medyanın GERÇEK `currentTime`ı okunur;
+ * konum tahmin edilmez. Bunun bedeli yok, faydası büyük: seek (çizelgeye
+ * tıklama, J/K/L mekiği, kenar sürükleme) anında yapışır — tahmin edilen bir
+ * konumun yeni zamana "yetişmesi" beklenmez.
+ *
+ * Döngü YALNIZ oynarken ve sekme görünürken döner: `paused` ya da
+ * `document.hidden` iken kendini durdurur, boşa kare istemez. `timeupdate`
+ * kancası KALDIRILMADI — duraklamışken programatik `currentTime` değişimi
+ * oradan da yakalanır ve atlama (kesim geçme) kararı ona bağlıdır.
+ */
+let playheadRaf = null;
+
+function playheadDonguSurdur() {
+  playheadRaf = null;
+  const oynatici = el("oynatici");
+  if (oynatici.paused || document.hidden) return; // döngü kendini kapatır
+  playheadTazele();
+  playheadRaf = requestAnimationFrame(playheadDonguSurdur);
+}
+
+function playheadDonguBaslat() {
+  if (playheadRaf !== null) return; // iki paralel döngü konumu iki kat hızlandırırdı
+  const oynatici = el("oynatici");
+  if (oynatici.paused || document.hidden) return;
+  playheadRaf = requestAnimationFrame(playheadDonguSurdur);
+}
+
+function playheadDonguDurdur() {
+  if (playheadRaf === null) return;
+  cancelAnimationFrame(playheadRaf);
+  playheadRaf = null;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) playheadDonguDurdur();
+  else playheadDonguBaslat(); // yalnız hâlâ oynuyorsa sürer (başlat kendi bakar)
+});
+
 /* ── panel ayırıcıları ─────────────────────────────────────────────────
  *
  * Sol panel GENİŞLİĞİ ve zaman çizelgesi YÜKSEKLİĞİ sürükle-ayarlanır ve
@@ -1678,6 +1723,7 @@ el("oynatici").addEventListener("timeupdate", () => {
 el("oynatici").addEventListener("play", () => {
   el("btn-oynat").innerHTML = "&#10073;&#10073;";
   atlamayiUygula(el("oynatici").currentTime * 1000);
+  playheadDonguBaslat();
 });
 
 /* Playhead senkronu İKİ YÖNLÜDÜR: video → çizelge burada (`timeupdate` +
@@ -1686,8 +1732,13 @@ el("oynatici").addEventListener("play", () => {
 el("oynatici").addEventListener("seeked", playheadTazele);
 el("oynatici").addEventListener("pause", () => {
   el("btn-oynat").innerHTML = "&#9654;";
+  playheadDonguDurdur();
+  playheadTazele(); // son kare ile duraklama anı arasındaki farkı kapat
 });
-el("oynatici").addEventListener("ended", () => shuttleSifirla());
+el("oynatici").addEventListener("ended", () => {
+  playheadDonguDurdur();
+  shuttleSifirla();
+});
 
 function oynatDurdur() {
   const oynatici = el("oynatici");
