@@ -21,6 +21,7 @@ dosyadır; tehdit modeli değişmez.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -263,3 +264,35 @@ class TestInvariantRegresyonu:
         assert client.get("/api/fs/browse").json()["kokler"] == [
             {"ad": fs.EV_ETIKETI, "yol": str(ev.resolve())}
         ]
+
+
+class TestSuiteYalitimi:
+    """`conftest` autouse yalıtımının kilidi — v1.3.1'de ÖLÇÜLEN sessiz tuzak.
+
+    Kökler artık makine-genel bir dosyadan da okunuyor. Yalıtım kalkarsa
+    `create_app()` çağıran her test, koşturan makinenin kullanıcı tercihini
+    içeri alır: İnan'ın makinesinde `["*"]` yazılıyken "ev dışı yol 403"
+    kilitlerinin 12'si düştü. Asıl tehlike düşen testler değil, DÜŞMEYEN
+    CI'ydı — runner'da o dosya yok, suite orada yeşil kalır ve güvenlik
+    kilitleri yalnızca özelliği fiilen kullanan makinelerde anlamsızlaşırdı.
+
+    Bu sınıf bilinçli olarak `izole_ayar` fixture'ını İSTEMEZ: sınanan şey
+    tam olarak autouse yalıtımının kendisidir.
+    """
+
+    def test_ayar_dosyasi_gercek_kullanici_profilinde_degil(self) -> None:
+        if sys.platform == "win32":
+            gercek = Path.home() / "AppData" / "Roaming" / "fillercut" / "config.json"
+        else:
+            gercek = Path.home() / ".config" / "fillercut" / "config.json"
+        assert yollar.ayar_dosyasi() != gercek
+
+    def test_hicbir_test_gercek_config_json_gormez(self) -> None:
+        assert yollar.ui_izinli_kokler_oku() == []
+
+    def test_create_app_makine_tercihini_iceri_ALMAZ(self, ev: Path, dkok: Path) -> None:
+        """Ev dışı yol 403 kalmalı — makinede `["*"]` yazılı olsa bile."""
+        cevap = TestClient(create_app(Config(ui=UiConfig()), fs_home=ev)).post(
+            "/api/fs/sec", json={"path": str(dkok / "d_video.mp4")}
+        )
+        assert cevap.status_code == 403

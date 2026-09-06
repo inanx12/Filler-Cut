@@ -1661,6 +1661,18 @@ SESSİZCE uçardı. Bu, özelliğin sessiz katiliydi — kilit
 örneği (ters bölü kaçırılır, kullanıcı olduğu gibi kopyalar — kilit örneği
 `json.loads` eder), pip/kaynak koşusunda eskisi gibi `filler-cut.toml`.
 
+**TUZAK — TEST YALITIMI (2026-09-06, İnan'ın makinesinde ÖLÇÜLDÜ).** Kökler
+artık MAKİNE-GENEL bir dosyadan da okunduğu için `create_app()` çağıran her
+test, koşturan makinenin kullanıcı tercihini içeri alıyordu. İnan'ın
+`%APPDATA%illercut\config.json`'unda `["*"]` yazılıyken **"ev dışı yol 403"
+kilitlerinin 12'si birden düştü** (tüm sürücüler hapse girince hiçbir yol
+"dışarısı" değildi). **Asıl tehlike düşen testler değil, DÜŞMEYEN CI'ydı:**
+runner'da böyle bir dosya yok, suite orada yeşil kalır ve güvenlik kilitleri
+yalnızca özelliği fiilen KULLANAN makinelerde anlamsızlaşırdı. Çözüm
+`tests/conftest.py`'de autouse yalıtım (`APPDATA`/`XDG_CONFIG_HOME` boş bir
+oturum dizinine); kilidi `test_web_kok_ayari.py::TestSuiteYalitimi`.
+**Makine-genel bir dosya okuyan her yeni kaynak aynı yalıtımı gerektirir.**
+
 **Tuzak (bir sonraki agent için):** `izinli_kokler_coz` SAF kaldı ve
 dokunulmadı; kaynak seçimi ayrı kapıda (`etkin_ham_kokler`) ve ikisini
 `etkin_kokler_coz` birleştiriyor. Yeni bir çağıran eklerken `izinli_kokler_coz`
