@@ -1664,7 +1664,7 @@ SESSİZCE uçardı. Bu, özelliğin sessiz katiliydi — kilit
 **TUZAK — TEST YALITIMI (2026-09-06, İnan'ın makinesinde ÖLÇÜLDÜ).** Kökler
 artık MAKİNE-GENEL bir dosyadan da okunduğu için `create_app()` çağıran her
 test, koşturan makinenin kullanıcı tercihini içeri alıyordu. İnan'ın
-`%APPDATA%illercut\config.json`'unda `["*"]` yazılıyken **"ev dışı yol 403"
+`%APPDATA%\fillercut\config.json`'unda `["*"]` yazılıyken **"ev dışı yol 403"
 kilitlerinin 12'si birden düştü** (tüm sürücüler hapse girince hiçbir yol
 "dışarısı" değildi). **Asıl tehlike düşen testler değil, DÜŞMEYEN CI'ydı:**
 runner'da böyle bir dosya yok, suite orada yeşil kalır ve güvenlik kilitleri
