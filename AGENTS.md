@@ -1661,6 +1661,16 @@ SESSİZCE uçardı. Bu, özelliğin sessiz katiliydi — kilit
 örneği (ters bölü kaçırılır, kullanıcı olduğu gibi kopyalar — kilit örneği
 `json.loads` eder), pip/kaynak koşusunda eskisi gibi `filler-cut.toml`.
 
+**TUZAK — VARSAYILAN PORT (2026-09-06, aynı makinede ÖLÇÜLDÜ).** Kullanıcının
+kendi Filler-Cut'ı 8765'te AÇIKKEN `TestUiKomutu`nun 5 + `TestUiNativeSecimi`nin
+5 testi birden düşüyordu: `ui` "var olanı göster" dalına giriyor, sunucu hiç
+kurulmuyor, mock'lar çağrılmıyordu. Bir öncekiyle **aynı sınıf** tuzak — CI'da
+uygulama açık olmadığı için orada YEŞİL kalıyordu, yani suite yalnızca ürünü
+fiilen KULLANAN makinelerde kırmızıydı. Kural: **`ui_app` çağıran hiçbir test
+varsayılan portu bağlamaz, hepsi `--port 0` verir.** Varsayılanın 8765 olduğu
+soketsiz kilitlenir (`test_varsayilan_port_sabiti`), mekanizma ise 8765'i
+gerçekten işgal eden `TestPortDoluyken` ile.
+
 **TUZAK — TEST YALITIMI (2026-09-06, İnan'ın makinesinde ÖLÇÜLDÜ).** Kökler
 artık MAKİNE-GENEL bir dosyadan da okunduğu için `create_app()` çağıran her
 test, koşturan makinenin kullanıcı tercihini içeri alıyordu. İnan'ın

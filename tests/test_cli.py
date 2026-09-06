@@ -399,6 +399,15 @@ class TestUiKomutu:
     `_native_kos`) mock'lanır. v1.1'de uvicorn'a host/port değil **bağlı
     soket** verilir (`Server.run(sockets=...)`) — ephemeral porta düşüldüğünde
     gerçek portu yarışsız bilmenin tek yolu budur.
+
+    **KURAL (v1.3.2'de ÖLÇÜLDÜ): `ui_app` çağıran hiçbir test VARSAYILAN
+    PORTU bağlamaz — hepsi `--port 0` (ephemeral) verir.** Kullanıcının kendi
+    Filler-Cut'ı 8765'te açıkken `ui` "var olanı göster" dalına giriyor,
+    sunucu hiç kurulmuyordu ve bu sınıfın 5 + `TestUiNativeSecimi`nin 5 testi
+    birden düşüyordu. CI'da uygulama açık olmadığı için orada yeşil kalırdı —
+    yani suite yalnızca ÜRÜNÜ KULLANAN makinelerde kırmızıydı. Varsayılanın
+    8765 olduğu ayrıca ve SOKETSİZ kilitlenir (`test_varsayilan_port_sabiti`),
+    mekanizma da kilitli (`TestPortDoluyken`).
     """
 
     def test_ui_help_opsiyonlari_listeler(self) -> None:
@@ -412,14 +421,24 @@ class TestUiKomutu:
         # rich help metnini 80 sütunda sarar — boşluk normalize edilerek aranır.
         assert "fillercut ui" in " ".join(result.output.split())
 
+    def test_varsayilan_port_sabiti(self) -> None:
+        """Varsayılan 8765 — SOKET AÇMADAN kilitlenir (makineden bağımsız)."""
+        import inspect
+
+        from fillercut.cli import UI_VARSAYILAN_PORT, ui
+
+        assert UI_VARSAYILAN_PORT == 8765
+        assert inspect.signature(ui).parameters["port"].default == UI_VARSAYILAN_PORT
+
     def test_soket_yalniz_loopbackte(self) -> None:
         with patch("fillercut.cli._sunucuyu_kos") as m_kos:
-            result = runner.invoke(ui_app, ["--no-browser"])
+            result = runner.invoke(ui_app, ["--no-browser", "--port", "0"])
         assert result.exit_code == 0
         sock = m_kos.call_args.args[1]
         assert sock.getsockname()[0] == "127.0.0.1"  # 0.0.0.0 YOK (handoff kilidi)
-        assert sock.getsockname()[1] == 8765
-        assert "http://127.0.0.1:8765/" in result.output
+        port = sock.getsockname()[1]
+        assert port != 0  # gerçekten bağlanmış bir port bildirilir
+        assert f"http://127.0.0.1:{port}/" in result.output
 
     def test_port_opsiyonu_gecer(self) -> None:
         with patch("fillercut.cli._sunucuyu_kos") as m_kos:
@@ -431,7 +450,7 @@ class TestUiKomutu:
         from fastapi import FastAPI
 
         with patch("fillercut.cli._sunucuyu_kos") as m_kos:
-            runner.invoke(ui_app, ["--no-browser"])
+            runner.invoke(ui_app, ["--no-browser", "--port", "0"])
         server = m_kos.call_args.args[0]
         assert isinstance(server.config.app, FastAPI)
 
@@ -439,18 +458,21 @@ class TestUiKomutu:
         import fillercut.web.app as web_app_mod
 
         with (
-            patch("fillercut.cli._sunucuyu_kos"),
+            patch("fillercut.cli._sunucuyu_kos") as m_kos,
             patch("fillercut.cli.native_hazir", return_value=(False, "test")),
             patch.object(web_app_mod, "create_app", wraps=web_app_mod.create_app) as m_ca,
             patch("webbrowser.open") as m_open,
         ):
-            result = runner.invoke(ui_app, [])
+            result = runner.invoke(ui_app, ["--port", "0"])
             assert result.exit_code == 0
             on_ready = m_ca.call_args.kwargs["on_ready"]
             assert on_ready is not None
             m_open.assert_not_called()  # sunucu hazır olmadan açılmaz
             on_ready()  # lifespan startup'ın yapacağı çağrı (patch İÇİNDE)
-            m_open.assert_called_once_with("http://127.0.0.1:8765/")
+            # URL sunucunun GERÇEKTEN bağlandığı porttan türer — sabit 8765
+            # beklemek testi makineye bağlardı (bkz. sınıf docstring'i).
+            port = m_kos.call_args.args[1].getsockname()[1]
+            m_open.assert_called_once_with(f"http://127.0.0.1:{port}/")
 
     def test_no_browser_on_ready_gecirmez(self) -> None:
         import fillercut.web.app as web_app_mod
@@ -459,7 +481,7 @@ class TestUiKomutu:
             patch("fillercut.cli._sunucuyu_kos"),
             patch.object(web_app_mod, "create_app", wraps=web_app_mod.create_app) as m_ca,
         ):
-            runner.invoke(ui_app, ["--no-browser"])
+            runner.invoke(ui_app, ["--no-browser", "--port", "0"])
         assert m_ca.call_args.kwargs["on_ready"] is None
 
     def test_config_hatasi_temiz_cikis(self, tmp_path: Path) -> None:
@@ -471,9 +493,48 @@ class TestUiKomutu:
         cfg_file = tmp_path / "fc.toml"
         cfg_file.write_text("config_version = 1\naggressive = true\n", encoding="utf-8")
         with patch("fillercut.cli._sunucuyu_kos") as m_kos:
-            result = runner.invoke(ui_app, ["--config", str(cfg_file), "--no-browser"])
+            result = runner.invoke(
+                ui_app, ["--config", str(cfg_file), "--no-browser", "--port", "0"]
+            )
         assert result.exit_code == 0
         assert m_kos.call_args.args[0].config.app.state.config.aggressive is True
+
+
+class TestPortDoluyken:
+    """**Varsayılan port DOLUYKEN suite ayakta kalmalı** (v1.3.2 kilidi).
+
+    Ölçülen kusur: kullanıcının kendi Filler-Cut'ı 8765'te açıkken
+    `TestUiKomutu`nun 5 + `TestUiNativeSecimi`nin 5 testi birden düşüyordu —
+    `ui` "var olanı göster" dalına giriyor ve sunucu hiç kurulmuyordu. CI'da
+    uygulama açık olmadığı için orada YEŞİL kalıyordu: suite yalnızca ürünü
+    fiilen kullanan makinelerde kırmızıydı (sessiz tuzağın aynadaki hâli).
+
+    Bu test o koşulu GERÇEKTEN üretir: 8765'i kendisi işgal eder ve `ui`nin
+    ephemeral porttan sorunsuz kurulduğunu doğrular.
+    """
+
+    def test_varsayilan_port_isgalliyken_ui_kurulur(self) -> None:
+        from fillercut.cli import UI_VARSAYILAN_PORT
+
+        isgalci = socket_mod.socket(socket_mod.AF_INET, socket_mod.SOCK_STREAM)
+        try:
+            try:
+                isgalci.bind(("127.0.0.1", UI_VARSAYILAN_PORT))
+            except OSError:  # pragma: no cover - port zaten başkasında
+                pytest.skip(f"{UI_VARSAYILAN_PORT} zaten dolu — işgal kurulamadı")
+            isgalci.listen(1)
+            with (
+                patch("fillercut.cli.native_hazir", return_value=(False, "test")),
+                patch("fillercut.cli._native_kos") as m_native,
+                patch("fillercut.cli._sunucuyu_kos") as m_kos,
+            ):
+                sonuc = runner.invoke(ui_app, ["--no-browser", "--port", "0"])
+            assert sonuc.exit_code == 0
+            m_native.assert_not_called()
+            m_kos.assert_called_once()
+            assert m_kos.call_args.args[1].getsockname()[1] != UI_VARSAYILAN_PORT
+        finally:
+            isgalci.close()
 
 
 class TestUiPortCakismasi:
@@ -587,7 +648,7 @@ class TestUiNativeSecimi:
             patch("fillercut.cli._sunucuyu_kos") as m_kos,
             patch("webbrowser.open") as m_open,
         ):
-            result = runner.invoke(ui_app, [])
+            result = runner.invoke(ui_app, ["--port", "0"])
         assert result.exit_code == 0
         m_native.assert_called_once()
         m_kos.assert_not_called()
@@ -599,7 +660,7 @@ class TestUiNativeSecimi:
             patch("fillercut.cli._native_kos") as m_native,
             patch("fillercut.cli._sunucuyu_kos") as m_kos,
         ):
-            result = runner.invoke(ui_app, [])
+            result = runner.invoke(ui_app, ["--port", "0"])
         assert result.exit_code == 0  # SESSİZ ÇÖKME YOK
         m_native.assert_not_called()
         m_kos.assert_called_once()
@@ -611,7 +672,7 @@ class TestUiNativeSecimi:
             patch("fillercut.cli._native_kos") as m_native,
             patch("fillercut.cli._sunucuyu_kos") as m_kos,
         ):
-            result = runner.invoke(ui_app, ["--no-native"])
+            result = runner.invoke(ui_app, ["--no-native", "--port", "0"])
         assert result.exit_code == 0
         m_native.assert_not_called()
         m_kos.assert_called_once()
@@ -623,7 +684,7 @@ class TestUiNativeSecimi:
             patch("fillercut.cli._native_kos") as m_native,
             patch("fillercut.cli._sunucuyu_kos") as m_kos,
         ):
-            result = runner.invoke(ui_app, ["--native"])
+            result = runner.invoke(ui_app, ["--native", "--port", "0"])
         assert result.exit_code == 1
         assert "WebView2 yok" in _birlesik_cikti(result)
         m_native.assert_not_called()
@@ -636,7 +697,7 @@ class TestUiNativeSecimi:
             patch("fillercut.cli._sunucuyu_kos") as m_kos,
             patch("webbrowser.open") as m_open,
         ):
-            result = runner.invoke(ui_app, ["--no-browser"])
+            result = runner.invoke(ui_app, ["--no-browser", "--port", "0"])
         assert result.exit_code == 0
         m_native.assert_not_called()
         m_open.assert_not_called()
@@ -825,7 +886,7 @@ class TestUiSablonKosusu:
     def test_ilk_kosuda_sablon_olusur(self, ayar_koku: Path) -> None:
         assert not ayar_koku.exists()
         with patch("fillercut.cli._sunucuyu_kos"):
-            sonuc = runner.invoke(ui_app, ["--no-browser"])
+            sonuc = runner.invoke(ui_app, ["--no-browser", "--port", "0"])
         assert sonuc.exit_code == 0
         assert ayar_koku.read_bytes() == b'{"ui": {"izinli_kokler": []}}\n'
 
@@ -845,7 +906,7 @@ class TestUiSablonKosusu:
         onceki = b'{"ui": {"izinli_kokler": []}, "binary": "C:/x/w.exe"}'
         ayar_koku.write_bytes(onceki)
         with patch("fillercut.cli._sunucuyu_kos"):
-            sonuc = runner.invoke(ui_app, ["--no-browser"])
+            sonuc = runner.invoke(ui_app, ["--no-browser", "--port", "0"])
         assert sonuc.exit_code == 0
         assert ayar_koku.read_bytes() == onceki
 
@@ -854,7 +915,7 @@ class TestUiSablonKosusu:
         ayar_koku.parent.mkdir(parents=True, exist_ok=True)
         ayar_koku.write_bytes(b"{bozuk")
         with patch("fillercut.cli._sunucuyu_kos"):
-            sonuc = runner.invoke(ui_app, ["--no-browser"])
+            sonuc = runner.invoke(ui_app, ["--no-browser", "--port", "0"])
         assert sonuc.exit_code == 1
         assert str(ayar_koku) in _birlesik_cikti(sonuc)
         assert ayar_koku.read_bytes() == b"{bozuk"
