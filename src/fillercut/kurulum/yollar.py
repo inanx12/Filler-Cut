@@ -54,6 +54,11 @@ _UYGULAMA = "fillercut"
 _UI_BOLUMU = "ui"
 _UI_KOKLER = "izinli_kokler"
 
+#: İlk çalıştırmada yazılan boş şablon (v1.3.2) — ASCII, BOM'suz, YORUMSUZ
+#: (JSON'da yorum yoktur). Boş liste = "ek kök yok" = bugünkü varsayılan
+#: davranışın aynısı; şablon kök EKLEMEZ, yalnız dosyayı ve yolu hazırlar.
+UI_SABLONU = '{"ui": {"izinli_kokler": []}}\n'
+
 
 def veri_dizini() -> Path:
     """İndirilen ikili ve modellerin kalıcı kökü.
@@ -237,6 +242,43 @@ def kurulum_yaz(*, binary: str | None = None, model: str | None = None) -> None:
         json.dumps(ham, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def ui_sablonu_olustur() -> bool:
+    """``config.json`` YOKSA boş ``ui`` şablonu yazar; VARSA hiç dokunmaz (v1.3.2).
+
+    Kullanıcı v1.3.1'de hem klasörü hem dosyayı sıfırdan, doğru kodlamayla
+    kurmak zorundaydı. Bu adım o sürtünmeyi kaldırır: dosya ve yol hazır
+    gelir, kullanıcı yalnız listeyi düzenler (403 mesajı zaten tam yolu ve
+    kopyalanabilir örneği öğretiyor).
+
+    **Davranış değişikliği SIFIR** — boş liste bugünkü varsayılanın aynısı;
+    şablon kök EKLEMEZ. Güvenlik modeli aynen durur.
+
+    **Var olan dosyaya ASLA yazılmaz.** Kapı ``open(..., "x")``dir: tek bir
+    atomik adımda hem "yoksa yaz" hem "varsa dokunma" olur — ``exists()``
+    kontrolü ile yazma arasındaki yarışta iki örnek aynı anda açılırsa
+    kullanıcının dosyasının ezilmesi mümkün olmazdı. ``ui`` bölümü olmayan
+    dosya da korunur (sihirbazın kendi kaydı olabilir), BOZUK dosya da:
+    şablon mantığı oraya hiç girmez ve v1.3.1'in açık startup hatası
+    (``ui_izinli_kokler_oku``) çalışmaya devam eder.
+
+    Şablon bir KOLAYLIKTIR: yazılamazsa (salt-okunur profil, disk dolu)
+    sessizce ``False`` döner — arayüzü düşürmez.
+
+    Returns:
+        Şablon bu çağrıda oluşturulduysa ``True``, aksi hâlde ``False``.
+    """
+    yol = ayar_dosyasi()
+    try:
+        yol.parent.mkdir(parents=True, exist_ok=True)
+        with yol.open("x", encoding="ascii", newline="") as dosya:
+            dosya.write(UI_SABLONU)
+    except OSError:
+        # FileExistsError dahil (OSError alt sınıfı): dosya zaten varsa da,
+        # yazılamıyorsa da yapılacak şey aynı — dokunma, sessizce çık.
+        return False
+    return True
 
 
 def _binary_var_mi(aday: str) -> str | None:

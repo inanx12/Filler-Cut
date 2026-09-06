@@ -795,3 +795,78 @@ class TestCiktiBayraklari:
         with patch("fillercut.cli.run", return_value=self._sonuc(tmp_path)):
             result = runner.invoke(app, ["video.mp4", "--cikti", "xml", "-y"])
         assert "video.xml" in result.output
+
+
+class TestUiSablonKosusu:
+    """`fillercut ui` ilk açılışta `config.json` şablonunu bırakır (v1.3.2).
+
+    Yerleşim `cli.ui`'dir: hem pip kurulumunun `fillercut ui`'si hem
+    paketlenmiş `fillercut-ui.exe` (girişi `ui`yi argv'ye enjekte eder)
+    buradan geçer — TEK kapı. Düz CLI (video işleme) yolu bu adımı GÖRMEZ.
+
+    Gerçek koşu: `%APPDATA%` teste yönlendirilir, sunucu mock'lanır.
+    """
+
+    @pytest.fixture()
+    def ayar_koku(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        """Kurulu-kullanıcı senaryosu: yönlendirilmiş `%APPDATA%` + toml'suz CWD.
+
+        `chdir` şart: `CliRunner` repo kökünden koşar ve `load_config` CWD'de
+        `filler-cut.toml` arar — reponunki bulunursa test kurulu kullanıcıyı
+        değil geliştirici makinesini sınamış olurdu.
+        """
+        for ad in ("APPDATA", "XDG_CONFIG_HOME"):
+            monkeypatch.setenv(ad, str(tmp_path / "ayar"))
+        monkeypatch.chdir(tmp_path)
+        from fillercut.kurulum import yollar
+
+        return yollar.ayar_dosyasi()
+
+    def test_ilk_kosuda_sablon_olusur(self, ayar_koku: Path) -> None:
+        assert not ayar_koku.exists()
+        with patch("fillercut.cli._sunucuyu_kos"):
+            sonuc = runner.invoke(ui_app, ["--no-browser"])
+        assert sonuc.exit_code == 0
+        assert ayar_koku.read_bytes() == b'{"ui": {"izinli_kokler": []}}\n'
+
+    def test_sablon_davranisi_DEGISTIRMEZ(self, ayar_koku: Path) -> None:
+        """Boş liste = ek kök yok: hapis tek kök (ev) kalmalı."""
+        # `--port 0` (ephemeral): varsayılan 8765'te kullanıcının KENDİ
+        # Filler-Cut'ı açıksa `ui` "var olanı göster" dalına girer ve sunucu
+        # hiç kurulmaz — test o zaman makineye bağımlı olurdu.
+        with patch("fillercut.cli._sunucuyu_kos") as m_kos:
+            sonuc = runner.invoke(ui_app, ["--no-browser", "--port", "0"])
+        assert sonuc.exit_code == 0
+        cozucu = m_kos.call_args.args[0].config.app.state.fs_izinli_kokler_cozucu
+        assert cozucu() == []
+
+    def test_ikinci_kosuda_DOKUNULMAZ(self, ayar_koku: Path) -> None:
+        ayar_koku.parent.mkdir(parents=True, exist_ok=True)
+        onceki = b'{"ui": {"izinli_kokler": []}, "binary": "C:/x/w.exe"}'
+        ayar_koku.write_bytes(onceki)
+        with patch("fillercut.cli._sunucuyu_kos"):
+            sonuc = runner.invoke(ui_app, ["--no-browser"])
+        assert sonuc.exit_code == 0
+        assert ayar_koku.read_bytes() == onceki
+
+    def test_bozuk_dosyada_startup_hatasi_KORUNUR(self, ayar_koku: Path) -> None:
+        """1.3.1 kilidi: bozuk JSON açık hata verir; şablon üstüne YAZMAZ."""
+        ayar_koku.parent.mkdir(parents=True, exist_ok=True)
+        ayar_koku.write_bytes(b"{bozuk")
+        with patch("fillercut.cli._sunucuyu_kos"):
+            sonuc = runner.invoke(ui_app, ["--no-browser"])
+        assert sonuc.exit_code == 1
+        assert str(ayar_koku) in _birlesik_cikti(sonuc)
+        assert ayar_koku.read_bytes() == b"{bozuk"
+
+    def test_tani_sablon_YAZMAZ(self, ayar_koku: Path) -> None:
+        """`--tani` yalnız ön kontrol raporudur; yan etkisi olmamalı."""
+        sonuc = runner.invoke(ui_app, ["--tani"])
+        assert sonuc.exit_code == 0
+        assert not ayar_koku.exists()
+
+    def test_duz_cli_kosusu_sablon_YAZMAZ(self, ayar_koku: Path) -> None:
+        """Kapsam yalnız UI girişi — video işleyen kullanıcı dosya edinmez."""
+        sonuc = runner.invoke(app, ["--version"])
+        assert sonuc.exit_code == 0
+        assert not ayar_koku.exists()

@@ -286,3 +286,92 @@ class TestUiKokleri:
         yollar.ayar_dizini().mkdir(parents=True, exist_ok=True)
         yollar.ayar_dosyasi().write_text("{bozuk", encoding="utf-8")
         assert yollar.kurulum_oku() is None
+
+
+class TestUiSablonu:
+    """İlk çalıştırmada boş `ui` şablonu (v1.3.2).
+
+    v1.3.1'de kökler `config.json`'dan okunabiliyordu ama kullanıcı hem
+    klasörü hem dosyayı SIFIRDAN, doğru kodlamayla kurmak zorundaydı. Şablon
+    o sürtünmeyi öldürür: dosya ve yol hazır gelir, kullanıcı yalnız listeyi
+    düzenler (403 mesajı zaten yolu ve örneği öğretiyor).
+
+    **Davranış değişikliği SIFIR:** boş liste = "ek kök yok" = bugünkü
+    varsayılan. Şablon kök EKLEMEZ — güvenlik modeli aynen durur.
+    """
+
+    def test_dosya_yoksa_sablon_olusur(self, izole_ev: Path) -> None:
+        assert yollar.ui_sablonu_olustur() is True
+        assert yollar.ayar_dosyasi().is_file()
+
+    def test_sablon_baytlari_TAM_beklendigi_gibi(self, izole_ev: Path) -> None:
+        yollar.ui_sablonu_olustur()
+        ham = yollar.ayar_dosyasi().read_bytes()
+        assert ham == b'{"ui": {"izinli_kokler": []}}\n'
+
+    def test_sablonda_BOM_yok_ve_ascii(self, izole_ev: Path) -> None:
+        yollar.ui_sablonu_olustur()
+        ham = yollar.ayar_dosyasi().read_bytes()
+        assert not ham.startswith(b"\xef\xbb\xbf")
+        assert all(b < 128 for b in ham)
+
+    def test_sablon_gecerli_json_ve_bos_liste(self, izole_ev: Path) -> None:
+        yollar.ui_sablonu_olustur()
+        assert json.loads(yollar.ayar_dosyasi().read_text(encoding="ascii")) == {
+            "ui": {"izinli_kokler": []}
+        }
+
+    def test_sablon_sonrasi_okuma_BOS_liste(self, izole_ev: Path) -> None:
+        """Davranış değişikliği sıfır: şablon kök EKLEMEZ."""
+        yollar.ui_sablonu_olustur()
+        assert yollar.ui_izinli_kokler_oku() == []
+
+    def test_dizin_yoksa_olusturulur(self, izole_ev: Path) -> None:
+        assert not yollar.ayar_dizini().exists()
+        yollar.ui_sablonu_olustur()
+        assert yollar.ayar_dizini().is_dir()
+
+    def test_var_olan_dosyaya_DOKUNMAZ_ui_li(self, izole_ev: Path) -> None:
+        yollar.ayar_dizini().mkdir(parents=True, exist_ok=True)
+        onceki = b'{"ui": {"izinli_kokler": ["D:\\\\"]}}'
+        yollar.ayar_dosyasi().write_bytes(onceki)
+        assert yollar.ui_sablonu_olustur() is False
+        assert yollar.ayar_dosyasi().read_bytes() == onceki
+
+    def test_var_olan_dosyaya_DOKUNMAZ_sihirbaz_only(self, izole_ev: Path) -> None:
+        """`ui` bölümü olmayan dosya sihirbazın kendi kaydı olabilir — ezilmez."""
+        yollar.kurulum_yaz(binary="C:/x/w.exe", model="C:/m/a.bin")
+        onceki = yollar.ayar_dosyasi().read_bytes()
+        assert yollar.ui_sablonu_olustur() is False
+        assert yollar.ayar_dosyasi().read_bytes() == onceki
+
+    def test_bozuk_dosyaya_DOKUNMAZ(self, izole_ev: Path) -> None:
+        """Şablon mantığı devreye girmez; 1.3.1'in açık hatası korunur."""
+        yollar.ayar_dizini().mkdir(parents=True, exist_ok=True)
+        yollar.ayar_dosyasi().write_bytes(b"{bozuk")
+        assert yollar.ui_sablonu_olustur() is False
+        assert yollar.ayar_dosyasi().read_bytes() == b"{bozuk"
+        with pytest.raises(ConfigError):
+            yollar.ui_izinli_kokler_oku()
+
+    def test_ikinci_cagri_idempotent(self, izole_ev: Path) -> None:
+        yollar.ui_sablonu_olustur()
+        ilk = yollar.ayar_dosyasi().read_bytes()
+        assert yollar.ui_sablonu_olustur() is False
+        assert yollar.ayar_dosyasi().read_bytes() == ilk
+
+    def test_yazilamiyorsa_PATLAMAZ(
+        self, izole_ev: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Şablon bir KOLAYLIK — yazılamaması arayüzü düşürmemeli."""
+
+        def _patla(*_a: object, **_k: object) -> None:
+            raise OSError("disk dolu")
+
+        monkeypatch.setattr(Path, "mkdir", _patla)
+        assert yollar.ui_sablonu_olustur() is False
+
+    def test_okuma_zinciri_YAZMAZ(self, izole_ev: Path) -> None:
+        """`ui_izinli_kokler_oku` SAF kalır — okuma yolu dosya oluşturmaz."""
+        assert yollar.ui_izinli_kokler_oku() == []
+        assert not yollar.ayar_dosyasi().exists()

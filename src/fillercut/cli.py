@@ -752,6 +752,21 @@ def ui(
     if tani:
         _tani_yazdir()
         return
+    # Kullanıcı ayar dosyasının ŞABLONU (v1.3.2). Yeri burasıdır çünkü `cli.ui`
+    # arayüzün TEK kapısıdır: pip kurulumunun `fillercut ui`'si de, paketlenmiş
+    # `fillercut-ui.exe` de (girişi argv'ye `ui` enjekte eder) buradan geçer;
+    # düz CLI (video işleme) yolu ise hiç uğramaz. `create_app`e KONMADI: o bir
+    # fabrika — yüzlerce test ve gömen kod onu çağırır, dosya yazan bir yan
+    # etki oraya ait değil. Adım okuma zincirinin DIŞINDADIR: `ui_izinli_kokler_oku`
+    # saf kalır, yazma yalnız burada ve açıkça olur.
+    #
+    # Var olan dosyaya dokunmaz (bozuk olana da) — bozuk dosyanın açık startup
+    # hatası aşağıdaki çözümde aynen çalışmaya devam eder. Şablon bir KOLAYLIK,
+    # bir önkoşul değil: `try` DIŞINDA çünkü başarısızlığı arayüzü düşürmemeli
+    # (fonksiyon zaten OSError yutar ve False döner).
+    from fillercut.kurulum import yollar as _yollar
+
+    _yollar.ui_sablonu_olustur()
     try:
         cfg = load_config(config)
         # İzinli kökleri BURADA çöz (socket açılmadan): var olmayan bir kök,
