@@ -2158,7 +2158,7 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `kurulum/yollar.py` (`ui_sablonu_olustur`) + `cli.py` (ui startup adımı); `test_kurulum_yollar.py::TestUiSablonu` (12) + `test_cli.py::TestUiSablonKosusu` (6) | `c5df04a` |
 | `web/static/app.js` — playhead rAF döngüsü (interpolasyonsuz); `test_web_playhead.py` (15, sahte rAF) + `test_web_editor.py` izin listesi | `85257da` |
 | `tests/test_cli.py` + AGENTS — ui testleri varsayılan porttan bağımsız (`TestPortDoluyken` mekanizma kilidi) | `a46015a` |
-| `pyproject.toml` **1.3.2** + `CHANGELOG.md` `[1.3.2]` + `dist_pypi` (twine check ×2 PASSED) + AGENTS kaydı | (bu commit) |
+| `pyproject.toml` **1.3.2** + `CHANGELOG.md` `[1.3.2]` + `dist_pypi` (twine check ×2 PASSED) + AGENTS kaydı | `6eb7271` |
 
 **v1.3.1 (kurulu kullanıcı için izinli kök yapılandırma kapısı)**
 
