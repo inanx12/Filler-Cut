@@ -1617,6 +1617,47 @@ testidir, davranışın kendisi gerçek tarayıcıda ölçüldü.
   `pencere.events.loaded.__iadd__.called` yanlış nesneye bakar. Kayıt
   `mock_calls` izinden doğrulanır.
 
+**v1.3.2 (config.json şablonu + playhead akıcılığı) TAMAMLANDI (2026-09-06,
+bump 1.3.2'nin İÇİNDE — tag hâlâ yok).**
+
+**ŞABLON — `cli.ui`'de, okuma zincirinin DIŞINDA.** İlk açılışta
+`%APPDATA%\fillercut\config.json` yoksa `{"ui": {"izinli_kokler": []}}` yazılır
+(ASCII, BOM'suz, LF; JSON'da yorum YOKTUR, eklenmedi). **Davranış değişikliği
+SIFIR** — boş liste bugünkü varsayılan; şablon kök EKLEMEZ, güvenlik modeli
+aynen durur.
+
+**Yerleşim gerekçesi:** `cli.ui` arayüzün TEK kapısıdır — pip'in `fillercut
+ui`'si de, paketlenmiş `fillercut-ui.exe` de (`entry_ui` argv'ye `ui` enjekte
+eder) oradan geçer; düz CLI hiç uğramaz. `create_app`e KONMADI: o bir fabrika,
+yüzlerce test ve gömen kod çağırır, dosya yazan yan etki oraya ait değil.
+`entry_ui.py`ye de konmadı: paketleme dosyasıdır, pip kullanıcısı kapsam dışı
+kalırdı. `--tani` erken döner, yan etki üretmez.
+
+**`open(..., "x")` bilinçli:** tek atomik adımda "yoksa yaz + varsa dokunma".
+`exists()`-sonra-yaz yarışında iki örnek aynı anda açılırsa kullanıcının
+dosyası ezilebilirdi. `ui`siz dosya da (sihirbaz kaydı) BOZUK dosya da korunur;
+bozuğun v1.3.1 açık startup hatası aynen çalışır. Yazılamazsa sessizce `False`
+— şablon KOLAYLIKTIR, önkoşul değil.
+
+**PLAYHEAD — rAF, İNTERPOLASYON YOK.** Konum `timeupdate`e bağlıydı; oranı
+app.js'in kendi yorumu zaten yazmıştı (~4 Hz) ve çubuk gözle sekiyordu. Artık
+oynarken her karede `requestAnimationFrame` ile tazelenir ve her karede
+medyanın GERÇEK `currentTime`ı okunur. Tahmin edilmediği için seek (tıklama,
+J/K/L, sürükleme) ANINDA yapışır — "yetişme" gecikmesi kavramı yoktur. Döngü
+`paused` ya da `document.hidden` iken kendini kapatır; çift `play` tek döngü
+açar. `timeupdate` kancası KALDIRILMADI: atlama (kesim geçme) kararı ona
+bağlıdır ve duraklamışken programatik `currentTime` değişimini o yakalar.
+
+**Tuzak (bir sonraki agent için):** `test_web_editor`in tanımsız-çağrı
+tarayıcısının `GLOBALLER` izin listesi vardır — yeni bir tarayıcı API'si
+(`requestAnimationFrame` gibi) çağırınca oraya EKLENMELİ, yoksa test
+"tanımsız fonksiyon" der. Ayrıca Playwright fixture'larını başka test
+modülünden IMPORT ETME: aynı adı taşıyan test parametrelerini gölgeler ve ruff
+F811 verir; veriyi/yönlendiriciyi ödünç al, fixture'ı yerelde tanımla.
+
+**Akıcılığın KENDİSİ manuel doğrulanır** — otomatik kilit "göze akıcı mı"
+sorusunu yanıtlayamaz; İnan'ın teyidi beklenir.
+
 **v1.3.1 (kurulu kullanıcı için izinli kök yapılandırma kapısı) TAMAMLANDI
 (2026-09-06, bump 1.3.1'in İÇİNDE — tag hâlâ yok).** İnan bunu KURULU exe'de
 yakaladı: `[ui].izinli_kokler` yalnız `filler-cut.toml`'dan okunuyordu, kurulu
@@ -2109,6 +2150,15 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/geri_bildirim.py` + `app.py` + `static/` — telemetrisiz geri bildirim düğmesi | `6934227` |
 | README ×2 — SmartScreen uyarısı normal + SignPath notu | `bf74afb` |
 | `pyproject.toml` + `test_paketleme_pypi.py` + CHANGELOG + KNOWN_ISSUES — PyPI metadata + **1.2.1 bump** | `9d12381` |
+
+**v1.3.2 (config.json şablonu + playhead akıcılığı)**
+
+| Modül | Commit |
+|---|---|
+| `kurulum/yollar.py` (`ui_sablonu_olustur`) + `cli.py` (ui startup adımı); `test_kurulum_yollar.py::TestUiSablonu` (12) + `test_cli.py::TestUiSablonKosusu` (6) | `c5df04a` |
+| `web/static/app.js` — playhead rAF döngüsü (interpolasyonsuz); `test_web_playhead.py` (15, sahte rAF) + `test_web_editor.py` izin listesi | `85257da` |
+| `tests/test_cli.py` + AGENTS — ui testleri varsayılan porttan bağımsız (`TestPortDoluyken` mekanizma kilidi) | `a46015a` |
+| `pyproject.toml` **1.3.2** + `CHANGELOG.md` `[1.3.2]` + `dist_pypi` (twine check ×2 PASSED) + AGENTS kaydı | (bu commit) |
 
 **v1.3.1 (kurulu kullanıcı için izinli kök yapılandırma kapısı)**
 

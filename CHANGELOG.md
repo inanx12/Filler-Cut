@@ -7,6 +7,33 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [1.3.2] — 2026-09-06
+
+**Ek disk eklemek artık dosya oluşturmayı gerektirmiyor; oynatma başlığı akıcı.**
+
+### Eklendi
+
+- **İlk açılışta hazır `config.json` şablonu.** Arayüz ilk kez çalıştığında
+  `%APPDATA%\fillercut\config.json` yoksa oluşturulur ve içine
+  `{"ui": {"izinli_kokler": []}}` yazılır. v1.3.1'de kullanıcı hem klasörü hem
+  dosyayı sıfırdan, doğru kodlamayla kurmak zorundaydı; artık yalnızca listeyi
+  düzenlemek yetiyor (izin hatası zaten dosyanın tam yolunu ve kopyalanabilir
+  örneğini gösteriyor). **Davranış değişikliği yok:** boş liste "ek kök yok"
+  demek, yani varsayılanın aynısı — şablon kök eklemez.
+  Var olan dosyaya **hiç dokunulmaz** (kurulum sihirbazının kendi kaydı olsa
+  da, bozuk olsa da); bozuk dosyanın açık hatası aynen korunur.
+
+### Düzeltildi
+
+- **Zaman çizelgesindeki oynatma başlığı artık akıcı ilerliyor.** Konum
+  saniyede ~4 kez ateşlenen `timeupdate` olayına bağlıydı ve beyaz çubuk gözle
+  sekiyordu; artık oynatma sırasında her karede güncelleniyor. Konum tahmin
+  edilmiyor, her karede videonun gerçek zamanı okunuyor — bu yüzden çizelgeye
+  tıklama, J/K/L mekiği ve kenar sürükleme **anında** yapışıyor. Başlık yalnız
+  oynarken ve pencere görünürken güncellenir; duraklatınca ya da sekme arka
+  plana geçince döngü durur. Kesim atlama mantığı ve dalga formu çizimi
+  değişmedi.
+
 ## [1.3.1] — 2026-09-06
 
 **Kurulu sürümde ikinci bir sürücü (D:\ …) artık gerçekten açılabiliyor.**
@@ -642,6 +669,7 @@ sınırlar: `experiments/pywebview_spike/README.md`.
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
 
+[1.3.2]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.2
 [1.3.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.1
 [1.3.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.0
 [1.2.4]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.2.4
