@@ -639,6 +639,7 @@ function zcSifirla() {
   el("kesim-katmani").textContent = "";
   el("playhead").style.left = "0%";
   dalgaYok();
+  donguTemizle(); // A-B işaretleri medyaya aittir; yeni medyaya taşınmaz
 }
 
 function yuzde(ms) {
@@ -762,6 +763,7 @@ function zcCiz() {
   cetvelCiz();
   dalgaCiz();
   bloklariCiz();
+  donguCiz();
   playheadTazele();
 }
 
@@ -825,6 +827,7 @@ function playheadDonguSurdur() {
   playheadRaf = null;
   const oynatici = el("oynatici");
   if (oynatici.paused || document.hidden) return; // döngü kendini kapatır
+  donguSar(); // A-B loop: `timeupdate` ~4 Hz'dir, B'yi 250 ms aşardı
   playheadTazele();
   playheadRaf = requestAnimationFrame(playheadDonguSurdur);
 }
@@ -1285,6 +1288,7 @@ function reviewCiz() {
   dugmeleriTazele();
   ozetCiz();
   bloklariCiz();
+  donguCiz(); // süre plandan gelebilir: yüzdeler yeniden hesaplanır
   listeyiCiz();
   miknatisCiz(); // durum ↔ DOM tek yerden senkron
 }
@@ -1715,10 +1719,98 @@ function atlamayiUygula(ms) {
   return true;
 }
 
+/* ── I / O / X: A-B aralık önizlemesi — loop (v1.4.0 Dalga 1) ───────────
+ *
+ * Bir aralığı TEKRAR TEKRAR dinlemek içindir; manuel kesim işaretleme
+ * DEĞİLDİR: plana dokunmaz, sunucuya istek atmaz, hiçbir yere yazılmaz
+ * (durum bu nesnededir, yeni medyada sıfırlanır).
+ *
+ * İŞARETLEME. I → A = playhead, O → B = playhead; her basış noktayı YENİDEN
+ * işaretler (loop canlı güncellenir). Nokta bir kesimin içine düşerse
+ * TUTULAN malzemeye itilir: A kesimin SONUNA, B kesimin BAŞINA (atlamalı
+ * önizlemenin iki sınır ilkesiyle aynı: ileri oynatma `bit`ten sürer, `bas`
+ * önceki malzemenin sonudur). Kesim [bas, bit) yarı açıktır — tam `bas`
+ * kesiktir. İtme sonrası A >= B ise loop KURULMAZ: işaretler kalır (ekranda
+ * kesikli çizilir), sarma olmaz.
+ *
+ * SARMA. Oynarken B'ye varılınca A'ya dönülür. Denetim rAF döngüsünde de
+ * yapılır (`timeupdate` ~4 Hz, B'yi 250 ms aşardı) ve kesim atlamasından
+ * ÖNCE gelir: B'de başlayan bir kesimde önce loop konuşur. Kesim atlaması
+ * loop içinde AYNEN çalışır, değiştirilmedi.
+ *
+ * ARAMA. Loop kuruluyken playhead'i taşıyan HER arama — tıklama, ←/→, ↑/↓,
+ * kare adımı, mekik, kesim atlaması — varış noktasına göre değerlendirilir:
+ * [A, B] içindeyse loop korunur, dışındaysa loop ve işaretler temizlenir.
+ * Karar `seeking` olayında verilir, `seeked`de DEĞİL — ölçüldü: sıra
+ * `seeking → timeupdate → seeked`tir ve `timeupdate` geldiğinde `seeking`
+ * zaten false'tur; B'nin ötesine yapılan bir arama `seeked`i beklerken
+ * sarma sanılır ve kullanıcı A'ya fırlatılırdı. Aramanın kendisi sürerken
+ * (`oynatici.seeking`, atama anında eşzamanlı true — ölçüldü) sarma
+ * denetlenmez. Kendi sarmamız A'ya varır, yani içeridedir ve loop'u bozmaz.
+ */
+const dongu = { a: null, b: null };
+
+function donguAktif() {
+  return dongu.a !== null && dongu.b !== null && dongu.a < dongu.b;
+}
+
+function donguIsaretle(uc) {
+  const ms = oynaticiMs();
+  const kesim = aktifKesimBul(ms);
+  if (uc === "a") dongu.a = kesim ? kesim[1] : ms;
+  else dongu.b = kesim ? kesim[0] : ms;
+  donguCiz();
+}
+
+function donguTemizle() {
+  dongu.a = null;
+  dongu.b = null;
+  donguCiz();
+}
+
+function donguSar() {
+  /* Oynarken B'ye varıldıysa A'ya sarar ve true döner. */
+  if (!donguAktif()) return false;
+  const oynatici = el("oynatici");
+  if (oynatici.paused || oynatici.seeking) return false;
+  if (oynaticiMs() < dongu.b) return false;
+  oynatici.currentTime = dongu.a / 1000;
+  return true;
+}
+
+el("oynatici").addEventListener("seeking", () => {
+  if (!donguAktif()) return;
+  const ms = oynaticiMs();
+  if (ms < dongu.a || ms > dongu.b) donguTemizle();
+});
+
+function donguCiz() {
+  /* Bant yalnız loop KURULUYKEN görünür; işaretler kuruluysa da,
+     kurulamamışsa da (A >= B, kesikli) görünür. Konumlar track YÜZDESİDİR
+     (ölçek modeli) — zoom onları kendiliğinden taşır. */
+  const katman = el("dongu-katmani");
+  const cizgi = (oge, ms) => {
+    oge.hidden = ms === null || !zc.total_ms;
+    if (!oge.hidden) oge.style.left = yuzde(ms) + "%";
+  };
+  cizgi(el("dongu-a"), dongu.a);
+  cizgi(el("dongu-b"), dongu.b);
+  const bant = el("dongu-bant");
+  bant.hidden = !donguAktif() || !zc.total_ms;
+  if (!bant.hidden) {
+    bant.style.left = yuzde(dongu.a) + "%";
+    bant.style.width = yuzde(dongu.b - dongu.a) + "%";
+  }
+  katman.classList.toggle(
+    "kurulmadi", dongu.a !== null && dongu.b !== null && !donguAktif()
+  );
+}
+
 el("oynatici").addEventListener("timeupdate", () => {
   playheadTazele();
   const oynatici = el("oynatici");
   if (oynatici.paused) return; // atlama YALNIZ oynarken
+  if (donguSar()) return; // B'ye varıldı: önce loop (A'ya sarıldı)
   atlamayiUygula(oynatici.currentTime * 1000);
 });
 
@@ -1727,7 +1819,7 @@ el("oynatici").addEventListener("timeupdate", () => {
    duyurabiliyordu. `play` olayı ilk kareden önce gelir. */
 el("oynatici").addEventListener("play", () => {
   el("btn-oynat").innerHTML = "&#10073;&#10073;";
-  atlamayiUygula(el("oynatici").currentTime * 1000);
+  if (!donguSar()) atlamayiUygula(el("oynatici").currentTime * 1000);
   playheadDonguBaslat();
 });
 
@@ -1970,6 +2062,9 @@ const EYLEMLER = {
   "sonraki-kesim-noktasi": () => kesimNoktasinaGit(1),
   "kare-geri": () => kareAdimi(-1),
   "kare-ileri": () => kareAdimi(1),
+  "dongu-a": () => donguIsaretle("a"),
+  "dongu-b": () => donguIsaretle("b"),
+  "dongu-temizle": () => donguTemizle(),
   "yasla": () => {
     if (review.secili && durum.asama === "analiz_tamam") yaslaGonder(review.secili);
   },

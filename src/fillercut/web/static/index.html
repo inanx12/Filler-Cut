@@ -300,6 +300,14 @@
         <div id="cetvel" class="cetvel"></div>
         <!-- Dalga formu: wavesurfer.js (vendor, CDN yok) buraya çizer. -->
         <div id="dalga" class="dalga"></div>
+        <!-- A-B aralık önizlemesi (I/O/X): SÜS katmanı — dalga katmanını
+             paylaşır (z-index 0, DOM sırasıyla dalganın üstünde, kesim
+             katmanının altında) ve olay BEKLEMEZ. -->
+        <div id="dongu-katmani" class="dongu-katmani" aria-hidden="true">
+          <div id="dongu-bant" class="dongu-bant" hidden></div>
+          <div id="dongu-a" class="dongu-isaret a" hidden></div>
+          <div id="dongu-b" class="dongu-isaret b" hidden></div>
+        </div>
         <div id="kesim-katmani" class="kesim-katmani"></div>
         <div id="playhead" class="playhead"></div>
       </div>

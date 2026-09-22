@@ -293,3 +293,71 @@ class TestKareAdimiKurali:
     def test_kare_hizi_sunucudan(self) -> None:
         js = _oku("app.js")
         assert "zc.kare = veri.kare || null;" in js
+
+
+def _fonksiyon(js: str, imza: str) -> str:
+    bas = js.index(imza)
+    return js[bas : js.index("\n}", bas)]
+
+
+class TestDonguSozlesmesi:
+    """I / O / X — A-B loop (davranış: `test_web_klavye.py::TestDongu`)."""
+
+    @pytest.mark.parametrize(
+        ("eylem", "kod"), [("dongu-a", "KeyI"), ("dongu-b", "KeyO"), ("dongu-temizle", "KeyX")]
+    )
+    def test_tek_atimlik(self, eylem: str, kod: str) -> None:
+        k = _kisayol(eylem)
+        assert k.kodlar == (kod,)
+        assert k.tekrar is False, "I/O/X basılı tutunca YENİDEN işaretlememeli"
+
+    def test_bant_dalga_katmaninda_ve_olaysiz(self) -> None:
+        css = _oku("style.css")
+        kural = css[css.index(".dongu-katmani {") :]
+        kural = kural[: kural.index("}")]
+        assert "z-index: var(--tl-kat-dalga)" in kural
+        assert "pointer-events: none" in kural
+        assert "position: absolute" in kural
+
+    def test_katman_sirasi_dort_kalir(self) -> None:
+        """Yeni `--tl-kat-*` açılmadı; invariant (0/1/2/3) aynen."""
+        css = _oku("style.css")
+        bas = css.index(".tl-track {")
+        govde = css[bas : css.index("}", bas)]
+        assert re.findall(r"(--tl-kat-[a-z]+):\s*(\d+)", govde) == [
+            ("--tl-kat-dalga", "0"),
+            ("--tl-kat-kesim", "1"),
+            ("--tl-kat-playhead", "2"),
+            ("--tl-kat-cetvel", "3"),
+        ]
+
+    def test_bant_dom_sirasi_dalga_ile_kesim_arasinda(self) -> None:
+        """Aynı z'de DOM sırası boyar: dalga < bant < kesim katmanı."""
+        html = _oku("index.html")
+        assert html.index('id="dalga"') < html.index('id="dongu-katmani"')
+        assert html.index('id="dongu-katmani"') < html.index('id="kesim-katmani"')
+
+    def test_temizleme_seeking_olayinda(self) -> None:
+        """`seeked` DEĞİL: ölçülen sıra seeking → timeupdate → seeked."""
+        js = _oku("app.js")
+        assert 'el("oynatici").addEventListener("seeking"' in js
+        assert 'addEventListener("seeked", () => {' not in js
+
+    def test_sarma_arama_surerken_denetlenmez(self) -> None:
+        govde = _fonksiyon(_oku("app.js"), "function donguSar")
+        assert "oynatici.seeking" in govde and "oynatici.paused" in govde
+
+    def test_sarma_kesim_atlamasindan_once(self) -> None:
+        js = _oku("app.js")
+        bas = js.index('el("oynatici").addEventListener("timeupdate"')
+        govde = js[bas : js.index("\n});", bas)]
+        assert govde.index("donguSar()") < govde.index("atlamayiUygula")
+
+    def test_loop_plana_ve_diske_dokunmaz(self) -> None:
+        """Bellek-içi: sunucu isteği, `localStorage`, plan overlay'i YOK."""
+        js = _oku("app.js")
+        for imza in ("function donguIsaretle", "function donguTemizle",
+                     "function donguSar", "function donguCiz"):
+            govde = _fonksiyon(js, imza)
+            for yasak in ("fetch", "localStorage", "overlay", "editsGonder", "reviewPost"):
+                assert yasak not in govde, f"{imza}: {yasak}"

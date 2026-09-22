@@ -790,6 +790,49 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   top: 18px; left: 0; right: 0; bottom: 0;
 }
 
+/* A-B aralık önizlemesi (I/O/X — v1.4.0 Dalga 1).
+
+   DALGA KATMANINI PAYLAŞIR: `z-index: var(--tl-kat-dalga)` (0) — yeni bir
+   `--tl-kat-*` değeri AÇILMADI, dört katmanlı sıra invariantı aynen durur.
+   Aynı z'de DOM sırası geçerlidir: bant dalganın ÜSTÜNDE, kesim katmanının
+   (1) ALTINDA boyanır. Sıfır bir yığın bağlamı yaratır; yani bandın içinde
+   ne olursa olsun kesim katmanının üstüne SIZAMAZ (v1.3.0 regresyonunun
+   dersi). `pointer-events: none` hem kapta hem çocuklarda: bant SÜSTÜR,
+   isabet testine hiç girmez — kilit gerçek fare ile
+   `test_web_klavye.py::TestDongu::test_bant_isabet_testine_girmez`. */
+.dongu-katmani {
+  position: absolute;
+  z-index: var(--tl-kat-dalga);
+  pointer-events: none;
+  top: 18px; left: 0; right: 0; bottom: 0;
+}
+
+.dongu-bant {
+  position: absolute;
+  top: 0; bottom: 0;
+  background: rgba(63, 185, 80, .14);
+  box-shadow: inset 0 2px 0 rgba(63, 185, 80, .75);
+  pointer-events: none;
+}
+
+.dongu-isaret {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  background: var(--yesil);
+  pointer-events: none;
+}
+
+/* B çizgisi sınırın SOLUNDA durur (tutulan malzemenin sonu); A sağında. */
+.dongu-isaret.b { transform: translateX(-100%); }
+
+/* İşaretler var ama loop kurulamadı (A >= B): kesikli ve soluk. */
+.dongu-katmani.kurulmadi .dongu-isaret {
+  background: repeating-linear-gradient(
+    to bottom, var(--soluk) 0 4px, transparent 4px 8px
+  );
+}
+
 /* zoom kaydırıcısı */
 .zoom { display: flex; align-items: center; gap: 8px; color: var(--soluk); font-size: 12px; }
 .zoom-etiket { text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }

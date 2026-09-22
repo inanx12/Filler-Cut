@@ -164,7 +164,7 @@ def _git(sayfa: Any, ms: int) -> None:
 MEVCUT_TUSLAR = ["Space", "j", "k", "l", "ArrowLeft", "ArrowRight", "y", "m"]
 
 #: v1.4.0 Dalga 1'in yeni tuşları — odak/modal kilitleri bunlar için de koşar.
-YENI_TUSLAR = ["ArrowUp", "ArrowDown", ",", "."]
+YENI_TUSLAR = ["ArrowUp", "ArrowDown", ",", ".", "i", "o", "x"]
 
 TUM_TUSLAR = MEVCUT_TUSLAR + YENI_TUSLAR
 
@@ -561,3 +561,239 @@ class TestKareAdimi:
         _bekle(sayfa)
         assert _durum(sayfa) == once
         assert _son_karar(sayfa)["onlendi"] is True
+
+
+def _dongu(sayfa: Any) -> dict[str, Any]:
+    return dict(
+        sayfa.evaluate(
+            """() => {
+              const bant = document.getElementById("dongu-bant");
+              return {
+                a: dongu.a, b: dongu.b, aktif: donguAktif(),
+                bantGorunur: !!bant && getComputedStyle(bant).display !== "none",
+              };
+            }"""
+        )
+    )
+
+
+def _isaretle(sayfa: Any, tus: str, ms: int) -> None:
+    _git(sayfa, ms)
+    sayfa.keyboard.press(tus)
+    _bekle(sayfa)
+
+
+def _ilerle(sayfa: Any, ms: int) -> None:
+    """OYNATMA ilerlemesi (arama DEĞİL): zaman akar, `timeupdate` gelir."""
+    sayfa.evaluate(
+        f"""() => {{
+          window.__t = {ms} / 1000;
+          document.getElementById("oynatici").dispatchEvent(new Event("timeupdate"));
+        }}"""
+    )
+    _bekle(sayfa)
+
+
+def _oynat(sayfa: Any) -> None:
+    sayfa.evaluate("() => document.getElementById('oynatici').play()")
+    _bekle(sayfa)
+
+
+class TestDongu:
+    """I / O / X — A-B aralık önizlemesi (loop). Manuel kesim işaretleme DEĞİL:
+    plana dokunmaz, sunucuya istek atmaz, diske yazmaz.
+
+    Plan: [5000, 6000) ve [15245, 17364)."""
+
+    ARALIKLAR = [(5_000, 6_000), (15_245, 17_364)]
+
+    @pytest.fixture(autouse=True)
+    def _plan(self, sayfa: Any) -> None:
+        _kesimleri_kur(sayfa, self.ARALIKLAR)
+
+    def test_kurulur(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        d = _dongu(sayfa)
+        assert (d["a"], d["b"], d["aktif"], d["bantGorunur"]) == (2_000, 12_000, True, True)
+        assert sayfa.evaluate("() => window.__istekler.length") == 0, "loop plana dokundu"
+
+    def test_yeniden_isaretleme_canli_gunceller(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        _isaretle(sayfa, "i", 3_000)  # loop İÇİNDE: loop korunur, A güncellenir
+        _isaretle(sayfa, "o", 10_000)
+        d = _dongu(sayfa)
+        assert (d["a"], d["b"], d["aktif"]) == (3_000, 10_000, True)
+
+    def test_a_kesim_icindeyse_kesim_sonuna(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 5_500)
+        assert _dongu(sayfa)["a"] == 6_000
+
+    def test_b_kesim_icindeyse_kesim_basina(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "o", 16_000)
+        assert _dongu(sayfa)["b"] == 15_245
+
+    def test_kesim_basi_da_kesimin_icidir(self, sayfa: Any) -> None:
+        """[bas, bit) yarı açık: tam `bas` kesiktir → A bit'e itilir."""
+        _isaretle(sayfa, "i", 5_000)
+        assert _dongu(sayfa)["a"] == 6_000
+
+    def test_a_b_ters_ise_kurulmaz_isaretler_kalir(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 10_000)
+        _isaretle(sayfa, "o", 9_000)
+        d = _dongu(sayfa)
+        assert (d["a"], d["b"], d["aktif"], d["bantGorunur"]) == (10_000, 9_000, False, False)
+
+    def test_clamp_sonrasi_a_b_cakisirsa_kurulmaz(self, sayfa: Any) -> None:
+        """A kesimin sonuna, B başına itilir → A >= B: loop kurulmaz."""
+        _isaretle(sayfa, "i", 15_300)
+        _isaretle(sayfa, "o", 16_000)
+        d = _dongu(sayfa)
+        assert (d["a"], d["b"], d["aktif"]) == (17_364, 15_245, False)
+
+    def test_kurulmamis_loop_sarmaz(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 10_000)
+        _isaretle(sayfa, "o", 9_000)
+        _git(sayfa, 8_000)
+        _oynat(sayfa)
+        _ilerle(sayfa, 9_500)
+        assert _konum_ms(sayfa) == 9_500
+
+    def test_b_ye_ulasinca_a_ya_sarar(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        _git(sayfa, 11_000)
+        _oynat(sayfa)
+        _ilerle(sayfa, 12_010)
+        assert _konum_ms(sayfa) == 2_000
+        assert _dongu(sayfa)["aktif"] is True, "kendi sarmamız loop'u temizledi"
+
+    def test_sarma_kare_dongusunde_de(self, sayfa: Any) -> None:
+        """`timeupdate` ~4 Hz'dir (250 ms taşma); sarma rAF döngüsünde de
+        denetlenir. Burada `timeupdate` HİÇ gönderilmez."""
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        _git(sayfa, 11_000)
+        _oynat(sayfa)
+        sayfa.evaluate("() => { window.__t = 12.004; }")
+        sayfa.wait_for_timeout(150)  # birkaç animasyon karesi
+        assert _konum_ms(sayfa) == 2_000
+
+    def test_sarma_suresince_kesim_atlama_aynen(self, sayfa: Any) -> None:
+        """Loop içindeki kesim yine atlanır ve varış loop içinde: loop kalır."""
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        _git(sayfa, 4_900)
+        _oynat(sayfa)
+        _ilerle(sayfa, 5_010)
+        assert _konum_ms(sayfa) == 6_000
+        assert _dongu(sayfa)["aktif"] is True
+
+    def test_ic_arama_loopu_korur(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        _git(sayfa, 9_000)
+        _git(sayfa, 12_000)  # tam B: sınır dahil
+        assert _dongu(sayfa)["aktif"] is True
+
+    def test_dis_arama_loopu_ve_isaretleri_temizler(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        _git(sayfa, 13_000)
+        d = _dongu(sayfa)
+        assert (d["a"], d["b"], d["aktif"], d["bantGorunur"]) == (None, None, False, False)
+
+    def test_klavye_aramasi_da_arama_sayilir(self, sayfa: Any) -> None:
+        """← (5 sn geri) loop'un önüne düşerse loop temizlenir."""
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        _git(sayfa, 3_000)
+        sayfa.keyboard.press("ArrowLeft")
+        _bekle(sayfa)
+        assert _dongu(sayfa)["a"] is None
+
+    def test_oynarken_dis_arama_sarmaya_donusmez(self, sayfa: Any) -> None:
+        """Ölçülmüş sıra: `timeupdate` `seeked`den ÖNCE gelir. B'nin ötesine
+        yapılan arama sarma sanılsaydı kullanıcı A'ya fırlatılırdı."""
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        _git(sayfa, 3_000)
+        _oynat(sayfa)
+        _git(sayfa, 20_000)
+        assert _konum_ms(sayfa) == 20_000
+        assert _dongu(sayfa)["aktif"] is False
+
+    def test_kesim_atlama_loop_disina_tasirsa_temizlenir(self, sayfa: Any) -> None:
+        """İşaretten SONRA plan değişti: bir kesim B'nin üstüne biniyor. Atlama
+        aynen çalışır, playhead loop dışına çıkar → loop temizlenir."""
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        _kesimleri_kur(sayfa, [(11_000, 14_000)])
+        _git(sayfa, 10_500)
+        _oynat(sayfa)
+        _ilerle(sayfa, 11_010)
+        assert _konum_ms(sayfa) == 14_000, "kesim atlama loop içinde değişti"
+        assert _dongu(sayfa)["aktif"] is False
+
+    def test_x_temizler(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        sayfa.keyboard.press("x")
+        _bekle(sayfa)
+        d = _dongu(sayfa)
+        assert (d["a"], d["b"], d["bantGorunur"]) == (None, None, False)
+
+    def test_i_tekrar_etmez(self, sayfa: Any) -> None:
+        _git(sayfa, 2_000)
+        sayfa.keyboard.down("i")
+        sayfa.evaluate("() => { window.__t = 3; }")  # arama değil: zaman aktı
+        sayfa.keyboard.down("i")  # repeat
+        sayfa.keyboard.up("i")
+        assert _dongu(sayfa)["a"] == 2_000
+
+    def test_o_tekrar_etmez(self, sayfa: Any) -> None:
+        _git(sayfa, 8_000)
+        sayfa.keyboard.down("o")
+        sayfa.evaluate("() => { window.__t = 9; }")
+        sayfa.keyboard.down("o")
+        sayfa.keyboard.up("o")
+        assert _dongu(sayfa)["b"] == 8_000
+
+    def test_x_tekrar_etmez(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 2_000)
+        sayfa.keyboard.down("x")
+        sayfa.evaluate("() => { dongu.a = 2000; dongu.b = 12000; }")
+        sayfa.keyboard.down("x")  # repeat: temizlememeli
+        sayfa.keyboard.up("x")
+        assert _dongu(sayfa)["a"] == 2_000
+
+    def test_bant_isabet_testine_girmez(self, sayfa: Any) -> None:
+        """v1.3.0 regresyonu bant üzerinden GERİ GELMEYECEK: bant kesim
+        bloklarının üstünü örtse bile tutamaç yine en üstteki öğedir."""
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 20_000)  # bant iki kesim bloğunu da kaplar
+        sonuc = sayfa.evaluate(
+            """() => {
+              const t = document.querySelector(".kesim-blok[data-id='c1'] .tutamac.sol");
+              const r = t.getBoundingClientRect();
+              const ust = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              const bant = document.getElementById("dongu-bant");
+              const kat = document.getElementById("dongu-katmani");
+              return {
+                tutamacMi: ust === t,
+                bantOlay: getComputedStyle(bant).pointerEvents,
+                katOlay: getComputedStyle(kat).pointerEvents,
+                katZ: getComputedStyle(kat).zIndex,
+              };
+            }"""
+        )
+        assert sonuc["tutamacMi"], "loop bandı tutamacı örtüyor"
+        assert sonuc["katOlay"] == "none" and sonuc["bantOlay"] == "none"
+        assert sonuc["katZ"] == "0", "bant dalga katmanında (0) olmalı"
+
+    def test_yeni_medya_loopu_sifirlar(self, sayfa: Any) -> None:
+        _isaretle(sayfa, "i", 2_000)
+        _isaretle(sayfa, "o", 12_000)
+        sayfa.evaluate("() => zcSifirla()")
+        assert _dongu(sayfa)["a"] is None
