@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from fillercut.export.medya import Kare, MedyaBilgisi, MedyaHatasi
 from fillercut.web.app import create_app
 from fillercut.web.medya import (
     EDITOR_BIN,
@@ -188,6 +189,46 @@ class TestOnizlemeUret:
         assert kayit.total_ms == 4_242
         assert kayit.peaks is None
 
+    def test_kare_hizi_tam_kesirli_tasinir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """v1.4.0: kare adımının (, / .) tabanı. XML dışa aktarımının OKUDUĞU
+        alanın aynısı (`export.medya.probe_medya` → `r_frame_rate`), float'a
+        düşülmeden pay/payda olarak — 29.97 float'ı uzun videoda kare kaydırır."""
+        monkeypatch.setattr("fillercut.web.medya.probe_duration_ms", lambda _h: 4_242)
+        monkeypatch.setattr(
+            "fillercut.web.medya.extract_audio",
+            lambda _s, _o: (_ for _ in ()).throw(RuntimeError("atla")),
+        )
+        monkeypatch.setattr(
+            "fillercut.web.medya.probe_medya",
+            lambda _h: MedyaBilgisi(
+                kare=Kare(30_000, 1_001), genislik=1920, yukseklik=1080,
+                ses_kanali=2, ses_hizi=48_000, sure_ms=4_242,
+            ),
+        )
+        kayit = onizleme_uret(_video(tmp_path))
+        assert kayit.kare == (30_000, 1_001)
+        assert kayit.total_ms == 4_242, "süre otoritesi DEĞİŞMEDİ: probe_duration_ms"
+
+    def test_kare_hizi_okunamazsa_kayit_yine_hazir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Kare hızı YAN bilgidir (yalnız ses dosyası, bozuk akış): kayıt `hazir`
+        kalır, `kare` None olur ve istemcide kare adımı etkisizdir."""
+        monkeypatch.setattr("fillercut.web.medya.probe_duration_ms", lambda _h: 4_242)
+        monkeypatch.setattr(
+            "fillercut.web.medya.extract_audio",
+            lambda _s, _o: (_ for _ in ()).throw(RuntimeError("atla")),
+        )
+        monkeypatch.setattr(
+            "fillercut.web.medya.probe_medya",
+            lambda _h: (_ for _ in ()).throw(MedyaHatasi("kaynakta video akışı yok")),
+        )
+        kayit = onizleme_uret(_video(tmp_path))
+        assert kayit.durum == "hazir"
+        assert kayit.kare is None
+
 
 @pytest.fixture()
 def istemci(tmp_path: Path) -> Iterator[tuple[TestClient, _SayanUretici, Path]]:
@@ -221,6 +262,34 @@ class TestOnizlemeUcu:
         assert veri["total_ms"] == 5_000
         assert veri["peaks"] == [[-10, 12], [-3, 4]]
         assert len(uretici.cagrilar) == 1
+
+    def test_kare_hizi_cevapta(self, tmp_path: Path) -> None:
+        ev = tmp_path / "ev"
+        ev.mkdir()
+        kayit = MedyaKaydi(durum="hazir", total_ms=5_000, peaks=None, kare=(30_000, 1_001))
+        app = create_app(fs_home=ev, medya=MedyaOnbellek(uretici=_SayanUretici(kayit)))
+        with TestClient(app) as client:
+            video = _video(ev)
+            veri: dict[str, object] = {}
+            for _ in range(200):
+                veri = client.get("/api/medya/onizleme", params={"path": str(video)}).json()
+                if veri["durum"] != "hesaplaniyor":
+                    break
+                threading.Event().wait(0.01)
+        assert veri["kare"] == {"pay": 30_000, "payda": 1_001}
+
+    def test_kare_hizi_yoksa_null(
+        self, istemci: tuple[TestClient, _SayanUretici, Path]
+    ) -> None:
+        client, _uretici, ev = istemci
+        video = _video(ev)
+        veri: dict[str, object] = {}
+        for _ in range(200):
+            veri = client.get("/api/medya/onizleme", params={"path": str(video)}).json()
+            if veri["durum"] != "hesaplaniyor":
+                break
+            threading.Event().wait(0.01)
+        assert veri["kare"] is None
 
     def test_olcek_sunucudan_gelir(
         self, istemci: tuple[TestClient, _SayanUretici, Path]
@@ -302,6 +371,11 @@ class TestGercekOnizleme:
         assert kayit.peaks is not None
         assert len(kayit.peaks) == 64
         assert all(len(p) == 2 and p[0] <= p[1] for p in kayit.peaks)
+
+    def test_kare_hizi_gercek_ffprobedan(self, tmp_path: Path) -> None:
+        video = make_color_sine_video(tmp_path / "fixture.mp4", duration_ms=1_000, fps=30)
+        kayit = onizleme_uret(video, bin_sayisi=16)
+        assert kayit.kare == (30, 1)
 
     def test_editor_bin_varsayilani_uygulanir(self, tmp_path: Path) -> None:
         video = make_color_sine_video(tmp_path / "fixture.mp4", duration_ms=3_000)

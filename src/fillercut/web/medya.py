@@ -21,6 +21,15 @@ aynı dosya ikinci kez istendiğinde ffmpeg hiç koşmaz.
 **Süre ile peaks ayrı başarısızlıklardır.** Süre zorunludur (zaman çizelgesi
 onsuz çizilemez); dalga formu YAN bir görselleştirmedir — üretilemezse kayıt
 yine ``hazir`` olur ve ``peaks`` ``None`` kalır (v1.0'daki sözleşmenin aynısı).
+
+**Kare hızı (v1.4.0 Dalga 1) da YAN bilgidir** — istemcinin kare adımı
+(``,`` / ``.``) onu kullanır. Kaynak, FCP7 XML dışa aktarımının OKUDUĞU alanın
+ta kendisidir (``export.medya.probe_medya`` → ``r_frame_rate``, pay/payda tam
+kesirli): önizlemenin "bir kare"si ile XML'in "bir kare"si aynı orandan gelir.
+Yeni bir ffprobe sözleşmesi YOK, var olan sarmalayıcı yeniden kullanılır
+(``surec`` kapısı dahil — KI-16). Okunamazsa (yalnız ses, bozuk akış) kayıt
+yine ``hazir``dır ve ``kare`` ``None`` kalır. Süre OTORİTESİ değişmedi:
+``probe_duration_ms``.
 """
 
 from __future__ import annotations
@@ -40,6 +49,7 @@ from pydantic import BaseModel, ConfigDict
 
 from fillercut.audio.extractor import extract_audio
 from fillercut.audio.probe import probe_duration_ms
+from fillercut.export.medya import probe_medya
 from fillercut.web import fs
 from fillercut.web.waveform import OLCEK, peaks_from_wav
 
@@ -87,6 +97,9 @@ class MedyaKaydi:
     peaks: list[list[int]] | None = None
     #: ``durum == "hata"`` iken Türkçe, eyleme dökülebilir metin.
     hata: str | None = None
+    #: Video akışının kare hızı ``(pay, payda)`` — ffprobe ``r_frame_rate``,
+    #: tam kesirli. Kare kavramı olmayan kaynakta ``None``.
+    kare: tuple[int, int] | None = None
 
 
 #: Ağır işi yapan çağrılabilir: yol → kayıt. Testler sahte üretici enjekte
@@ -116,6 +129,12 @@ def onizleme_uret(hedef: Path, *, bin_sayisi: int = EDITOR_BIN) -> MedyaKaydi:
                 "ffmpeg ve ffprobe PATH üzerinde mi?"
             ),
         )
+    kare: tuple[int, int] | None = None
+    try:
+        oran = probe_medya(hedef).kare
+        kare = (oran.pay, oran.payda)
+    except Exception:  # noqa: BLE001 - kare hızı YAN bilgidir (yalnız ses, bozuk akış)
+        kare = None
     peaks: list[list[int]] | None = None
     try:
         with tempfile.TemporaryDirectory(prefix="fillercut-peaks-") as gecici:
@@ -123,7 +142,7 @@ def onizleme_uret(hedef: Path, *, bin_sayisi: int = EDITOR_BIN) -> MedyaKaydi:
             peaks = peaks_from_wav(wav, bin_sayisi)
     except Exception:  # noqa: BLE001 - dalga formu YAN görselleştirmedir
         peaks = None
-    return MedyaKaydi(durum="hazir", total_ms=total_ms, peaks=peaks)
+    return MedyaKaydi(durum="hazir", total_ms=total_ms, peaks=peaks, kare=kare)
 
 
 class MedyaOnbellek:
@@ -187,6 +206,15 @@ class MedyaOnbellek:
         self._executor.shutdown(wait=False, cancel_futures=True)
 
 
+class KareCevabi(BaseModel):
+    """Kare hızı, tam kesirli — istemci ms↔kare çevrimini tamsayıyla yapar."""
+
+    model_config = ConfigDict(frozen=True)
+
+    pay: int
+    payda: int
+
+
 class OnizlemeCevabi(BaseModel):
     """``GET /api/medya/onizleme`` gövdesi.
 
@@ -202,6 +230,7 @@ class OnizlemeCevabi(BaseModel):
     peaks: list[list[int]] | None = None
     olcek: int = OLCEK
     hata: str | None = None
+    kare: KareCevabi | None = None
 
 
 def onbellek(request: Request) -> MedyaOnbellek:
@@ -230,8 +259,13 @@ def medya_onizleme(path: str, request: Request) -> OnizlemeCevabi:
     ffmpeg bir daha KOŞMAZ (kilit: ``tests/test_web_medya.py``).
     """
     kayit = onbellek(request).iste(_dogrulanmis_yol(path, request))
+    kare = KareCevabi(pay=kayit.kare[0], payda=kayit.kare[1]) if kayit.kare else None
     return OnizlemeCevabi(
-        durum=kayit.durum, total_ms=kayit.total_ms, peaks=kayit.peaks, hata=kayit.hata
+        durum=kayit.durum,
+        total_ms=kayit.total_ms,
+        peaks=kayit.peaks,
+        hata=kayit.hata,
+        kare=kare,
     )
 
 
@@ -256,6 +290,7 @@ def onbellek_kur(uretici: Uretici | None = None) -> MedyaOnbellek:
 
 __all__ = [
     "EDITOR_BIN",
+    "KareCevabi",
     "MedyaAnahtari",
     "MedyaKaydi",
     "MedyaOnbellek",

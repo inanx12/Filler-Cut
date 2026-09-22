@@ -249,6 +249,7 @@ async function onizlemeYokla() {
   zc.total_ms = veri.total_ms || 0;
   zc.peaks = veri.peaks;
   zc.olcek = veri.olcek || 127;
+  zc.kare = veri.kare || null;
   medyaOlcuTazele();
   zcCiz();
 }
@@ -620,11 +621,15 @@ const zc = {
   olcek: 127,
   zoom: 1,
   ws: null,       // wavesurfer örneği (vendor; yoksa dalga çizilmez)
+  /* Kare hızı {pay, payda} — önizleme ucundan, tam kesirli (XML'in okuduğu
+     `r_frame_rate`in aynısı). Kare kavramı olmayan kaynakta null. */
+  kare: null,
 };
 
 function zcSifirla() {
   zc.total_ms = 0;
   zc.peaks = null;
+  zc.kare = null;
   zc.zoom = 1;
   el("zoom").value = "1";
   el("zoom-deger").textContent = "1×";
@@ -1963,6 +1968,8 @@ const EYLEMLER = {
   "ileri-5sn": () => saniyeKaydir(5),
   "onceki-kesim-noktasi": () => kesimNoktasinaGit(-1),
   "sonraki-kesim-noktasi": () => kesimNoktasinaGit(1),
+  "kare-geri": () => kareAdimi(-1),
+  "kare-ileri": () => kareAdimi(1),
   "yasla": () => {
     if (review.secili && durum.asama === "analiz_tamam") yaslaGonder(review.secili);
   },
@@ -2023,6 +2030,60 @@ function kesimNoktasinaGit(yon) {
   }
   if (hedef === null) return; // uçtayız: clamp
   el("oynatici").currentTime = hedef / 1000;
+}
+
+/* ── , / . : kare adımı (v1.4.0 Dalga 1) ─────────────────────────────────
+ *
+ * YUVARLAMA KURALI EZBERDEN DEĞİL — FCP7 XML dışa aktarımının kuralıdır:
+ * `export/medya.py` `Kare.kare_alt` = `(ms * pay) // (payda * 1000)` (floor)
+ * ve `export/fcp7.py` keep BAŞINI onunla kareye çevirir
+ * (`giris = kare.kare_alt(keep.start_ms)`). Playhead'in "hangi karede"
+ * olduğu BİREBİR bu formülle bulunur; önizleme ile XML bir kare ayrışamaz.
+ *
+ * Karenin ilk ms'i aynı kuralın TERSİDİR: `kareAlt(ms) == n` olan EN KÜÇÜK
+ * ms = ceil(n * payda * 1000 / pay) (Python'daki `kare_ust` deyimiyle
+ * `-((-x) // y)`). Adım bu ms'e gider — yani adımın vardığı yer XML'in o
+ * kareye verdiği numaranın içindedir ve bir sonraki adım yine tam bir kare
+ * ilerler (mekân kaymaz).
+ *
+ * Tamsayı aritmetiği: `ms * pay` 10 saatlik 60000/1001 kaynakta ~2e12'dir,
+ * 2^53'ün çok altında. Bölmenin `Math.floor`u yine de düzeltilir — kayan
+ * nokta bölümü tam sayı sınırında bir üste yuvarlanabilir.
+ */
+function bolAlt(a, b) {
+  /* floor(a / b), b > 0, tam sayılar — Python `//` ile aynı (negatifte de). */
+  let q = Math.floor(a / b);
+  if (q * b > a) q -= 1;
+  else if ((q + 1) * b <= a) q += 1;
+  return q;
+}
+
+function kareAlt(ms) {
+  /* export/medya.py Kare.kare_alt — keep başının kare numarası (floor). */
+  return bolAlt(ms * zc.kare.pay, zc.kare.payda * 1000);
+}
+
+function kareBasMs(n) {
+  /* `n`. karenin ilk ms'i: kareAlt(ms) == n olan en küçük ms (ceil). */
+  return -bolAlt(-n * zc.kare.payda * 1000, zc.kare.pay);
+}
+
+function kareAdimi(yon) {
+  /* Bir kare geri/ileri. Oynuyorsa önce DURAKLATIR (kare adımı incelemedir;
+     oynarken bir kare ileri atlamanın gözle görülür bir karşılığı yoktur)
+     ve mekiği sıfırlar. Uçlar clamp'tir: ilk kare 0, son kare medyanın son
+     ms'ini (`total_ms - 1`) içeren karedir. Kare hızı bilinmiyorsa (yalnız
+     ses) eylem etkisizdir — tuş yine sahiplenilir. */
+  if (!zc.kare || !zc.total_ms) return;
+  const oynatici = el("oynatici");
+  shuttleSifirla();
+  if (!oynatici.paused) oynatici.pause();
+  const ms = Math.min(oynaticiMs(), zc.total_ms);
+  const son = kareAlt(zc.total_ms - 1);
+  const hedefKare = Math.min(Math.max(kareAlt(ms) + yon, 0), son);
+  const hedef = kareBasMs(hedefKare);
+  if (hedef === ms) return; // uçtayız: boş arama yok
+  oynatici.currentTime = hedef / 1000;
 }
 
 /* TEK keydown dinleyicisi — global tuş disiplini burada, SIRAYLA:

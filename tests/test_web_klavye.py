@@ -29,6 +29,7 @@ from typing import Any
 
 import pytest
 
+from fillercut.export.medya import Kare
 from tests.test_web_surukleme import (
     GORUNUM,
     HAZIRLIK,
@@ -163,7 +164,7 @@ def _git(sayfa: Any, ms: int) -> None:
 MEVCUT_TUSLAR = ["Space", "j", "k", "l", "ArrowLeft", "ArrowRight", "y", "m"]
 
 #: v1.4.0 Dalga 1'in yeni tuşları — odak/modal kilitleri bunlar için de koşar.
-YENI_TUSLAR = ["ArrowUp", "ArrowDown"]
+YENI_TUSLAR = ["ArrowUp", "ArrowDown", ",", "."]
 
 TUM_TUSLAR = MEVCUT_TUSLAR + YENI_TUSLAR
 
@@ -432,4 +433,131 @@ class TestEditPoint:
 
     def test_ok_tusu_sayfayi_kaydirmaz(self, sayfa: Any) -> None:
         sayfa.keyboard.press("ArrowDown")
+        assert _son_karar(sayfa)["onlendi"] is True
+
+
+def _kare_kur(sayfa: Any, pay: int, payda: int) -> None:
+    """Önizleme ucunun `kare` alanı (sunucu `r_frame_rate`i tam kesirli verir)."""
+    sayfa.evaluate(f"() => {{ zc.kare = {{ pay: {pay}, payda: {payda} }}; }}")
+
+
+def _kare_bas_ms(kare: Kare, n: int) -> int:
+    """`n`. karenin İLK ms'i — XML kuralının (`Kare.kare_alt`, floor) tersi:
+    `kare_alt(ms) == n` olan en küçük ms. Arama ile bulunur, formül KOPYALANMAZ."""
+    ms = (n * kare.payda * 1000) // kare.pay
+    while kare.kare_alt(ms) < n:
+        ms += 1
+    while ms > 0 and kare.kare_alt(ms - 1) >= n:
+        ms -= 1
+    return ms
+
+
+#: Rasyonel NTSC ailesi + tam sayı oranlar (korpus klipleri 60/1).
+ORANLAR = [(30_000, 1_001), (24_000, 1_001), (60_000, 1_001), (60, 1), (25, 1)]
+
+
+class TestKareAdimi:
+    """, / . — bir kare geri/ileri. Yuvarlama kuralı EZBERDEN DEĞİL: FCP7 XML
+    dışa aktarımının kullandığı `export.medya.Kare.kare_alt`in (keep başı,
+    floor) BİREBİR aynısı. Önizleme ile XML bir kare ayrışamaz."""
+
+    @pytest.mark.parametrize(("pay", "payda"), ORANLAR)
+    def test_js_kare_alt_xml_kuraliyla_ayni(self, sayfa: Any, pay: int, payda: int) -> None:
+        kare = Kare(pay, payda)
+        _kare_kur(sayfa, pay, payda)
+        ornekler = list(range(0, 3_000)) + [
+            25_676, 25_677, 599_999, 3_600_000, 35_999_999, 36_000_000,
+        ]
+        js = sayfa.evaluate("(ms) => ms.map((x) => kareAlt(x))", ornekler)
+        py = [kare.kare_alt(m) for m in ornekler]
+        farklar = [(m, j, p) for m, j, p in zip(ornekler, js, py, strict=True) if j != p]
+        assert not farklar, f"JS ↔ XML ayrışması (ms, js, xml): {farklar[:5]}"
+
+    @pytest.mark.parametrize(("pay", "payda"), ORANLAR)
+    def test_js_kare_basi_xml_kuralinin_tersi(self, sayfa: Any, pay: int, payda: int) -> None:
+        """Karenin ilk ms'i: XML kuralıyla tam o kareye düşen EN KÜÇÜK ms."""
+        kare = Kare(pay, payda)
+        _kare_kur(sayfa, pay, payda)
+        kareler = list(range(0, 400)) + [108_000, 1_078_921]
+        js = sayfa.evaluate("(n) => n.map((x) => kareBasMs(x))", kareler)
+        py = [_kare_bas_ms(kare, n) for n in kareler]
+        assert js == py
+
+    def test_nokta_bir_kare_ileri_rasyonel(self, sayfa: Any) -> None:
+        kare = Kare(30_000, 1_001)
+        _kare_kur(sayfa, 30_000, 1_001)
+        _git(sayfa, 0)
+        sayfa.keyboard.press(".")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == _kare_bas_ms(kare, 1) == 34  # 33.366… → ilk tam ms
+        sayfa.keyboard.press(".")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == _kare_bas_ms(kare, 2) == 67
+        sayfa.keyboard.press(",")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == 34
+
+    def test_kare_ortasindan_adim_komsu_kareye(self, sayfa: Any) -> None:
+        """Playhead karenin ortasındaysa (çizelgeye tıklanmış) bulunduğu kare
+        XML kuralıyla (floor) belirlenir ve komşu karenin BAŞINA gidilir."""
+        kare = Kare(30_000, 1_001)
+        _kare_kur(sayfa, 30_000, 1_001)
+        _git(sayfa, 50)  # kare 1'in içi
+        assert kare.kare_alt(50) == 1
+        sayfa.keyboard.press(".")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == _kare_bas_ms(kare, 2)
+        _git(sayfa, 50)
+        sayfa.keyboard.press(",")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == 0
+
+    def test_basili_tutunca_tekrar_eder(self, sayfa: Any) -> None:
+        kare = Kare(60, 1)
+        _kare_kur(sayfa, 60, 1)
+        _git(sayfa, 1_000)
+        sayfa.keyboard.down(".")
+        sayfa.keyboard.down(".")
+        sayfa.keyboard.down(".")
+        sayfa.keyboard.up(".")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == _kare_bas_ms(kare, kare.kare_alt(1_000) + 3)
+
+    def test_basta_geri_clamp(self, sayfa: Any) -> None:
+        _kare_kur(sayfa, 30_000, 1_001)
+        _git(sayfa, 0)
+        once = sayfa.evaluate("() => window.__seekler.length")
+        sayfa.keyboard.press(",")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == 0
+        assert sayfa.evaluate("() => window.__seekler.length") == once
+
+    def test_sonda_ileri_clamp(self, sayfa: Any) -> None:
+        """Son kare, medyanın son ms'ini (`total - 1`) içeren karedir; ötesi yok."""
+        kare = Kare(30_000, 1_001)
+        _kare_kur(sayfa, 30_000, 1_001)
+        son = _kare_bas_ms(kare, kare.kare_alt(TOPLAM - 1))
+        _git(sayfa, son)
+        sayfa.keyboard.press(".")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == son
+        assert son < TOPLAM
+
+    def test_oynarken_adim_duraklatir(self, sayfa: Any) -> None:
+        _kare_kur(sayfa, 30_000, 1_001)
+        sayfa.keyboard.press("Space")
+        _bekle(sayfa)
+        assert _durum(sayfa)["duraklamis"] is False
+        sayfa.keyboard.press(".")
+        _bekle(sayfa)
+        assert _durum(sayfa)["duraklamis"] is True
+
+    def test_kare_hizi_bilinmiyorsa_etkisiz_ama_sahiplenilir(self, sayfa: Any) -> None:
+        """Yalnız ses dosyası / ffprobe okuyamadı: kare kavramı yok."""
+        sayfa.evaluate("() => { zc.kare = null; }")
+        _git(sayfa, 1_000)
+        once = _durum(sayfa)
+        sayfa.keyboard.press(".")
+        _bekle(sayfa)
+        assert _durum(sayfa) == once
         assert _son_karar(sayfa)["onlendi"] is True

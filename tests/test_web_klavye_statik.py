@@ -242,3 +242,54 @@ class TestKesimNoktasi:
         govde = js[bas : js.index("\n}", bas)]
         assert "n < ms" in govde and "n > ms" in govde
         assert "<= ms" not in govde and ">= ms" not in govde
+
+
+class TestKareAdimiKurali:
+    """, / . — kare adımı XML dışa aktarımının yuvarlama kuralını kullanır.
+
+    Davranış eşitliği (JS ↔ `Kare.kare_alt`, rasyonel oranlarla, binlerce ms)
+    gerçek tarayıcıda kilitlidir (`test_web_klavye.py::TestKareAdimi`). Bu
+    sınıf iki tarafın METNİNİ birbirine bağlar ve CI'da koşar: XML kuralı
+    değişirse (ör. floor → round) bu test kırmızıya döner ve önizlemenin de
+    güncellenmesi gerektiğini söyler."""
+
+    def test_xml_kurali_floor(self) -> None:
+        import inspect
+
+        from fillercut.export import fcp7
+        from fillercut.export.medya import Kare
+
+        assert "(ms * self.pay) // (self.payda * 1000)" in inspect.getsource(Kare.kare_alt)
+        assert "giris = kare.kare_alt(keep.start_ms)" in inspect.getsource(fcp7.build_fcp7_xml)
+
+    def test_js_ayni_formul(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("function kareAlt")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "bolAlt(ms * zc.kare.pay, zc.kare.payda * 1000)" in govde
+
+    def test_js_kare_basi_ters_kural(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("function kareBasMs")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "-bolAlt(-n * zc.kare.payda * 1000, zc.kare.pay)" in govde
+
+    def test_float_fps_kullanilmaz(self) -> None:
+        """29.97 float'ı uzun videoda kare kaydırır (export/medya.py gerekçesi)."""
+        js = _oku("app.js")
+        for yasak in ("29.97", "zc.kare.pay / zc.kare.payda", "fps"):
+            assert yasak not in js, yasak
+
+    def test_noktalama_karakterle_eslesir(self) -> None:
+        """TR-Q'da "," ve "." fiziksel yerleri US'ten farklıdır."""
+        assert _kisayol("kare-geri").tuslar == (",",)
+        assert _kisayol("kare-ileri").tuslar == (".",)
+        assert _kisayol("kare-geri").kodlar == ()
+
+    @pytest.mark.parametrize("eylem", ["kare-geri", "kare-ileri"])
+    def test_tekrar_eder(self, eylem: str) -> None:
+        assert _kisayol(eylem).tekrar is True
+
+    def test_kare_hizi_sunucudan(self) -> None:
+        js = _oku("app.js")
+        assert "zc.kare = veri.kare || null;" in js
