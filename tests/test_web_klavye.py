@@ -162,6 +162,29 @@ def _git(sayfa: Any, ms: int) -> None:
 #: Mevcut (v1.3.x) kısayollar — kayda TAŞINDILAR, davranış aynı.
 MEVCUT_TUSLAR = ["Space", "j", "k", "l", "ArrowLeft", "ArrowRight", "y", "m"]
 
+#: v1.4.0 Dalga 1'in yeni tuşları — odak/modal kilitleri bunlar için de koşar.
+YENI_TUSLAR = ["ArrowUp", "ArrowDown"]
+
+TUM_TUSLAR = MEVCUT_TUSLAR + YENI_TUSLAR
+
+TOPLAM = int(GORUNUM["total_ms"])  # type: ignore[call-overload]
+
+
+def _kesimleri_kur(sayfa: Any, araliklar: list[tuple[int, int]]) -> None:
+    """Planı verilen aktif kesimlerle yeniden kurar (sunucu görünümü biçiminde)."""
+    sayfa.evaluate(
+        """(ar) => {
+          const g = review.gorunum;
+          g.kesimler = ar.map(([b, e], i) => ({
+            id: "c" + i, bas_ms: b, bit_ms: e, tur: "sessizlik", aktif: true,
+            manuel: false, duzenlendi: false, reason: "silence", kelimeler: [],
+          }));
+          g.aktif_araliklar = ar.map(([b, e]) => [b, e]);
+          reviewCiz();
+        }""",
+        [list(a) for a in araliklar],
+    )
+
 
 class TestOdakKilidi:
     """Metin girişi odaktayken HİÇBİR global kısayol ateşlenmez."""
@@ -173,7 +196,7 @@ class TestOdakKilidi:
     }
 
     @pytest.mark.parametrize("tur", list(GIRDILER))
-    @pytest.mark.parametrize("tus", MEVCUT_TUSLAR)
+    @pytest.mark.parametrize("tus", TUM_TUSLAR)
     def test_metin_girisinde_kisayol_olu(self, sayfa: Any, tur: str, tus: str) -> None:
         sayfa.evaluate(
             "(h) => { const d = document.createElement('div'); d.innerHTML = h;"
@@ -250,7 +273,7 @@ class TestDugmeOdagi:
 class TestModalKilidi:
     """Bir diyalog açıkken global kısayollar ÖLÜ; modalın kendi tuşları çalışır."""
 
-    @pytest.mark.parametrize("tus", MEVCUT_TUSLAR)
+    @pytest.mark.parametrize("tus", TUM_TUSLAR)
     def test_diyalog_acikken_kisayol_olu(self, sayfa: Any, tus: str) -> None:
         sayfa.evaluate("() => document.getElementById('dlg-render').showModal()")
         once = _durum(sayfa)
@@ -316,3 +339,97 @@ class TestPreventDefault:
         karar = _son_karar(sayfa)
         assert karar["onlendi"] is False, f"{tus} engellendi — tarayıcıya akmalıydı"
         assert _durum(sayfa) == once, f"{tus} bir eylem ateşledi"
+
+
+class TestEditPoint:
+    """↑/↓ — kesim sınırları arasında atlama (CapCut/Premiere modeli).
+
+    Sınırlar planın AKTİF kesimlerinin (`aktif_araliklar`) baş/bitiş ms-int
+    değerleridir; medyanın başı (0) ve sonu da birer uçtur (clamp).
+    Plan: [5000, 6000) ve [15245, 17364) — ikisi arasında tutulan bölge.
+    """
+
+    ARALIKLAR = [(5_000, 6_000), (15_245, 17_364)]
+
+    @pytest.fixture(autouse=True)
+    def _plan(self, sayfa: Any) -> None:
+        _kesimleri_kur(sayfa, self.ARALIKLAR)
+
+    def _bas(self, sayfa: Any, tus: str, bas_ms: int) -> int:
+        _git(sayfa, bas_ms)
+        sayfa.keyboard.press(tus)
+        _bekle(sayfa)
+        return _konum_ms(sayfa)
+
+    def test_kesim_icinde_yukari_baslangica(self, sayfa: Any) -> None:
+        assert self._bas(sayfa, "ArrowUp", 15_500) == 15_245
+
+    def test_kesim_icinde_asagi_bitise(self, sayfa: Any) -> None:
+        assert self._bas(sayfa, "ArrowDown", 15_500) == 17_364
+
+    def test_tam_sinirda_asagi_yapismaz(self, sayfa: Any) -> None:
+        """KİLİT: sınırın TAM üstündeyken aynı yere gitmek kullanıcıyı kilitlerdi."""
+        assert self._bas(sayfa, "ArrowDown", 15_245) == 17_364
+
+    def test_tam_sinirda_yukari_yapismaz(self, sayfa: Any) -> None:
+        assert self._bas(sayfa, "ArrowUp", 15_245) == 6_000
+
+    def test_bitis_sinirinda_yukari_baslangica(self, sayfa: Any) -> None:
+        assert self._bas(sayfa, "ArrowUp", 17_364) == 15_245
+
+    def test_tutulan_bolgeden_yukari(self, sayfa: Any) -> None:
+        assert self._bas(sayfa, "ArrowUp", 10_000) == 6_000
+
+    def test_tutulan_bolgeden_asagi(self, sayfa: Any) -> None:
+        assert self._bas(sayfa, "ArrowDown", 10_000) == 15_245
+
+    def test_basili_tutunca_her_tekrar_bir_sinir(self, sayfa: Any) -> None:
+        _git(sayfa, 0)
+        sayfa.keyboard.down("ArrowDown")
+        sayfa.keyboard.down("ArrowDown")  # repeat: true
+        sayfa.keyboard.down("ArrowDown")  # repeat: true
+        sayfa.keyboard.up("ArrowDown")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == 15_245, "0 → 5000 → 6000 → 15245 olmalıydı"
+
+    def test_son_sinirdan_sonra_medya_sonu(self, sayfa: Any) -> None:
+        assert self._bas(sayfa, "ArrowDown", 20_000) == TOPLAM
+
+    def test_ilk_sinirdan_once_medya_basi(self, sayfa: Any) -> None:
+        assert self._bas(sayfa, "ArrowUp", 2_000) == 0
+
+    def test_medya_basinda_yukari_clamp(self, sayfa: Any) -> None:
+        _git(sayfa, 0)
+        once = sayfa.evaluate("() => window.__seekler.length")
+        sayfa.keyboard.press("ArrowUp")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == 0
+        assert sayfa.evaluate("() => window.__seekler.length") == once, "uçta boş arama yapıldı"
+
+    def test_medya_sonunda_asagi_clamp(self, sayfa: Any) -> None:
+        _git(sayfa, TOPLAM)
+        sayfa.keyboard.press("ArrowDown")
+        _bekle(sayfa)
+        assert _konum_ms(sayfa) == TOPLAM
+
+    def test_geri_alinan_kesim_sinir_degildir(self, sayfa: Any) -> None:
+        """Plan = AKTİF kesimler. Geri alınan (pasif) kesim kesilmeyecek; sınırı
+        bir edit noktası değildir."""
+        sayfa.evaluate(
+            """() => {
+              review.gorunum.kesimler[0].aktif = false;
+              review.gorunum.aktif_araliklar = [[15245, 17364]];
+              reviewCiz();
+            }"""
+        )
+        assert self._bas(sayfa, "ArrowDown", 1_000) == 15_245
+
+    def test_plansiz_medyada_uclara_gider(self, sayfa: Any) -> None:
+        """Analizden önce (`yuklendi`) kesim yoktur: yalnız medyanın iki ucu."""
+        sayfa.evaluate("() => { review.gorunum = null; asamaAyarla('yuklendi'); }")
+        assert self._bas(sayfa, "ArrowDown", 10_000) == TOPLAM
+        assert self._bas(sayfa, "ArrowUp", 10_000) == 0
+
+    def test_ok_tusu_sayfayi_kaydirmaz(self, sayfa: Any) -> None:
+        sayfa.keyboard.press("ArrowDown")
+        assert _son_karar(sayfa)["onlendi"] is True

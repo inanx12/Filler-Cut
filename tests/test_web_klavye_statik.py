@@ -193,7 +193,9 @@ class TestTekrarDisiplini:
     def test_mekik_basili_tutunca_katlamaz(self, eylem: str) -> None:
         assert _kisayol(eylem).tekrar is False
 
-    @pytest.mark.parametrize("eylem", ["geri-5sn", "ileri-5sn"])
+    @pytest.mark.parametrize(
+        "eylem", ["geri-5sn", "ileri-5sn", "onceki-kesim-noktasi", "sonraki-kesim-noktasi"]
+    )
     def test_ok_tuslari_tekrar_eder(self, eylem: str) -> None:
         assert _kisayol(eylem).tekrar is True
 
@@ -216,3 +218,27 @@ class TestDegistiriciDisiplini:
         govde = js[bas : js.index("\n}", bas)]
         for alan in ("ev.ctrlKey", "ev.altKey", "ev.metaKey", '"AltGraph"'):
             assert alan in govde, alan
+
+
+class TestKesimNoktasi:
+    """↑/↓ — plan sınırları arasında atlama (davranış: `test_web_klavye.py`)."""
+
+    def test_oklar_kayitta(self) -> None:
+        assert _kisayol("onceki-kesim-noktasi").kodlar == ("ArrowUp",)
+        assert _kisayol("sonraki-kesim-noktasi").kodlar == ("ArrowDown",)
+
+    def test_noktalar_aktif_plandan(self) -> None:
+        """Geri alınan kesim plan dışıdır; nokta kaynağı `aktif_araliklar`."""
+        js = _oku("app.js")
+        bas = js.index("function kesimNoktalari")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "review.gorunum.aktif_araliklar" in govde
+        assert "kesimler" not in govde
+
+    def test_kesin_esitsizlik(self) -> None:
+        """Tam sınırda yapışmamanın metin tarafı: `<`/`>`, `<=`/`>=` DEĞİL."""
+        js = _oku("app.js")
+        bas = js.index("function kesimNoktasinaGit")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "n < ms" in govde and "n > ms" in govde
+        assert "<= ms" not in govde and ">= ms" not in govde

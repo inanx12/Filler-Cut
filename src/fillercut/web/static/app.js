@@ -1961,6 +1961,8 @@ const EYLEMLER = {
   "mekik-ileri": () => shuttleUygula(1),
   "geri-5sn": () => saniyeKaydir(-5),
   "ileri-5sn": () => saniyeKaydir(5),
+  "onceki-kesim-noktasi": () => kesimNoktasinaGit(-1),
+  "sonraki-kesim-noktasi": () => kesimNoktasinaGit(1),
   "yasla": () => {
     if (review.secili && durum.asama === "analiz_tamam") yaslaGonder(review.secili);
   },
@@ -1970,6 +1972,57 @@ const EYLEMLER = {
 function saniyeKaydir(sn) {
   const oynatici = el("oynatici");
   oynatici.currentTime = Math.max(0, oynatici.currentTime + sn);
+}
+
+function oynaticiMs() {
+  /* Oynatıcının konumu, ms-int (invariant 1). Ölçüldü: atanan `currentTime`
+     geri okunduğunda BİREBİR aynı gelir (1.234 → 1234), yani bizim
+     yaptığımız bir aramanın sonucu yuvarlamadan sonra atanan ms'e eşittir —
+     "tam sınırın üstünde miyiz" karşılaştırması buna dayanır. */
+  return Math.round(el("oynatici").currentTime * 1000);
+}
+
+/* ── ↑/↓: kesim noktası atlama (v1.4.0 Dalga 1) ──────────────────────────
+ *
+ * CapCut/Premiere modeli. Kesim noktaları PLANDAN gelir: AKTİF kesimlerin
+ * (`aktif_araliklar` — geri alınanlar plan dışıdır, sınırları da nokta
+ * değildir) başlangıç ve bitiş ms-int değerleri. Medyanın başı (0) ve sonu
+ * da uçtur; bir yönde nokta kalmadıysa oraya gidilir ve orada kalınır
+ * (clamp — uçta boş bir arama yapılmaz).
+ *
+ * TEK KURAL, KESİN EŞİTSİZLİK: ↑ `ms`den KÜÇÜK en büyük noktaya, ↓ `ms`den
+ * BÜYÜK en küçük noktaya. Bundan üç sözleşme kendiliğinden çıkar:
+ *   · kesimin İÇİNDE (bas < ms < bit) ↑ başına, ↓ sonuna gider — kesim içinde
+ *     başka nokta yoktur;
+ *   · TAM sınırın üstünde (ms == nokta) yapışıp kalınmaz, yönündeki BİR
+ *     SONRAKİ noktaya geçilir (`<=` yazılsaydı kullanıcı kilitlenirdi);
+ *   · tutulan bölgede yönündeki en yakın noktaya gidilir.
+ * Basılı tutmak (`repeat`) her tekrarda bir nokta atlar.
+ */
+function kesimNoktalari() {
+  const kume = new Set([0]);
+  if (zc.total_ms > 0) kume.add(zc.total_ms);
+  if (review.gorunum) {
+    for (const [bas, bit] of review.gorunum.aktif_araliklar) {
+      kume.add(bas);
+      kume.add(bit);
+    }
+  }
+  return [...kume].sort((a, b) => a - b);
+}
+
+function kesimNoktasinaGit(yon) {
+  const ms = oynaticiMs();
+  const noktalar = kesimNoktalari();
+  let hedef = null;
+  if (yon < 0) {
+    for (const n of noktalar) if (n < ms) hedef = n;
+  } else {
+    hedef = noktalar.find((n) => n > ms);
+    if (hedef === undefined) hedef = null;
+  }
+  if (hedef === null) return; // uçtayız: clamp
+  el("oynatici").currentTime = hedef / 1000;
 }
 
 /* TEK keydown dinleyicisi — global tuş disiplini burada, SIRAYLA:
