@@ -25,6 +25,15 @@
  *   tekrar    basılı tutunca (`ev.repeat`) yeniden ateşler mi. `false`
  *             olan tuş tekrar olayında da SAHİPLENİLİR (varsayılanı
  *             engellenir) ama eylem koşmaz.
+ *
+ *             KURAL: **durum çeviren tuş tek-atımlık, adım/hız tuşu
+ *             repeat'li.** Boşluk, K, Y, M, I, O, X ve ? bir DURUMU çevirir
+ *             (oynat/duraklat, mıknatıs, işaret, katman); tekrarda yeniden
+ *             ateşlenmeleri ekranda TİTREME olur ve sonucu "tuş kaç kez
+ *             tekrarladı"ya bağlar — 250 ms'lik bir basış bile durumu geri
+ *             alabilir. Ok tuşları, kare adımı ve zoom ADIM atar: tekrar
+ *             orada işin ta kendisidir. J/L arada durur ve v1.3.0
+ *             semantiğini korur (basılı tutmak hızı KATLAMAZ).
  *   herAsamada  (isteğe bağlı) medya yokken (`bos`) de çalışır
  *
  * Değiştirici DİSİPLİNİ: Ctrl/Alt/Meta'lı HİÇBİR kombinasyon sahiplenilmez —
@@ -37,13 +46,13 @@
 const KISAYOLLAR = [
   { eylem: "oynat-durdur", tuslar: [{ kod: "Space" }],
     etiket: "Boşluk", aciklama: "Oynat / duraklat",
-    grup: "Oynatma", tekrar: true },
+    grup: "Oynatma", tekrar: false },
   { eylem: "mekik-geri", tuslar: [{ kod: "KeyJ" }],
     etiket: "J", aciklama: "Geri sar — her basış hızı katlar",
     grup: "Oynatma", tekrar: false },
   { eylem: "mekik-dur", tuslar: [{ kod: "KeyK" }],
     etiket: "K", aciklama: "Mekiği durdur",
-    grup: "Oynatma", tekrar: true },
+    grup: "Oynatma", tekrar: false },
   { eylem: "mekik-ileri", tuslar: [{ kod: "KeyL" }],
     etiket: "L", aciklama: "İleri oynat — her basış hızı katlar",
     grup: "Oynatma", tekrar: false },
@@ -88,10 +97,10 @@ const KISAYOLLAR = [
     grup: "Genel", tekrar: false, herAsamada: true },
   { eylem: "yasla", tuslar: [{ kod: "KeyY" }],
     etiket: "Y", aciklama: "Seçili kesimi sessizliğe yasla",
-    grup: "Düzenleme", tekrar: true },
+    grup: "Düzenleme", tekrar: false },
   { eylem: "miknatis", tuslar: [{ kod: "KeyM" }],
     etiket: "M", aciklama: "Mıknatısı aç / kapat",
-    grup: "Düzenleme", tekrar: true },
+    grup: "Düzenleme", tekrar: false },
 ];
 
 function kisayolBul(ev) {

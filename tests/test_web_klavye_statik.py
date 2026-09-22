@@ -195,6 +195,34 @@ class TestMevcutKisayollarTasindi:
 
 
 class TestTekrarDisiplini:
+    """KURAL: durum çeviren tuş tek-atımlık, adım/hız tuşu repeat'li.
+
+    Kural KAYITTA yaşar (`tekrar` alanı) ve burada TÜM kayda uygulanır: yeni
+    bir kısayol eklendiğinde yazan kişi hangi sınıfta olduğunu söylemek
+    zorunda kalır, yoksa bu test kırmızıya döner."""
+
+    #: ADIM/HIZ tuşları — tekrar işin kendisidir.
+    TEKRARLI = frozenset({
+        "geri-5sn", "ileri-5sn",
+        "onceki-kesim-noktasi", "sonraki-kesim-noktasi",
+        "kare-geri", "kare-ileri",
+        "zoom-yakin", "zoom-uzak",
+    })
+
+    def test_kural_tum_kayda_uygulanir(self) -> None:
+        for k in kayit():
+            assert k.tekrar is (k.eylem in self.TEKRARLI), (
+                f"{k.eylem}: adım/hız tuşu repeat'li, durum çeviren tuş tek-atımlık"
+            )
+
+    @pytest.mark.parametrize(
+        "eylem", ["oynat-durdur", "mekik-dur", "yasla", "miknatis"]
+    )
+    def test_durum_ceviren_tuslar_tek_atimlik(self, eylem: str) -> None:
+        """v1.4.0 Dalga 1 kapanışı: bu dördü ÖNCE `tekrar: true` idi (v1.3
+        davranışı aynen taşınmıştı) ve basılı tutmak durumu titretiyordu."""
+        assert _kisayol(eylem).tekrar is False
+
     @pytest.mark.parametrize("eylem", ["mekik-geri", "mekik-ileri"])
     def test_mekik_basili_tutunca_katlamaz(self, eylem: str) -> None:
         assert _kisayol(eylem).tekrar is False

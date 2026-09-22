@@ -292,7 +292,82 @@ class TestModalKilidi:
 
 
 class TestTekrar:
-    """Basılı tutma (`repeat`) disiplini."""
+    """Basılı tutma (`repeat`) disiplini.
+
+    KURAL: **durum çeviren tuş tek-atımlık, adım/hız tuşu repeat'li.** Boşluk,
+    K, Y ve M bir DURUMU çevirir (oynat/duraklat, mekiği durdur, yasla,
+    mıknatıs); tekrar olayında yeniden ateşlenmeleri kullanıcıya bir titreme
+    olarak görünür ve basılı tutmanın sonucu tuşun kaç kez tekrarladığına
+    bağlı kalır. Ok tuşları, kare adımı ve zoom ise ADIM atar: tekrar orada
+    işin ta kendisidir. J/L bu ikisinin arasındadır ve v1.3.0 semantiğini
+    korur (basılı tutmak hızı KATLAMAZ).
+    """
+
+    #: Durumu çeviren tuş → eylem kimliği (kayıtta `tekrar: false`).
+    DURUM_CEVIRENLER = [
+        ("Space", "oynat-durdur"),
+        ("k", "mekik-dur"),
+        ("y", "yasla"),
+        ("m", "miknatis"),
+    ]
+
+    @pytest.mark.parametrize(("tus", "eylem"), DURUM_CEVIRENLER)
+    def test_durum_ceviren_tus_tek_atimlik(self, sayfa: Any, tus: str, eylem: str) -> None:
+        """Basılı tutmak eylemi BİR kez koşturur; tuş yine de bizimdir."""
+        sayfa.evaluate(
+            """(e) => {
+              window.__sayac = 0;
+              const orj = EYLEMLER[e];
+              EYLEMLER[e] = (ev) => { window.__sayac += 1; return orj(ev); };
+            }""",
+            eylem,
+        )
+        for _ in range(4):  # ilk basış + üç tekrar
+            sayfa.keyboard.down(tus)
+        sayfa.keyboard.up(tus)
+        _bekle(sayfa)
+        assert sayfa.evaluate("() => window.__sayac") == 1, f"{tus} tekrarda yeniden ateşledi"
+        assert sayfa.evaluate("() => window.__kararlar.at(-1).onlendi") is True, (
+            "tekrar eylemi koşturmasa da tuş BİZİMDİR (sayfa kaymamalı)"
+        )
+
+    def test_bosluk_basili_tutmak_oynatmayi_titretmez(self, sayfa: Any) -> None:
+        """Ölçülebilir sonuç: dört olayda TEK geçiş ve sonunda oynuyor
+        (tekrarlı hâlde oynat/duraklat dört kez çevrilip duraklamış kalırdı)."""
+        sayfa.evaluate(
+            """() => {
+              window.__gecis = 0;
+              const o = document.getElementById("oynatici");
+              const say = () => { window.__gecis += 1; };
+              for (const ad of ["play", "pause"]) o.addEventListener(ad, say);
+            }"""
+        )
+        for _ in range(4):
+            sayfa.keyboard.down("Space")
+        sayfa.keyboard.up("Space")
+        _bekle(sayfa)
+        assert sayfa.evaluate("() => window.__gecis") == 1
+        assert _durum(sayfa)["duraklamis"] is False
+
+    def test_miknatis_basili_tutmak_anahtari_titretmez(self, sayfa: Any) -> None:
+        for _ in range(4):
+            sayfa.keyboard.down("m")
+        sayfa.keyboard.up("m")
+        _bekle(sayfa)
+        assert sayfa.evaluate("() => review.snap") is False, "mıknatıs dört kez çevrildi"
+        assert sayfa.evaluate(
+            "() => document.getElementById('btn-miknatis').getAttribute('aria-pressed')"
+        ) == "false", "DOM durumla ayrıştı"
+
+    def test_yasla_basili_tutmak_sunucuyu_yagmalamaz(self, sayfa: Any) -> None:
+        sayfa.evaluate("() => { review.secili = 'c0'; }")
+        for _ in range(4):
+            sayfa.keyboard.down("y")
+        sayfa.keyboard.up("y")
+        _bekle(sayfa)
+        istekler = sayfa.evaluate("() => window.__istekler.map((i) => i.yol)")
+        assert len(istekler) == 1, f"tek basışta {len(istekler)} istek gitti: {istekler}"
+        assert istekler[0].endswith("/review/yasla")
 
     def test_l_basili_tutmak_hizi_katlamaz(self, sayfa: Any) -> None:
         sayfa.keyboard.down("l")

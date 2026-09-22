@@ -2296,7 +2296,9 @@ function kareAdimi(yon) {
  *   4. Klavye odağındaki düğme Boşluk/Enter'ı sahiplenir (erişilebilirlik).
  *   5. preventDefault YALNIZ burada, yani yalnız sahiplenilen tuşta.
  *   6. Tekrar disiplini: `tekrar: false` girdide basılı tutma eylemi yeniden
- *      koşturmaz — ama tuş yine bizimdir (5. adım sayfanın kaymasını önler). */
+ *      koşturmaz — ama tuş yine bizimdir (5. adım sayfanın kaymasını önler).
+ *      Sınıflandırma kayıttadır: durum çeviren tuş tek-atımlık, adım/hız
+ *      tuşu repeat'li (bkz. `keymap.js`). */
 document.addEventListener("keydown", (ev) => {
   if (el("dlg-yardim").open) {
     yardimTusu(ev); // yardım katmanının KENDİ tuşu (?); gerisi ölü
