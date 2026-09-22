@@ -1225,3 +1225,41 @@ h2.ust-bosluk { margin-top: 20px; }
 @media (max-width: 620px) {
   .modlar { grid-template-columns: 1fr; }
 }
+
+/* ── yardım katmanı (?) — içerik keymap.js'ten üretilir ─────────────── */
+
+.dlg-yardim { max-width: 680px; padding: 0; }
+.yardim-govde { padding: 20px 24px 16px; outline: none; max-height: 80vh; overflow-y: auto; }
+.yardim-bas { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.yardim-bas h2 { margin: 0; }
+.yardim-liste {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 6px 28px;
+  margin-top: 14px;
+}
+.yardim-grup h3 {
+  color: var(--soluk);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  margin: 10px 0 6px;
+}
+.yardim-grup dl { margin: 0; }
+.yardim-satir { display: flex; align-items: baseline; gap: 12px; padding: 3px 0; }
+.yardim-satir dt { flex: none; min-width: 44px; }
+.yardim-satir dd { margin: 0; color: var(--metin); font-size: 13px; }
+.yardim-satir kbd {
+  display: inline-block;
+  min-width: 26px;
+  padding: 1px 7px;
+  border: 1px solid var(--cizgi);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--kart-ust);
+  font-family: ui-monospace, "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  text-align: center;
+  color: var(--metin);
+}
+.yardim-alt { color: var(--soluk); font-size: 12px; margin: 14px 0 0; }

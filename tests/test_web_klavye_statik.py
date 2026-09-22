@@ -54,6 +54,12 @@ _GIRDI = re.compile(
 )
 
 
+def _kacis_coz(metin: str) -> str:
+    """JS dize kaçışını çözer (kaynaktaki iki ters bölü → bir ters bölü).
+    `unicode_escape` KULLANILMAZ: UTF-8 Türkçe metni bozar."""
+    return re.sub(r"\\(.)", r"\1", metin)
+
+
 def kayit() -> list[Kisayol]:
     """`keymap.js`teki `KISAYOLLAR` dizisini ayrıştırır."""
     js = _oku("keymap.js")
@@ -70,8 +76,8 @@ def kayit() -> list[Kisayol]:
                     t.encode().decode("unicode_escape")
                     for t in re.findall(r"tus:\s*\"((?:[^\"\\]|\\.)+)\"", tuslar)
                 ),
-                etiket=m.group("etiket"),
-                aciklama=m.group("aciklama"),
+                etiket=_kacis_coz(m.group("etiket")),
+                aciklama=_kacis_coz(m.group("aciklama")),
                 grup=m.group("grup"),
                 tekrar=m.group("tekrar") == "true",
             )
@@ -402,3 +408,61 @@ class TestZoomSozlesmesi:
         bas = js.index("function zoomTavani")
         govde = js[bas : js.index("\n}", bas)]
         assert "Math.max(ZOOM_ESKI_TAVAN, Math.min(kareTavani, pikselTavani))" in govde
+
+
+class TestYardimDriftKilidi:
+    """? yardım katmanı — içerik KAYITTAN üretilir, elle yazılmış liste YOK.
+
+    Kayıtla ekrandaki satırların birebir eşleşmesi gerçek tarayıcıda da
+    kilitlidir (`test_web_klavye.py::TestYardim::test_icerik_kayitla_birebir`);
+    bu sınıf metin tarafını CI'da tutar."""
+
+    def test_yardim_kayitta(self) -> None:
+        k = _kisayol("yardim")
+        assert k.tuslar == ("?",)
+        assert k.tekrar is False, "? basılı tutunca katmanı titretmemeli"
+        js = _oku("keymap.js")
+        bas = js.index('{ eylem: "yardim"')
+        assert "herAsamada: true" in js[bas : js.index("},", bas)], "medya yokken de açılmalı"
+
+    def test_html_liste_bos_ve_elle_satir_yok(self) -> None:
+        html = _oku("index.html")
+        assert re.search(r'<div id="yardim-liste" class="yardim-liste"></div>', html), (
+            "yardım listesi HTML'de elle doldurulmuş"
+        )
+        assert "<kbd" not in html
+        assert "<dt" not in html and "<dd" not in html
+
+    def test_html_de_eski_elle_ipucu_yok(self) -> None:
+        """v1.3'ün oynatıcı ipucu satırı elle yazılmış kısmi bir listeydi."""
+        html = _oku("index.html")
+        for eski in ("J/K/L: mekik", "Boşluk: oynat/dur", "←/→: 5 sn"):
+            assert eski not in html, eski
+
+    def test_js_kayittan_uretir(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("function yardimCiz")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "of KISAYOLLAR" in govde
+        for alan in ("k.etiket", "k.aciklama", "k.grup", "k.eylem"):
+            assert alan in govde, alan
+
+    def test_aciklama_metinleri_yalniz_kayitta(self) -> None:
+        """Her açıklama `keymap.js`te yaşar; app.js/index.html'de bir KOPYASI
+        yoktur — kopya, kayıt değişince eskide kalan ikinci kaynak olurdu."""
+        js = _oku("app.js")
+        html = _oku("index.html")
+        for k in kayit():
+            assert k.aciklama not in js, f"app.js kopyası: {k.aciklama}"
+            assert k.aciklama not in html, f"index.html kopyası: {k.aciklama}"
+
+    def test_yardim_modal_ve_govde_odakli(self) -> None:
+        """Ölçüldü: `showModal` ilk düğmeye odaklanır; Boşluk katmanı kapatırdı."""
+        html = _oku("index.html")
+        bas = html.index('<dialog id="dlg-yardim"')
+        diyalog = html[bas : html.index("</dialog>", bas)]
+        assert 'id="yardim-govde"' in diyalog
+        govde_etiketi = diyalog[diyalog.index('<div id="yardim-govde"') :]
+        govde_etiketi = govde_etiketi[: govde_etiketi.index(">")]
+        assert "autofocus" in govde_etiketi and 'tabindex="-1"' in govde_etiketi
+        assert "el(\"dlg-yardim\").open" in _oku("app.js")

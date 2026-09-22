@@ -166,8 +166,10 @@
               title="Mıknatıs açık — sürükleme en yakın sessizlik kenarına yapışır (M)">
         <span class="miknatis-ikon">&#129522;</span><span>Mıknatıs</span>
       </button>
-      <span class="ipucu">Boşluk: oynat/dur · J/K/L: mekik · ←/→: 5 sn ·
-        Y: sessizliğe yasla · M: mıknatıs</span>
+      <!-- Kısayol listesi burada ELLE YAZILMAZ (v1.4.0): yardım katmanı
+           keymap.js kaydından üretilir; bu bağlantı yalnız onu açar. -->
+      <button id="btn-yardim" class="baglanti-dugme ipucu" type="button"
+              title="Tüm klavye kısayolları">Klavye kısayolları (?)</button>
     </div>
   </section>
 
@@ -374,6 +376,22 @@
       <button value="tamam" class="dugme birincil">Render al</button>
     </menu>
   </form>
+</dialog>
+
+<!-- Yardım katmanı (?): İÇERİK keymap.js kaydından ÜRETİLİR — burada elle
+     yazılmış satır YOK (drift kilidi: tests/test_web_klavye_statik.py).
+     Odak düğmeye değil gövdeye verilir (`autofocus` + tabindex=-1): ölçüldü,
+     `showModal` aksi hâlde ilk düğmeye odaklanır ve Boşluk katmanı kapatırdı. -->
+<dialog id="dlg-yardim" class="dlg dlg-yardim" aria-labelledby="yardim-baslik">
+  <div id="yardim-govde" class="yardim-govde" tabindex="-1" autofocus>
+    <div class="yardim-bas">
+      <h2 id="yardim-baslik">Klavye kısayolları</h2>
+      <button id="btn-yardim-kapat" class="dugme ikincil dar" type="button"
+              aria-label="Kapat">&#10005;</button>
+    </div>
+    <div id="yardim-liste" class="yardim-liste"></div>
+    <p class="yardim-alt">Esc ya da ? ile kapanır.</p>
+  </div>
 </dialog>
 
 <script src="/static/vendor/wavesurfer.min.js"></script>

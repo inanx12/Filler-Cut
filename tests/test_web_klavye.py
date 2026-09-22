@@ -164,7 +164,7 @@ def _git(sayfa: Any, ms: int) -> None:
 MEVCUT_TUSLAR = ["Space", "j", "k", "l", "ArrowLeft", "ArrowRight", "y", "m"]
 
 #: v1.4.0 Dalga 1'in yeni tuşları — odak/modal kilitleri bunlar için de koşar.
-YENI_TUSLAR = ["ArrowUp", "ArrowDown", ",", ".", "i", "o", "x", "+", "-", "Backslash"]
+YENI_TUSLAR = ["ArrowUp", "ArrowDown", ",", ".", "i", "o", "x", "+", "-", "Backslash", "?"]
 
 TUM_TUSLAR = MEVCUT_TUSLAR + YENI_TUSLAR
 
@@ -1002,3 +1002,90 @@ class TestZoom:
             sayfa.keyboard.press("+")
         sayfa.keyboard.press("\\")
         assert sayfa.evaluate("() => window.__yazilan") == []
+
+
+def _yardim_acik(sayfa: Any) -> bool:
+    return bool(sayfa.evaluate("() => document.getElementById('dlg-yardim').open"))
+
+
+class TestYardim:
+    """? — yardım katmanı (modal). İçerik kayıttan ÜRETİLİR."""
+
+    def test_soru_isareti_acar_esc_kapatir(self, sayfa: Any) -> None:
+        sayfa.keyboard.press("?")
+        assert _yardim_acik(sayfa)
+        sayfa.keyboard.press("Escape")
+        assert not _yardim_acik(sayfa)
+
+    def test_shift_bolu_acar_soru_isareti_kapatir(self, sayfa: Any) -> None:
+        sayfa.keyboard.press("Shift+Slash")
+        assert _yardim_acik(sayfa)
+        sayfa.keyboard.press("Shift+Slash")
+        assert not _yardim_acik(sayfa)
+
+    @pytest.mark.parametrize("tus", ["Space", "Delete", "i", "o", "j", "ArrowDown", ".", "+"])
+    def test_acikken_kisayollar_olu(self, sayfa: Any, tus: str) -> None:
+        _kesimleri_kur(sayfa, [(5_000, 6_000)])
+        _git(sayfa, 2_000)
+        sayfa.keyboard.press("?")
+        once = (_durum(sayfa), _zoom(sayfa), _dongu(sayfa))
+        sayfa.keyboard.press(tus)
+        _bekle(sayfa)
+        sonra = (_durum(sayfa), _zoom(sayfa), _dongu(sayfa))
+        assert sonra == once, f"{tus} modal açıkken ateşlendi"
+        assert _yardim_acik(sayfa), f"{tus} yardım katmanını kapattı"
+
+    def test_basili_tutmak_acip_kapatmaz(self, sayfa: Any) -> None:
+        """? tekrar YOK: basılı tutmak katmanı titretmemeli."""
+        sayfa.keyboard.down("?")
+        sayfa.keyboard.down("?")  # repeat
+        sayfa.keyboard.down("?")  # repeat
+        sayfa.keyboard.up("?")
+        assert _yardim_acik(sayfa)
+
+    def test_metin_girisinde_acilmaz(self, sayfa: Any) -> None:
+        sayfa.evaluate(
+            "() => { const i = document.createElement('input'); i.id = 't-girdi';"
+            " document.querySelector('.oynatici-alt').appendChild(i); }"
+        )
+        sayfa.click("#t-girdi")
+        sayfa.keyboard.press("?")
+        assert not _yardim_acik(sayfa)
+        assert sayfa.evaluate("() => document.getElementById('t-girdi').value") == "?"
+
+    def test_medya_yokken_de_acilir(self, sayfa: Any) -> None:
+        sayfa.evaluate("() => asamaAyarla('bos')")
+        sayfa.keyboard.press("?")
+        assert _yardim_acik(sayfa)
+
+    def test_kapat_dugmesi_fareyle(self, sayfa: Any) -> None:
+        sayfa.keyboard.press("?")
+        sayfa.click("#btn-yardim-kapat")
+        assert not _yardim_acik(sayfa)
+
+    def test_ipucu_baglantisi_acar(self, sayfa: Any) -> None:
+        sayfa.click("#btn-yardim")
+        assert _yardim_acik(sayfa)
+
+    def test_icerik_kayitla_birebir(self, sayfa: Any) -> None:
+        """Drift kilidi (davranış tarafı): ekrandaki satırlar = kayıt, sırasıyla."""
+        from tests.test_web_klavye_statik import kayit
+
+        sayfa.keyboard.press("?")
+        satirlar = sayfa.evaluate(
+            """() => [...document.querySelectorAll("#yardim-liste .yardim-satir")].map((s) => ({
+                 eylem: s.dataset.eylem,
+                 etiket: s.querySelector("kbd").textContent,
+                 aciklama: s.querySelector("dd").textContent,
+                 grup: s.closest(".yardim-grup").querySelector("h3").textContent,
+               }))"""
+        )
+        beklenen = [
+            {"eylem": k.eylem, "etiket": k.etiket, "aciklama": k.aciklama, "grup": k.grup}
+            for k in kayit()
+        ]
+        assert sorted(satirlar, key=lambda s: s["eylem"]) == sorted(
+            beklenen, key=lambda s: s["eylem"]
+        )
+        for mevcut in ("J", "K", "L", "Boşluk", "←", "→"):
+            assert any(s["etiket"] == mevcut for s in satirlar), mevcut

@@ -268,7 +268,7 @@ class TestOluCagriYok:
     #: `JSON.parse`, `window.…`) taramaya HİÇ girmez — nokta ile nitelenmiş
     #: çağrılar dışarıda bırakılır.
     GLOBALLER = frozenset({
-        "Error", "EventSource", "Float32Array", "Number", "ResizeObserver",
+        "Error", "EventSource", "Float32Array", "Map", "Number", "ResizeObserver",
         "Set", "String", "cancelAnimationFrame", "clearInterval", "clearTimeout",
         "encodeURIComponent", "fetch", "requestAnimationFrame", "setInterval",
     })

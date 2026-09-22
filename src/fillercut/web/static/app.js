@@ -2166,6 +2166,7 @@ const EYLEMLER = {
   "zoom-yakin": () => zoomTusu(ZOOM_ADIM),
   "zoom-uzak": () => zoomTusu(1 / ZOOM_ADIM),
   "zoom-sigdir": () => zoomSigdir(),
+  "yardim": () => yardimAc(),
   "yasla": () => {
     if (review.secili && durum.asama === "analiz_tamam") yaslaGonder(review.secili);
   },
@@ -2297,6 +2298,10 @@ function kareAdimi(yon) {
  *   6. Tekrar disiplini: `tekrar: false` girdide basılı tutma eylemi yeniden
  *      koşturmaz — ama tuş yine bizimdir (5. adım sayfanın kaymasını önler). */
 document.addEventListener("keydown", (ev) => {
+  if (el("dlg-yardim").open) {
+    yardimTusu(ev); // yardım katmanının KENDİ tuşu (?); gerisi ölü
+    return;
+  }
   if (document.querySelector("dialog[open]")) return;
   const kisayol = kisayolBul(ev);
   if (kisayol === null) return;
@@ -2307,6 +2312,73 @@ document.addEventListener("keydown", (ev) => {
   ev.preventDefault();
   if (ev.repeat && !kisayol.tekrar) return;
   EYLEMLER[kisayol.eylem](ev);
+});
+
+/* ── ? : yardım katmanı (v1.4.0 Dalga 1) ─────────────────────────────────
+ *
+ * İÇERİK KAYITTAN ÜRETİLİR: `KISAYOLLAR` (keymap.js) grup grup dökülür —
+ * burada ve index.html'de elle yazılmış bir kısayol listesi YOKTUR. Elle
+ * liste kayıttan zamanla ayrışırdı (v1.3'ün oynatıcı ipucu satırı tam
+ * olarak buydu: J/K/L eklenmiş, yeni tuşları hiç bilmiyordu). Drift kilidi
+ * iki katmanlı: statik (CI) + ekrandaki satırlar = kayıt (gerçek tarayıcı).
+ *
+ * MODAL KİLİDİ: `<dialog>` + `showModal` — açıkken tek keydown dinleyicisi
+ * yalnız `yardimTusu`nu çağırır; global kısayollar ölüdür. Esc'yi tarayıcı
+ * kapatır (native), ? ise burada kapatır. ? tekrar YOK: basılı tutmak
+ * katmanı titretmez. Odak gövdededir (index.html notu) — Boşluk kapatmaz. */
+function yardimCiz() {
+  const kap = el("yardim-liste");
+  kap.textContent = "";
+  const gruplar = new Map();
+  for (const k of KISAYOLLAR) {
+    if (!gruplar.has(k.grup)) gruplar.set(k.grup, []);
+    gruplar.get(k.grup).push(k);
+  }
+  for (const [grup, girdiler] of gruplar) {
+    const bolum = document.createElement("section");
+    bolum.className = "yardim-grup";
+    const baslik = document.createElement("h3");
+    baslik.textContent = grup;
+    const liste = document.createElement("dl");
+    for (const k of girdiler) {
+      const satir = document.createElement("div");
+      satir.className = "yardim-satir";
+      satir.dataset.eylem = k.eylem;
+      const tus = document.createElement("dt");
+      const kbd = document.createElement("kbd");
+      kbd.textContent = k.etiket;
+      tus.appendChild(kbd);
+      const aciklama = document.createElement("dd");
+      aciklama.textContent = k.aciklama;
+      satir.append(tus, aciklama);
+      liste.appendChild(satir);
+    }
+    bolum.append(baslik, liste);
+    kap.appendChild(bolum);
+  }
+}
+
+function yardimAc() {
+  const dlg = el("dlg-yardim");
+  if (dlg.open) return;
+  yardimCiz();
+  dlg.showModal();
+}
+
+function yardimTusu(ev) {
+  const kisayol = kisayolBul(ev);
+  if (kisayol === null || kisayol.eylem !== "yardim") return;
+  ev.preventDefault();
+  if (ev.repeat) return;
+  el("dlg-yardim").close();
+}
+
+el("btn-yardim").addEventListener("click", yardimAc);
+el("btn-yardim-kapat").addEventListener("click", () => el("dlg-yardim").close());
+el("dlg-yardim").addEventListener("click", (ev) => {
+  /* Perdeye (diyalog kutusunun DIŞINA) tıklamak kapatır: olayın hedefi
+     diyaloğun kendisidir, içeriği değil. */
+  if (ev.target === el("dlg-yardim")) el("dlg-yardim").close();
 });
 
 /* ── diyaloglar: mod (analiz) + format (render) ───────────────────────── */
