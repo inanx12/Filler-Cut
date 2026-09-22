@@ -170,7 +170,176 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 "Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
 kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
-## Mevcut Durum (2026-09-05)
+## Mevcut Durum (2026-09-22)
+
+**v1.4.0 DALGA 1 TAMAMLANDI (2026-09-22) — çekirdek review kısayolları.**
+Sürüm bump YOK, push/tag/release YOK. Kapsam YALNIZ web katmanı: pipeline,
+plan, render ve XML/SRT dışa aktarım koduna dokunulmadı (`git diff` yalnız
+`web/` + `tests/`). Durum BELLEKTE: zoom ve A-B loop hiçbir yere yazılmaz —
+`plan.json`a da, `config.json`a da, `localStorage`a da (kilit testli).
+
+**TEK KEYMAP KAYDI — `web/static/keymap.js`.** Tuş → eylem eşlemesi orada,
+uygulamalar `app.js`teki `EYLEMLER` tablosunda; ikisi İKİ YÖNLÜ kilitli (ölü
+kısayol da gizli kısayol da kırmızıya döner). `app.js`te artık hiçbir
+`ev.code ===` yok. Tek `keydown` dinleyicisi disiplini SIRAYLA uygular:
+modal kilidi → sahiplik (kayıtta yoksa tuş tarayıcıya AYNEN akar: F5,
+Ctrl+R, F12, Ctrl+K) → odak kilidi → klavye odağındaki düğme →
+`preventDefault` (yalnız sahiplenilen tuşta) → tekrar disiplini.
+
+**HARFLER `ev.code`, NOKTALAMA `ev.key` (TR-Q gerekçesi).** J/K/L/I/O/X/Y/M
+fiziksel tuştur (v1.0'dan beri sözleşme, düzenden bağımsız). `?` `,` `.`
+`+` `=` `-` `\` ise ÜRETİLEN karakterle eşleşir: Türkçe Q'da bu tuşların
+fiziksel yerleri US'ten farklıdır (`?` Shift+`*`, `+` Shift+4, `,` Enter'ın
+yanında), kodla eşleşselerdi yanlış tuş ateşlenirdi. AltGr Windows'ta
+Ctrl+Alt olarak raporlanır; AltGraph açıkken değiştirici SAYILMAZ ama yalnız
+karakter eşleşmesi geçerlidir (AltGr+J sahiplenilmez). **TR-Q fiziksel
+klavye doğrulaması İnan'da** — Playwright'ta Türkçe düzen kurulamıyor.
+
+**TEKRAR KURALI TEK CÜMLE: durum çeviren tuş tek-atımlık, adım/hız tuşu
+repeat'li.** Kural kayıtta (`tekrar` alanı) yaşar ve statik test onu TÜM
+kayda uygular — yeni bir kısayol eklendiğinde yazan kişi sınıfını söylemek
+zorunda. Boşluk/K/Y/M Dalga 1'in refactor commit'inde "davranış değişmez"
+diye tekrarlı taşınmıştı; kapanışta tek-atımlığa çevrildi (bkz. KİLİT
+DEĞİŞİKLİKLERİ). J/L arada durur: tekrar eylemi koşturmaz ama tuş bizimdir.
+
+**KARE ADIMI (`,` / `.`) — QUANTIZE KURALI EZBERDEN DEĞİL, XML'İN KURALI.**
+Kaynak iki satırdır ve commit mesajında da yazılıdır:
+
+* `src/fillercut/export/medya.py:110` — `Kare.kare_alt`:
+  `return (ms * self.pay) // (self.payda * 1000)` (floor)
+* `src/fillercut/export/fcp7.py:204` — `giris = kare.kare_alt(keep.start_ms)`
+
+Playhead'in hangi karede olduğu BİREBİR bu formülle bulunur (JS `kareAlt`);
+adım karenin ilk ms'ine gider, yani aynı kuralın tersine
+(`kareAlt(ms) == n` olan en küçük ms = `ceil(n*payda*1000/pay)`, Python'daki
+`kare_ust` deyimi). Böylece önizleme ile XML bir kare ayrışamaz. Doğrulama
+İKİ katmanlı: gerçek tarayıcıda JS ↔ `Kare.kare_alt` eşitliği **5 oran ×
+binlerce ms** (30000/1001, 24000/1001, 60000/1001, 60/1, 25/1) ve karenin
+ilk ms'i için aynı kıyas; ayrıca **statik metin kilidi CI'da** koşar — XML
+kuralı değişirse (floor → round) kırmızıya döner ve önizlemenin de
+güncellenmesi gerektiğini söyler. Kare hızı web'e YENİ geldi:
+`/api/medya/onizleme` eklemeli `kare: {pay, payda}` alanı,
+`export.medya.probe_medya`dan (export koduna dokunulmadı, yalnız çağrılıyor;
+`surec` kapısı dolayısıyla KI-16 garantisi kendiliğinden gelir). Okunamazsa
+(yalnız ses, bozuk akış) `kare` null kalır, kayıt yine `hazir`dır ve tuş
+etkisizdir — ama sahiplenilir.
+
+**ÜÇ ÖLÇÜLMÜŞ TUZAK (gerçek Chromium + gerçek WebM; hiçbiri tahmin değil):**
+
+1. **`seeking` anında `currentTime` YENİ HEDEFTİR ve olay sırası
+   `seeking → timeupdate → seeked`tir.** `timeupdate` geldiğinde `seeking`
+   ZATEN false olur. A-B loop'un "dışarı arama loop'u temizler" kuralı bu
+   yüzden `seeking` olayına bağlandı: `seeked` beklenseydi, B'nin ötesine
+   yapılan bir arama aradaki `timeupdate`te SARMA sanılır ve kullanıcı
+   A'ya fırlatılırdı. Aramanın kendisi sürerken (`oynatici.seeking` —
+   atama anında EŞZAMANLI true) sarma denetlenmez.
+2. **`:focus-visible` tuşa basıldığı anda TRUE'ya döner.** Fareyle
+   tıklanmış bir onay kutusu tıklamadan hemen sonra `:focus-visible`
+   değildir, ama `keydown` olayının İÇİNDE öyledir — yani "bu odak fareden
+   mi geldi" sorusu tuş anında `:focus-visible` ile YANITLANAMAZ. Odağın
+   KAYNAĞI ayrıca izleniyor (`pointerdown`/`keydown` yakalama evresi +
+   `focusin`). Düğmelerin `mousedown` çözümü (v1.3.0) aynen duruyor;
+   kaydırıcıda `mousedown` iptali sürüklemeyi öldüreceği için kullanılamaz.
+3. **`showModal` ilk DÜĞMEYE odaklanır** (`autofocus` diyaloğun kendisinde
+   olsa bile). Yardım katmanında odak bu yüzden gövdeye verildi
+   (`<div autofocus tabindex="-1">`); verilmeseydi Boşluk katmanı kapatır
+   ve "modal açıkken kısayollar ölü" sözleşmesi görünürde tutulurken
+   pratikte kırılırdı.
+
+**ZOOM SABİTLERİ VE GEREKÇESİ.** Alt sınır = sığdır (1×). Üst sınır
+`max(ZOOM_ESKI_TAVAN, min(kare ölçüsü, piksel ölçüsü))`:
+
+* `ZOOM_ESKI_TAVAN = 16` — v1.3 kaydırıcısının tavanı. Tavan bunun ALTINA
+  inmez: kısa klipte davranış eskisiyle aynı kalsın.
+* `KARE_PX_HEDEF = 12` — en yakın zoom'da bir kare ~12 px; kare adımı gözle
+  izlenebilir ve 2 px'lik playhead kareyi örtmez.
+* `TRACK_PX_TAVANI = 32768` — tuval BELLEĞİ tavanı. wavesurfer kabı tam
+  genişlikte tuvallere böler (8000 px parçalar × iki katman: dalga +
+  ilerleme) ve hepsini çizer; Dalga A'da 16× → 1228 px pencerede 19648 px
+  ölçülmüştü, 32768 onun ~1,7 katıdır. Uzun videoda kare başına piksel bu
+  tavanda düşer (10 dk, 30 kare/sn ≈ 2,7 px).
+
+Kaydırıcının `max`ı tavanla senkrondur; tavan pencere genişliğine bağlı
+olduğu için ResizeObserver'da tazelenir. Tuşla zoom merkezi PLAYHEAD (ekran
+dışındaysa ortalanır), Ctrl+tekerlekte İMLEÇ. Tekerlek dinleyicisi
+`{ passive: false }` ŞART — pasifken `preventDefault` yok sayılır ve
+WebView2 SAYFAYI zoom'lar. Ctrl+tekerlek yalnız çizelgenin üstünde
+sahiplenilir; düz tekerlek ve Ctrl+± tarayıcıya akar. Ölçek modeli
+DEĞİŞMEDİ (konumlar track yüzdesi): sürükleme/mıknatıs matematiği aynı ve
+zoom'da gerçek fareyle kilitli.
+
+**A-B LOOP PLANA DOKUNMAZ.** I/O/X manuel kesim işaretleme DEĞİLDİR: sunucu
+isteği yok, overlay yok, depolama yok (statik kilit). Nokta kesim içine
+düşerse TUTULAN malzemeye itilir (A kesim sonuna, B kesim başına — atlamalı
+önizlemenin iki sınır ilkesiyle aynı); itme sonrası A >= B ise loop
+KURULMAZ, işaretler kesikli çizilir. Sarma `timeupdate`in yanında rAF
+döngüsünde de denetlenir (`timeupdate` ~4 Hz, B'yi 250 ms aşardı) ve kesim
+atlamasından ÖNCE gelir. Bant `#tl-track`te DALGA KATMANINI PAYLAŞIR
+(`--tl-kat-dalga`, z 0; DOM'da dalga ile kesim katmanı arasında) —
+**yeni bir `--tl-kat-*` değeri AÇILMADI, dört katmanlı sıra invariantı
+aynen durur** ve bant `pointer-events: none`tur. v1.3.0 sürükleme
+regresyonunun bant üzerinden geri gelmediği gerçek fareyle kilitli
+(tutamaç bandın altında kalsa da isabet testini kazanıyor).
+
+**KİLİT DEĞİŞİKLİKLERİ — dört statik kilit KAYDA yöneltildi, niyetleri
+korunarak.** Ölçüt değişti (metin → kayıt), soru değişmedi:
+
+| Kilit | Eski ölçüt | Yeni ölçüt | Niyet (değişmedi) |
+|---|---|---|---|
+| `TestMekik::test_uc_tus_da_bagli` | keydown gövdesinde `ev.code === "KeyJ"` + çağrı metni | kayıtta `kod: "KeyJ"` + `EYLEMLER["mekik-geri"]` gövdesinde `shuttleUygula(-1)` | tuş AYNI fonksiyona bağlı |
+| `TestMekik::test_basili_tutmak_hizi_katlamaz` | `govde.count("!ev.repeat") == 2` | kayıtta J/L `tekrar: false` + dağıtıcıda `if (ev.repeat && !kisayol.tekrar) return;` | basılı tutmak hızı KATLAMAZ |
+| `TestDugmeOdagi::test_korunan_kisayollar_duruyor` | keydown gövdesinde beş `ev.code ===` | kayıtta beş `kod` | v1.x kısayolları kaybolmadı |
+| `TestOluCagriYok` | tarama kapsamı `app.js` | `keymap.js + app.js` BİRLEŞİMİ (sayfanın gördüğü kapsam) + `GLOBALLER`e `Map` | tanımsız fonksiyon çağrısı kalmasın |
+
+Beşinci değişiklik kapanış commit'indedir: **`tekrar: true` beklentileri
+Boşluk/K/Y/M için tersine çevrildi.** Gerekçe kilit metninde yazılı — yerine
+gelen kilit daha güçlüdür, çünkü artık kural TÜM kayda uygulanır (tek tek
+tuşa değil).
+
+**TEST DÖKÜMÜ (commit başına yeni test = red-first + companion).** Koleksiyon
+1668 → **1928** (+260). "Red-first" = eski kodda GERÇEKTEN düşen kilit sayısı
+(ölçüldü, sayıldı); "companion" = aynı turda eklenen regresyon/sözleşme
+kilitleri (eski kodda da yeşildi, kusur sınıfını ileriye karşı tutarlar).
+
+| Commit | Yeni | Red-first | Companion |
+|---|---|---|---|
+| `d55ffa8` tek keymap + disiplin | 81 | 14 (2 davranış + 12 kayıt/statik) | 67 |
+| `be1aafd` ↑/↓ edit-point | 28 | 13 | 15 |
+| `7131f12` kare adımı | 38 | 20 (15 tarayıcı + 5 sunucu) | 18 |
+| `c16c92a` A-B loop | 44 | 21 | 23 |
+| `802dd83` zoom + Ctrl+tekerlek | 31 | 10 | 21 |
+| `0df6aa8` `?` yardım katmanı | 26 | 16 | 10 |
+| `8e8f6d0` tek-atımlık toggle | 12 | 11 (6 davranış + 5 statik) | 1 |
+
+Marker dağılımı: `tarayici` **215** (Dalga 1 öncesi 26), `web` 512, `xml`
+114, `ffmpeg` **17**, `exe` 7, `wcpp` 3, `ag` 1. **`ffmpeg` 16 → 17 farkı
+tek testtir:** `test_web_medya.py::TestGercekOnizleme::
+test_kare_hizi_gercek_ffprobedan` — kare hızının gerçek ffprobe'dan
+geldiğini sentetik klipte doğrular (30 fps kaynak → `(30, 1)`); kalan 16
+test değişmedi. Tam koşu: **1922 passed / 6 skipped** (skip'ler yalnız
+NVENC+QSV donanım yokluğu), ruff ve mypy temiz (tam kapsam, repo kökünden).
+CI konvansiyonu (`-m "not exe and not ffmpeg and not wcpp and not ag and not
+tarayici"`) 1682 passed.
+
+**İZLEME NOTU — `test_ui_yasam_dongusu::TestKapatUctanUca::
+test_ac_kapat_uc_dongu_zombi_birakmaz` BİR KEZ düştü.** Tam koşu altında
+"süreç temiz çıkmadı" (30 sn beklemesi doldu); hemen ardından tek başına
+**3/3** yeşil ve tam koşu tekrarı da yeşil geçti. Bu tur bir kusur olarak
+ele alınmadı: statiklere dokunmuyor, klavye/çizelge kodundan bağımsız ve
+yük altında zaman aşımı gibi görünüyor. **TEKRARLARSA KI açılacak** (aday
+kök neden: `Popen` ile başlatılan sunucunun kapanışı paylaşılan 8765
+portunda yarışıyor — v1.2.3 tuzak kaydındaki yönlendirici/pid ailesi).
+
+**İNAN'IN KURULU EXE'DE ELLE DOĞRULAYACAKLARI (bu turda otomasyonla
+yapılamayanlar):** (1) TR-Q fiziksel klavyede `?` `,` `.` `+` `-` `\` ve I
+tuşu; (2) native pencerede Ctrl+tekerlek — çizelge yakınlaşmalı, ARAYÜZ
+değil; touchpad pinch aynı yoldan; (3) 29.97 fps kaynakta `.` ile kare kare
+ilerleme görüntüde bir kare oynatıyor mu; (4) gerçek planda A-B loop
+(B'de A'ya dönüş, loop içinde kesim atlama); (5) "Atlamalı" kutusuna ya da
+zoom kaydırıcısına fareyle tıkla, sonra Boşluk — oynatmalı; (6) `?` katmanı
+açıkken Boşluk ölü, Esc/✕ kapatıyor; (7) Release Kontrol Listesi madde 10
+(kenar sürükleme + mıknatıs + boş alan) — zaman çizelgesine yeni bir katman
+girdi.
 
 **v1.3.0 PRE-RELEASE DÜZELTMESİ (2026-09-05) — sürükleme regresyonu (P0) +
 başlık çubuğu rengi (P2).** Sürüm bump YOK: 1.3.0 commit'li ama TAG ATILMADI,
@@ -2150,6 +2319,19 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/geri_bildirim.py` + `app.py` + `static/` — telemetrisiz geri bildirim düğmesi | `6934227` |
 | README ×2 — SmartScreen uyarısı normal + SignPath notu | `bf74afb` |
 | `pyproject.toml` + `test_paketleme_pypi.py` + CHANGELOG + KNOWN_ISSUES — PyPI metadata + **1.2.1 bump** | `9d12381` |
+
+**v1.4.0 Dalga 1 (çekirdek review kısayolları)**
+
+| Modül | Commit |
+|---|---|
+| `web/static/keymap.js` (yeni: `KISAYOLLAR` + `kisayolBul`) + `app.js` `EYLEMLER` + tek `keydown` dağıtıcısı; fare odağındaki onay kutusu/kaydırıcı kısayolu yutmuyor (odak kaynağı izlenir); `test_web_klavye.py` + `test_web_klavye_statik.py` (81 yeni) | `d55ffa8` |
+| `web/static/app.js` — `kesimNoktalari`/`kesimNoktasinaGit` (↑/↓, kesin eşitsizlik, uçlarda clamp) (28 yeni) | `be1aafd` |
+| `web/medya.py` — eklemeli `kare: {pay, payda}` (kaynak `export.medya.probe_medya`) + `app.js` `bolAlt`/`kareAlt`/`kareBasMs`/`kareAdimi`; JS ↔ XML kuralı 5 oranda kilitli (38 yeni) | `7131f12` |
+| `web/static/` — A-B loop (I/O/X): işaretleme + kesim içi itme + sarma (rAF + `timeupdate`) + `seeking`te temizleme; bant dalga katmanında, `pointer-events: none` (44 yeni) | `c16c92a` |
+| `web/static/app.js` — `zoomTavani`/`zoomOdakli`/`zoomTusu`/`zoomSigdir` + `{ passive: false }` Ctrl+tekerlek; sabitler 16 / 12 px / 32768 px (31 yeni) | `802dd83` |
+| `web/static/` — `?` yardım katmanı, içerik kayıttan üretilir; oynatıcıdaki elle yazılmış ipucu satırı kalktı; drift kilidi statik + gerçek tarayıcı (26 yeni) | `0df6aa8` |
+| `web/static/keymap.js` — Boşluk/K/Y/M `tekrar: false`; kural tüm kayda uygulanır (12 yeni) | `8e8f6d0` |
+| AGENTS kaydı (karar + tuzaklar + kilit değişiklikleri + test dökümü) | bu commit |
 
 **v1.3.2 (config.json şablonu + playhead akıcılığı)**
 
