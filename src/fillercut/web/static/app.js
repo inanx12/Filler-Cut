@@ -1879,6 +1879,10 @@ el("btn-miknatis").addEventListener("click", miknatisToggle);
  *
  * Kısayollar METİN GİRİŞİNDE çalışmaz (INPUT/TEXTAREA/SELECT ve
  * contenteditable). Diyalog açıkken de çalışmazlar.
+ *
+ * TUŞ → EYLEM EŞLEMESİ BURADA DEĞİL, `keymap.js`tedir (v1.4.0 Dalga 1).
+ * Bu bölüm yalnız DİSİPLİNİ (odak / modal / tekrar / preventDefault) ve
+ * eylemlerin UYGULAMASINI (`EYLEMLER`) taşır.
  */
 
 document.addEventListener("mousedown", (ev) => {
@@ -1887,6 +1891,48 @@ document.addEventListener("mousedown", (ev) => {
   const dugme = hedef.closest("button");
   if (dugme && !dugme.disabled) ev.preventDefault();
 });
+
+/* AYNI TUZAĞIN ÖTEKİ YÜZÜ — onay kutusu, radyo, kaydırıcı. Ölçüldü (Chromium):
+   fareyle tıklanan "Atlamalı" kutusu ve zoom kaydırıcısı ODAĞI ALIR
+   (`:focus-visible` false). Sonra Boşluk kutuyu YENİDEN çevirir, oklar
+   kaydırıcıyı oynatır ve odak kilidi (`girdiOdakli`) bütün kısayolları
+   susturur — kullanıcı neden çalışmadığını göremez.
+
+   `mousedown` iptali burada KULLANILMAZ: kaydırıcının sürüklenmesini de
+   öldürürdü. Karar tuşa basıldığı AN, `keydown` içinde eşzamanlı verilir:
+   fare odağındaki kontrol bırakılır ve tuş global kısayol olarak işlenir.
+
+   İKİ ÖLÇÜLMÜŞ ÇIKMAZ, o yüzden odağın KAYNAĞI kendimiz izlenir:
+   · Tıklamadan sonra ertelenmiş bir `blur` yarışa açıktı — tıklamanın hemen
+     ardından gelen tuş ondan önce işleniyordu.
+   · `:focus-visible` `keydown` anında İŞE YARAMAZ: tuşa basıldığı an
+     Chromium odaktaki kutuyu klavye etkileşimi sayıp `:focus-visible`
+     yapıyor (tıklamadan hemen sonra false, tuş olayının içinde true).
+   Kural: odak son etkileşim işaretçiyken (fare/dokunma) geldiyse "fare
+   odağı"dır; Tab gibi klavyeyle geldiyse klavyenindir ve KORUNUR — oklar ve
+   Boşluk o kontrole aittir (erişilebilirlik). Diyalog içindekiler modalın
+   kendi odak düzenidir, dokunulmaz. */
+const odakKaynagi = { sonFare: false, fareOdagi: null };
+
+/* `window` + yakalama evresi: her şeyden ÖNCE koşar ve sayfanın TEK kısayol
+   dinleyicisi (`document` keydown) ile karışmaz. */
+window.addEventListener("pointerdown", () => { odakKaynagi.sonFare = true; }, true);
+window.addEventListener("keydown", () => { odakKaynagi.sonFare = false; }, true);
+document.addEventListener("focusin", (ev) => {
+  odakKaynagi.fareOdagi = odakKaynagi.sonFare ? ev.target : null;
+});
+
+function fareOdaginiBirak(hedef) {
+  /* `hedef` fareyle odaklanmış bir onay kutusu/radyo/kaydırıcıysa odağı
+     bırakır ve true döner. */
+  if (!hedef || hedef !== odakKaynagi.fareOdagi) return false;
+  if (hedef.tagName !== "INPUT") return false;
+  if (!["checkbox", "radio", "range"].includes(hedef.type)) return false;
+  if (hedef.closest("dialog")) return false;
+  hedef.blur();
+  odakKaynagi.fareOdagi = null;
+  return true;
+}
 
 function girdiOdakli(hedef) {
   if (!hedef || !hedef.tagName) return false;
@@ -1905,39 +1951,52 @@ function tusDugmeyeAit(hedef, kod) {
   }
 }
 
-/* Kısayollar: Boşluk / ←→ v1.0'dan; Y ve M v1.x'ten; J/K/L v1.3.0'dan. */
+/* Eylem kimliği → uygulama. Kimlikler `keymap.js`teki `KISAYOLLAR`la BİREBİR
+   (iki yönlü kilit: `tests/test_web_klavye_statik.py`). Boşluk / ←→ v1.0'dan;
+   Y ve M v1.x'ten; J/K/L v1.3.0'dan — davranışları taşımada DEĞİŞMEDİ. */
+const EYLEMLER = {
+  "oynat-durdur": () => oynatDurdur(),
+  "mekik-geri": () => shuttleUygula(-1),
+  "mekik-dur": () => shuttleDurdur(),
+  "mekik-ileri": () => shuttleUygula(1),
+  "geri-5sn": () => saniyeKaydir(-5),
+  "ileri-5sn": () => saniyeKaydir(5),
+  "yasla": () => {
+    if (review.secili && durum.asama === "analiz_tamam") yaslaGonder(review.secili);
+  },
+  "miknatis": () => miknatisToggle(),
+};
+
+function saniyeKaydir(sn) {
+  const oynatici = el("oynatici");
+  oynatici.currentTime = Math.max(0, oynatici.currentTime + sn);
+}
+
+/* TEK keydown dinleyicisi — global tuş disiplini burada, SIRAYLA:
+ *
+ *   1. Modal kilidi: bir diyalog açıkken global kısayollar ÖLÜDÜR; modalın
+ *      kendi tuşları (Esc, odaktaki düğme) tarayıcıya aynen akar.
+ *   2. Sahiplik: `kisayolBul` null dönerse tuş BİZİM DEĞİLDİR — hiçbir şey
+ *      yapılmaz, varsayılanı engellenmez (F5, Ctrl+R, Tab…).
+ *   3. Odak kilidi: metin girişi odaktayken hiçbir kısayol ateşlenmez ve tuş
+ *      girişe aittir (engellenmez — yazı yazılabilmeli). Fareyle odaklanmış
+ *      onay kutusu/kaydırıcı önce bırakılır (`fareOdaginiBirak`) — o bir
+ *      metin girişi değil, tıklamanın artığıdır.
+ *   4. Klavye odağındaki düğme Boşluk/Enter'ı sahiplenir (erişilebilirlik).
+ *   5. preventDefault YALNIZ burada, yani yalnız sahiplenilen tuşta.
+ *   6. Tekrar disiplini: `tekrar: false` girdide basılı tutma eylemi yeniden
+ *      koşturmaz — ama tuş yine bizimdir (5. adım sayfanın kaymasını önler). */
 document.addEventListener("keydown", (ev) => {
   if (document.querySelector("dialog[open]")) return;
-  if (durum.asama === "bos") return;
-  if (ev.ctrlKey || ev.altKey || ev.metaKey) return;
-  if (girdiOdakli(ev.target)) return;
-  if (tusDugmeyeAit(ev.target, ev.code)) return;
-  const oynatici = el("oynatici");
-  if (ev.code === "Space") {
-    ev.preventDefault();
-    oynatDurdur();
-  } else if (ev.code === "KeyJ") {
-    ev.preventDefault();
-    if (!ev.repeat) shuttleUygula(-1); // basılı tutmak hızı katlamaz
-  } else if (ev.code === "KeyK") {
-    ev.preventDefault();
-    shuttleDurdur();
-  } else if (ev.code === "KeyL") {
-    ev.preventDefault();
-    if (!ev.repeat) shuttleUygula(1);
-  } else if (ev.code === "ArrowLeft") {
-    ev.preventDefault();
-    oynatici.currentTime = Math.max(0, oynatici.currentTime - 5);
-  } else if (ev.code === "ArrowRight") {
-    ev.preventDefault();
-    oynatici.currentTime = oynatici.currentTime + 5;
-  } else if (ev.code === "KeyY") {
-    ev.preventDefault();
-    if (review.secili && durum.asama === "analiz_tamam") yaslaGonder(review.secili);
-  } else if (ev.code === "KeyM") {
-    ev.preventDefault();
-    miknatisToggle();
-  }
+  const kisayol = kisayolBul(ev);
+  if (kisayol === null) return;
+  if (durum.asama === "bos" && !kisayol.herAsamada) return;
+  const hedef = fareOdaginiBirak(ev.target) ? document.body : ev.target;
+  if (girdiOdakli(hedef)) return;
+  if (tusDugmeyeAit(hedef, ev.code)) return;
+  ev.preventDefault();
+  if (ev.repeat && !kisayol.tekrar) return;
+  EYLEMLER[kisayol.eylem](ev);
 });
 
 /* ── diyaloglar: mod (analiz) + format (render) ───────────────────────── */

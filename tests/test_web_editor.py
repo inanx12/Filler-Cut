@@ -290,7 +290,10 @@ class TestOluCagriYok:
         return js
 
     def _bilinmeyen_cagrilar(self) -> set[str]:
-        kod = self._kod(_oku("app.js"))
+        # `keymap.js` app.js'ten ÖNCE yüklenir ve aynı betik kapsamını paylaşır
+        # (v1.4.0): orada tanımlanan `kisayolBul` app.js'te çağrılır. Sayfanın
+        # gördüğü kapsam ikisinin BİRLEŞİMİDİR, tarama da öyle yapılır.
+        kod = self._kod(_oku("keymap.js") + "\n" + _oku("app.js"))
         tanimli = set(re.findall(r"\bfunction\s+([A-Za-z_$][\w$]*)", kod))
         tanimli |= set(re.findall(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)", kod))
         tanimli |= set(re.findall(r"\bwindow\.([A-Za-z_$][\w$]*)\s*=", kod))
@@ -495,16 +498,18 @@ class TestMekik:
     """J/K/L — NLE mekiği (v1.3.0 Dalga B)."""
 
     def test_uc_tus_da_bagli(self) -> None:
-        js = _oku("app.js")
-        bas = js.index('document.addEventListener("keydown"')
-        govde = js[bas : js.index("\n});", bas)]
-        for kod, eylem in (
-            ("KeyJ", "shuttleUygula(-1)"),
-            ("KeyK", "shuttleDurdur()"),
-            ("KeyL", "shuttleUygula(1)"),
+        """v1.4.0: eşleme `keymap.js` kaydına taşındı (tek kayıt); tuşun
+        eyleme, eylemin AYNI fonksiyona bağlı olduğu oradan doğrulanır."""
+        from tests.test_web_klavye_statik import eylem_govdesi, kayit
+
+        girdiler = {k.eylem: k for k in kayit()}
+        for kod, eylem_id, cagri in (
+            ("KeyJ", "mekik-geri", "shuttleUygula(-1)"),
+            ("KeyK", "mekik-dur", "shuttleDurdur()"),
+            ("KeyL", "mekik-ileri", "shuttleUygula(1)"),
         ):
-            assert f'ev.code === "{kod}"' in govde, kod
-            assert eylem in govde, eylem
+            assert kod in girdiler[eylem_id].kodlar, kod
+            assert cagri in eylem_govdesi(eylem_id), cagri
 
     def test_ayni_yonde_hiz_katlanir_tavanli(self) -> None:
         js = _oku("app.js")
@@ -531,10 +536,16 @@ class TestMekik:
         assert "ms = kesim[0]" in govde
 
     def test_basili_tutmak_hizi_katlamaz(self) -> None:
+        """J ve L kayıtta `tekrar: false`; dağıtıcı tekrarda eylemi koşturmaz."""
+        from tests.test_web_klavye_statik import kayit
+
+        girdiler = {k.eylem: k for k in kayit()}
+        assert girdiler["mekik-geri"].tekrar is False
+        assert girdiler["mekik-ileri"].tekrar is False
         js = _oku("app.js")
         bas = js.index('document.addEventListener("keydown"')
         govde = js[bas : js.index("\n});", bas)]
-        assert govde.count("!ev.repeat") == 2  # J ve L
+        assert "if (ev.repeat && !kisayol.tekrar) return;" in govde
 
     def test_bosluk_mekigi_sifirlar(self) -> None:
         js = _oku("app.js")
@@ -589,11 +600,12 @@ class TestDugmeOdagi:
         assert "isContentEditable" in govde
 
     def test_korunan_kisayollar_duruyor(self) -> None:
-        js = _oku("app.js")
-        bas = js.index('document.addEventListener("keydown"')
-        govde = js[bas : js.index("\n});", bas)]
+        """v1.4.0: tuşlar `keymap.js` kaydında (tek kayıt)."""
+        from tests.test_web_klavye_statik import kayit
+
+        kodlar = {kod for k in kayit() for kod in k.kodlar}
         for kod in ("Space", "ArrowLeft", "ArrowRight", "KeyY", "KeyM"):
-            assert f'ev.code === "{kod}"' in govde, kod
+            assert kod in kodlar, kod
 
 
 class TestPanelAyiricilari:
