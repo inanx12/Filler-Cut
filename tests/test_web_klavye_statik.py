@@ -206,11 +206,16 @@ class TestDegistiriciDisiplini:
     Ctrl+Alt olarak raporlar ve TR-Q'da `\\` ancak AltGr ile yazılır."""
 
     def test_kayitta_degistirici_alani_yok(self) -> None:
+        """Eşleşme nesnelerinde (`tuslar`) değiştirici alanı YOK. Açıklama
+        metni "Ctrl+tekerlek" diyebilir — o bir tuş sahiplenmesi değildir."""
         js = _oku("keymap.js")
         bas = js.index("const KISAYOLLAR = [")
         govde = js[bas : js.index("\n];", bas)]
-        for alan in ("ctrl", "alt:", "meta", "shift"):
-            assert alan not in govde.lower(), f"değiştiricili kombinasyon sahiplenildi: {alan}"
+        eslesmeler = re.findall(r"tuslar:\s*\[([^\]]*)\]", govde)
+        assert len(eslesmeler) == len(kayit())
+        for tuslar in eslesmeler:
+            alanlar = set(re.findall(r"(\w+):", tuslar))
+            assert alanlar <= {"kod", "tus"}, f"değiştiricili eşleşme: {tuslar}"
 
     def test_eslestirici_degistiricileri_reddeder(self) -> None:
         js = _oku("keymap.js")
@@ -361,3 +366,39 @@ class TestDonguSozlesmesi:
             govde = _fonksiyon(js, imza)
             for yasak in ("fetch", "localStorage", "overlay", "editsGonder", "reviewPost"):
                 assert yasak not in govde, f"{imza}: {yasak}"
+
+
+class TestZoomSozlesmesi:
+    """+ / − / \\ ve Ctrl+tekerlek (davranış: `test_web_klavye.py::TestZoom`)."""
+
+    def test_tuslar_karakterle_eslesir(self) -> None:
+        """TR-Q'da "+" Shift+4'tür; US'te Shift+=. Karakter eşleşmesi ikisini de tutar."""
+        assert set(_kisayol("zoom-yakin").tuslar) == {"+", "="}
+        assert _kisayol("zoom-uzak").tuslar == ("-",)
+        assert _kisayol("zoom-sigdir").tuslar == ("\\",)
+
+    def test_tekerlek_pasif_degil_ve_yalniz_ctrl(self) -> None:
+        """Pasif dinleyicide `preventDefault` yok sayılır → tarayıcı sayfayı zoom'lar."""
+        js = _oku("app.js")
+        bas = js.index('el("tl-viewport").addEventListener("wheel"')
+        govde = js[bas : js.index("{ passive: false });", bas)]
+        assert "if (!ev.ctrlKey) return;" in govde
+        assert govde.index("if (!ev.ctrlKey) return;") < govde.index("ev.preventDefault()")
+        assert js.count('addEventListener("wheel"') == 1
+
+    def test_zoom_bellekte(self) -> None:
+        js = _oku("app.js")
+        for imza in ("function zoomOdakli", "function zoomTusu", "function zoomSigdir",
+                     "function zoomTavani", "function zoomUygula"):
+            bas = js.index(imza)
+            govde = js[bas : js.index("\n}", bas)]
+            assert "localStorage" not in govde and "fetch" not in govde, imza
+
+    def test_ust_sinir_bilesenleri(self) -> None:
+        js = _oku("app.js")
+        assert "const ZOOM_ESKI_TAVAN = 16;" in js
+        assert "const KARE_PX_HEDEF = 12;" in js
+        assert "const TRACK_PX_TAVANI = 32768;" in js
+        bas = js.index("function zoomTavani")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "Math.max(ZOOM_ESKI_TAVAN, Math.min(kareTavani, pikselTavani))" in govde

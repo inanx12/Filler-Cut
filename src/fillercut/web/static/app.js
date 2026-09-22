@@ -631,6 +631,7 @@ function zcSifirla() {
   zc.peaks = null;
   zc.kare = null;
   zc.zoom = 1;
+  el("zoom").max = String(ZOOM_ESKI_TAVAN);
   el("zoom").value = "1";
   el("zoom-deger").textContent = "1×";
   el("tl-track").style.width = "100%";
@@ -760,12 +761,108 @@ function zoomUygula(yeni) {
 }
 
 function zcCiz() {
+  zoomTavaniniTazele(); // süre/kare hızı değişti: üst sınır da değişir
   cetvelCiz();
   dalgaCiz();
   bloklariCiz();
   donguCiz();
   playheadTazele();
 }
+
+/* ── zoom: + / − / \ ve Ctrl+tekerlek (v1.4.0 Dalga 1) ───────────────────
+ *
+ * Ölçek modeli DEĞİŞMEDİ: zoom yalnız `#tl-track`in genişliğidir (bkz.
+ * `zoomUygula`), konumlar yüzde kalır, sürükleme/mıknatıs matematiği aynı.
+ * Burada eklenen iki şey var: sınırlar ve MERKEZ.
+ *
+ * SINIRLAR. Alt = sığdır (1×, tüm çizelge pencerede). Üst sınır iki
+ * ölçünün KÜÇÜĞÜdür, ama v1.3 kaydırıcısının tavanının (16×) altına
+ * inmez (kısa klipte davranış eskisi gibi kalsın):
+ *   · KARE_PX_HEDEF — en yakın zoom'da bir kare ~12 px: kare adımı (, / .)
+ *     gözle izlenebilir ve playhead (2 px) kareyi örtmez. Daha fazlası
+ *     boşluk büyütür, bilgi eklemez.
+ *   · TRACK_PX_TAVANI — track 32768 px'i geçmez. wavesurfer kabını tam
+ *     genişlikte tuvallere böler (8000 px'lik parçalar, dalga + ilerleme
+ *     = iki katman) ve hepsini çizer; bugünkü 16× tavanı 1228 px'lik
+ *     pencerede ~19648 px idi (Dalga A ölçümü). 32768 onun ~1,7 katıdır —
+ *     uzun videoda kare başına piksel bu tavanda düşer (10 dk, 30 kare/sn ≈ 2,7 px).
+ * Kare hızı bilinmiyorsa (yalnız ses) kare ölçüsü devre dışıdır: 16×.
+ *
+ * MERKEZ. Tuşla zoom'da playhead ekranda AYNI x'te kalır (ekran dışındaysa
+ * ortalanır); Ctrl+tekerlekte imlecin altındaki an imlecin altında kalır.
+ * Touchpad pinch'i Chromium'da `ctrlKey`li tekerlek olayı olarak gelir,
+ * yani aynı yoldan bedavaya çalışır — ayrı bir uygulama YOK.
+ *
+ * Durum bellekte: zoom hiçbir yere yazılmaz (ayırıcı ölçüleri gibi
+ * `localStorage`a da). */
+const ZOOM_ESKI_TAVAN = 16;
+const KARE_PX_HEDEF = 12;
+const TRACK_PX_TAVANI = 32768;
+const ZOOM_ADIM = Math.SQRT2; // iki basış = 2×
+
+function zoomTavani() {
+  const genislik = el("tl-viewport").clientWidth;
+  if (!zc.total_ms || genislik <= 0) return ZOOM_ESKI_TAVAN;
+  const pikselTavani = TRACK_PX_TAVANI / genislik;
+  const kareTavani = zc.kare
+    ? (KARE_PX_HEDEF * zc.total_ms * zc.kare.pay) / (zc.kare.payda * 1000 * genislik)
+    : ZOOM_ESKI_TAVAN;
+  return Math.max(ZOOM_ESKI_TAVAN, Math.min(kareTavani, pikselTavani));
+}
+
+function zoomTavaniniTazele() {
+  /* Kaydırıcının `max`ı tavanla aynı kalır; tavan küçüldüyse (pencere
+     genişledi) mevcut zoom içeri çekilir. */
+  const tavan = zoomTavani();
+  el("zoom").max = String(tavan);
+  if (zc.zoom > tavan) zoomUygula(tavan);
+}
+
+function zoomOdakli(yeni, merkezMs, ekranX) {
+  /* `merkezMs` anı, görünür pencerenin `ekranX` pikselinde kalacak biçimde
+     zoom'u `yeni`ye getirir. */
+  if (!zc.total_ms) return;
+  const hedef = Math.min(Math.max(yeni, 1), zoomTavani());
+  if (Math.abs(hedef - zc.zoom) < 1e-9) return;
+  zoomUygula(hedef);
+  el("zoom").value = String(hedef); // kaydırıcı adımına yuvarlanarak görünür
+  const x = (merkezMs / zc.total_ms) * el("tl-track").clientWidth;
+  el("tl-viewport").scrollLeft = Math.max(0, x - ekranX);
+}
+
+function zoomTusu(kat) {
+  const pencere = el("tl-viewport");
+  const ms = el("oynatici").currentTime * 1000;
+  const x = (ms / (zc.total_ms || 1)) * el("tl-track").clientWidth - pencere.scrollLeft;
+  const gorunur = x >= 0 && x <= pencere.clientWidth;
+  zoomOdakli(zc.zoom * kat, ms, gorunur ? x : pencere.clientWidth / 2);
+}
+
+function zoomSigdir() {
+  if (zc.zoom !== 1) zoomUygula(1);
+  el("zoom").value = "1";
+  el("tl-viewport").scrollLeft = 0;
+}
+
+/* Ctrl+tekerlek: `passive: false` ŞART — tekerlek dinleyicisi pasifken
+   `preventDefault` yok sayılır ve tarayıcı (WebView2) SAYFAYI zoom'lar.
+   Yalnız çizelgenin üstünde sahiplenilir; düz tekerlek (Ctrl'siz) yatay
+   kaydırmadır ve hiç ellenmez. */
+el("tl-viewport").addEventListener("wheel", (ev) => {
+  if (!ev.ctrlKey) return;
+  ev.preventDefault();
+  if (!zc.total_ms) return;
+  const pencere = el("tl-viewport");
+  const kutu = pencere.getBoundingClientRect();
+  const ekranX = Math.min(
+    Math.max(ev.clientX - kutu.left - pencere.clientLeft, 0), pencere.clientWidth
+  );
+  const merkezMs = ((pencere.scrollLeft + ekranX) / el("tl-track").clientWidth) * zc.total_ms;
+  /* deltaMode: 0 piksel, 1 satır, 2 sayfa. Bir fare çentiği Chromium'da
+     ~100 px'tir → ~1,22× (üstel: yakınlaştırıp uzaklaştırmak aynı yere döner). */
+  const birim = ev.deltaMode === 1 ? 40 : ev.deltaMode === 2 ? 800 : 1;
+  zoomOdakli(zc.zoom * Math.exp(-ev.deltaY * birim * 0.002), merkezMs, ekranX);
+}, { passive: false });
 
 el("zoom").addEventListener("input", (ev) => {
   zoomUygula(Number(ev.target.value));
@@ -781,6 +878,7 @@ el("zoom").addEventListener("input", (ev) => {
 if (window.ResizeObserver) {
   new ResizeObserver(() => {
     if (!zc.total_ms) return;
+    zoomTavaniniTazele(); // tavan pencere genişliğine bağlı (32768 px track)
     cetvelCiz();
     dalgaGecikmeliCiz();
   }).observe(el("tl-viewport"));
@@ -2065,6 +2163,9 @@ const EYLEMLER = {
   "dongu-a": () => donguIsaretle("a"),
   "dongu-b": () => donguIsaretle("b"),
   "dongu-temizle": () => donguTemizle(),
+  "zoom-yakin": () => zoomTusu(ZOOM_ADIM),
+  "zoom-uzak": () => zoomTusu(1 / ZOOM_ADIM),
+  "zoom-sigdir": () => zoomSigdir(),
   "yasla": () => {
     if (review.secili && durum.asama === "analiz_tamam") yaslaGonder(review.secili);
   },

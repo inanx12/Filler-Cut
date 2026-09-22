@@ -164,7 +164,7 @@ def _git(sayfa: Any, ms: int) -> None:
 MEVCUT_TUSLAR = ["Space", "j", "k", "l", "ArrowLeft", "ArrowRight", "y", "m"]
 
 #: v1.4.0 Dalga 1'in yeni tuşları — odak/modal kilitleri bunlar için de koşar.
-YENI_TUSLAR = ["ArrowUp", "ArrowDown", ",", ".", "i", "o", "x"]
+YENI_TUSLAR = ["ArrowUp", "ArrowDown", ",", ".", "i", "o", "x", "+", "-", "Backslash"]
 
 TUM_TUSLAR = MEVCUT_TUSLAR + YENI_TUSLAR
 
@@ -797,3 +797,208 @@ class TestDongu:
         _isaretle(sayfa, "o", 12_000)
         sayfa.evaluate("() => zcSifirla()")
         assert _dongu(sayfa)["a"] is None
+
+
+#: Zoom üst sınırının iki bileşeni — ürün sabitleriyle AYNI değerler; test
+#: formülü bağımsız yeniden kurar (ürünün `zoomTavani`sini çağırmaz).
+KARE_PX = 12
+TRACK_PX_TAVANI = 32_768
+ESKI_TAVAN = 16
+
+
+def _zoom(sayfa: Any) -> float:
+    return float(sayfa.evaluate("() => zc.zoom"))
+
+
+def _ekran_x(sayfa: Any, ms: float) -> float:
+    """`ms`in görünür penceredeki x'i (px, pencerenin iç sol kenarından)."""
+    return float(
+        sayfa.evaluate(
+            """(ms) => {
+              const p = document.getElementById("tl-viewport");
+              const w = document.getElementById("tl-track").clientWidth;
+              return (ms / zc.total_ms) * w - p.scrollLeft;
+            }""",
+            ms,
+        )
+    )
+
+
+def _beklenen_tavan(sayfa: Any, toplam_ms: int, pay: int, payda: int) -> float:
+    w = float(sayfa.evaluate("() => document.getElementById('tl-viewport').clientWidth"))
+    kare_sayisi = toplam_ms * pay / (payda * 1000)
+    return max(ESKI_TAVAN, min(KARE_PX * kare_sayisi / w, TRACK_PX_TAVANI / w))
+
+
+class TestZoom:
+    """+ / − / \\ ve Ctrl+tekerlek — zaman çizelgesi yakınlaştırma."""
+
+    def test_arti_ve_esittir_yakinlastirir(self, sayfa: Any) -> None:
+        sayfa.keyboard.press("+")
+        z1 = _zoom(sayfa)
+        sayfa.keyboard.press("=")
+        z2 = _zoom(sayfa)
+        assert 1 < z1 < z2
+        assert abs(z2 - 2.0) < 1e-9, "iki basış 2× olmalı (adım √2)"
+
+    def test_eksi_uzaklastirir_tabani_sigdir(self, sayfa: Any) -> None:
+        sayfa.keyboard.press("+")
+        sayfa.keyboard.press("+")
+        sayfa.keyboard.press("-")
+        assert abs(_zoom(sayfa) - 2 ** 0.5) < 1e-9
+        for _ in range(5):
+            sayfa.keyboard.press("-")
+        assert _zoom(sayfa) == 1, "alt sınır = sığdır (1×)"
+
+    def test_ters_bolu_sigdirir(self, sayfa: Any) -> None:
+        for _ in range(6):
+            sayfa.keyboard.press("+")
+        sayfa.evaluate("() => { document.getElementById('tl-viewport').scrollLeft = 900; }")
+        sayfa.keyboard.press("\\")
+        assert _zoom(sayfa) == 1
+        assert sayfa.evaluate("() => document.getElementById('tl-viewport').scrollLeft") == 0
+        assert sayfa.evaluate("() => document.getElementById('tl-track').style.width") == "100%"
+
+    def test_tus_merkezi_playhead(self, sayfa: Any) -> None:
+        """Playhead ekranda aynı x'te kalır — zoom onun etrafında olur."""
+        _git(sayfa, 15_000)
+        once = _ekran_x(sayfa, 15_000)
+        for _ in range(4):
+            sayfa.keyboard.press("+")
+        assert _zoom(sayfa) == pytest.approx(4.0)
+        assert abs(_ekran_x(sayfa, 15_000) - once) <= 1.5
+
+    def test_playhead_ekran_disindaysa_ortalanir(self, sayfa: Any) -> None:
+        for _ in range(6):
+            sayfa.keyboard.press("+")
+        sayfa.evaluate("() => { document.getElementById('tl-viewport').scrollLeft = 0; }")
+        _git(sayfa, 22_000)  # 8× iken pencerenin çok sağında
+        sayfa.evaluate("() => { document.getElementById('tl-viewport').scrollLeft = 0; }")
+        sayfa.keyboard.press("+")
+        genislik = float(sayfa.evaluate("() => document.getElementById('tl-viewport').clientWidth"))
+        assert abs(_ekran_x(sayfa, 22_000) - genislik / 2) <= 1.5
+
+    def test_ctrl_tekerlek_imlec_merkezli_ve_tarayici_zoomu_ezilir(self, sayfa: Any) -> None:
+        kutu = sayfa.locator("#tl-viewport").bounding_box()
+        assert kutu is not None
+        x = kutu["x"] + kutu["width"] * 0.3
+        y = kutu["y"] + kutu["height"] * 0.6
+        sayfa.mouse.move(x, y)
+        ic_x = x - kutu["x"] - float(
+            sayfa.evaluate("() => document.getElementById('tl-viewport').clientLeft")
+        )
+        w = float(sayfa.evaluate("() => document.getElementById('tl-track').clientWidth"))
+        imlec_ms = ic_x / w * TOPLAM
+        olcek = sayfa.evaluate("() => [window.devicePixelRatio, window.visualViewport.scale]")
+        sayfa.keyboard.down("Control")
+        sayfa.mouse.wheel(0, -300)
+        sayfa.keyboard.up("Control")
+        sayfa.wait_for_timeout(50)
+        assert _zoom(sayfa) > 1.5, "Ctrl+tekerlek yakınlaştırmadı"
+        assert abs(_ekran_x(sayfa, imlec_ms) - ic_x) <= 1.5, "merkez imleç değil"
+        assert sayfa.evaluate("() => window.__tekerOnlendi") is True, "tarayıcı zoom'u ezilmedi"
+        assert sayfa.evaluate(
+            "() => [window.devicePixelRatio, window.visualViewport.scale]"
+        ) == olcek
+
+    def test_duz_tekerlek_dokunulmaz(self, sayfa: Any) -> None:
+        kutu = sayfa.locator("#tl-viewport").bounding_box()
+        assert kutu is not None
+        sayfa.mouse.move(kutu["x"] + 50, kutu["y"] + kutu["height"] / 2)
+        sayfa.mouse.wheel(0, -300)
+        sayfa.wait_for_timeout(50)
+        assert _zoom(sayfa) == 1
+        assert sayfa.evaluate("() => window.__tekerOnlendi") is False
+
+    def test_ctrl_arti_tarayiciya_akar(self, sayfa: Any) -> None:
+        """Ctrl+± tarayıcının (WebView2'nin) sayfa zoom'udur — sahiplenilmez."""
+        sayfa.keyboard.press("Control+Equal")
+        assert _zoom(sayfa) == 1
+        assert _son_karar(sayfa)["onlendi"] is False
+
+    def test_ust_sinir_kare_basina_piksel(self, sayfa: Any) -> None:
+        """10 dk, 30 fps: sınır = 12 px/kare ile 32768 px track'in küçüğü."""
+        sayfa.evaluate(
+            "() => { zc.total_ms = 600000; zc.kare = { pay: 30, payda: 1 }; zcCiz(); }"
+        )
+        beklenen = _beklenen_tavan(sayfa, 600_000, 30, 1)
+        for _ in range(30):
+            sayfa.keyboard.press("+")
+        assert _zoom(sayfa) == pytest.approx(beklenen)
+        assert sayfa.evaluate("() => document.getElementById('tl-track').clientWidth") <= (
+            TRACK_PX_TAVANI + 1
+        )
+        assert float(sayfa.evaluate("() => document.getElementById('zoom').max")) == (
+            pytest.approx(beklenen)
+        )
+
+    def test_kisa_klipte_eski_tavan_korunur(self, sayfa: Any) -> None:
+        """Kaydırıcının v1.3 tavanı (16×) asla düşmez."""
+        sayfa.evaluate("() => { zc.kare = { pay: 60, payda: 1 }; zcCiz(); }")
+        assert _beklenen_tavan(sayfa, TOPLAM, 60, 1) == ESKI_TAVAN
+        for _ in range(12):
+            sayfa.keyboard.press("+")
+        assert _zoom(sayfa) == ESKI_TAVAN
+
+    def test_basili_tutunca_tekrar_eder(self, sayfa: Any) -> None:
+        sayfa.keyboard.down("+")
+        sayfa.keyboard.down("+")
+        sayfa.keyboard.down("+")
+        sayfa.keyboard.up("+")
+        assert _zoom(sayfa) == pytest.approx(2 ** 1.5)
+
+    def test_dalga_yeniden_cizilir(self, sayfa: Any) -> None:
+        # İlk yerleşimin ResizeObserver kaynaklı yeniden çizimi bitsin — yoksa
+        # zoom'suz da "yeni örnek" görülür ve test hiçbir şey kanıtlamaz.
+        sayfa.wait_for_timeout(400)
+        sayfa.evaluate("() => { window.__eskiWs = zc.ws; }")
+        sayfa.keyboard.press("+")
+        sayfa.keyboard.press("+")
+        sayfa.wait_for_timeout(300)  # gecikmeli yeniden yaratım (120 ms)
+        assert sayfa.evaluate("() => !!zc.ws && zc.ws !== window.__eskiWs")
+
+    def test_katman_invariantlari_zoomda_bozulmaz(self, sayfa: Any) -> None:
+        for _ in range(4):
+            sayfa.keyboard.press("+")
+        sayfa.wait_for_timeout(300)
+        sonuc = sayfa.evaluate(
+            """() => {
+              const t = document.querySelector(".kesim-blok[data-id='c0'] .tutamac.sol");
+              t.scrollIntoView({ block: "nearest", inline: "center" });
+              const r = t.getBoundingClientRect();
+              const ust = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              const z = (id) => getComputedStyle(document.getElementById(id)).zIndex;
+              return { tutamacMi: ust === t,
+                       z: [z("dalga"), z("kesim-katmani"), z("playhead"), z("cetvel")] };
+            }"""
+        )
+        assert sonuc["tutamacMi"], "zoom'da tutamaç örtüldü"
+        assert sonuc["z"] == ["0", "1", "2", "3"]
+
+    def test_zoomda_kenar_surukleme_calisir(self, sayfa: Any) -> None:
+        """Ölçek modeli: konumlar track YÜZDESİ — sürükleme matematiği aynı."""
+        for _ in range(4):
+            sayfa.keyboard.press("+")
+        sayfa.wait_for_timeout(300)
+        sayfa.evaluate(
+            """() => document.querySelector(".kesim-blok[data-id='c0'] .tutamac.sol")
+                 .scrollIntoView({ block: "nearest", inline: "center" })"""
+        )
+        kutu = sayfa.locator(".kesim-blok[data-id='c0'] .tutamac.sol").bounding_box()
+        assert kutu is not None
+        sayfa.mouse.move(kutu["x"] + kutu["width"] / 2, kutu["y"] + kutu["height"] / 2)
+        sayfa.mouse.down()
+        sayfa.mouse.move(kutu["x"] - 60, kutu["y"] + kutu["height"] / 2, steps=8)
+        sayfa.mouse.up()
+        istekler = sayfa.evaluate("() => window.__istekler")
+        assert istekler, "zoom'da kenar sürüklemesi istek üretmedi"
+        assert istekler[-1]["govde"]["sinirlar"][0]["bas_ms"] < 15_245
+
+    def test_zoom_diske_yazilmaz(self, sayfa: Any) -> None:
+        sayfa.evaluate("() => { window.__yazilan = []; const o = Storage.prototype.setItem;"
+                       " Storage.prototype.setItem = function (k, v) {"
+                       " window.__yazilan.push(k); return o.call(this, k, v); }; }")
+        for _ in range(3):
+            sayfa.keyboard.press("+")
+        sayfa.keyboard.press("\\")
+        assert sayfa.evaluate("() => window.__yazilan") == []
