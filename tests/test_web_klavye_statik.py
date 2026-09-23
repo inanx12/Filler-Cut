@@ -494,3 +494,29 @@ class TestYardimDriftKilidi:
         govde_etiketi = govde_etiketi[: govde_etiketi.index(">")]
         assert "autofocus" in govde_etiketi and 'tabindex="-1"' in govde_etiketi
         assert "el(\"dlg-yardim\").open" in _oku("app.js")
+
+
+class TestModalKilidiDefault:
+    """Modal kilidi = aksiyon + default (davranış:
+    `test_web_klavye.py::TestModalDefaultOlu`, gerçek Chromium)."""
+
+    def test_iki_modal_dali_da_default_oldurur(self) -> None:
+        js = _oku("app.js")
+        bas = js.index('document.addEventListener("keydown"')
+        govde = js[bas : js.index("\n});", bas)]
+        genel = govde[govde.index('if (document.querySelector("dialog[open]"))') :]
+        assert "modalDefaultOlu(ev)" in genel[: genel.index("return;")]
+        yardim = js[js.index("function yardimTusu") :]
+        yardim = yardim[: yardim.index("\n}")]
+        assert "modalDefaultOlu(ev)" in yardim
+
+    def test_yalniz_sahiplenilen_tus_ve_kontrol_disi_hedef(self) -> None:
+        """Sıra: önce sahiplik (değilse akar), sonra modalın kendi kontrolü,
+        EN SON `preventDefault` — ters sıra Esc/Tab/PageDown'ı da öldürürdü."""
+        js = _oku("app.js")
+        bas = js.index("function modalDefaultOlu")
+        govde = js[bas : js.index("\n}", bas)]
+        i_sahip = govde.index("kisayolBul(ev) === null")
+        i_kontrol = govde.index("modalKontroluMu(ev.target)")
+        i_engel = govde.index("ev.preventDefault()")
+        assert i_sahip < i_kontrol < i_engel

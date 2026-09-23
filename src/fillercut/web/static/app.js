@@ -2285,8 +2285,9 @@ function kareAdimi(yon) {
 
 /* TEK keydown dinleyicisi — global tuş disiplini burada, SIRAYLA:
  *
- *   1. Modal kilidi: bir diyalog açıkken global kısayollar ÖLÜDÜR; modalın
- *      kendi tuşları (Esc, odaktaki düğme) tarayıcıya aynen akar.
+ *   1. Modal kilidi: bir diyalog açıkken global kısayollar ÖLÜDÜR — hem
+ *      AKSİYONU hem DEFAULT'U (`modalDefaultOlu`). Modalın kendi tuşları
+ *      (Esc, Tab, odaktaki radyo/düğme) tarayıcıya aynen akar.
  *   2. Sahiplik: `kisayolBul` null dönerse tuş BİZİM DEĞİLDİR — hiçbir şey
  *      yapılmaz, varsayılanı engellenmez (F5, Ctrl+R, Tab…).
  *   3. Odak kilidi: metin girişi odaktayken hiçbir kısayol ateşlenmez ve tuş
@@ -2304,7 +2305,10 @@ document.addEventListener("keydown", (ev) => {
     yardimTusu(ev); // yardım katmanının KENDİ tuşu (?); gerisi ölü
     return;
   }
-  if (document.querySelector("dialog[open]")) return;
+  if (document.querySelector("dialog[open]")) {
+    modalDefaultOlu(ev);
+    return;
+  }
   const kisayol = kisayolBul(ev);
   if (kisayol === null) return;
   if (durum.asama === "bos" && !kisayol.herAsamada) return;
@@ -2369,10 +2373,41 @@ function yardimAc() {
 
 function yardimTusu(ev) {
   const kisayol = kisayolBul(ev);
-  if (kisayol === null || kisayol.eylem !== "yardim") return;
+  if (kisayol === null || kisayol.eylem !== "yardim") {
+    modalDefaultOlu(ev);
+    return;
+  }
   ev.preventDefault();
   if (ev.repeat) return;
   el("dlg-yardim").close();
+}
+
+/* MODAL KİLİDİ = AKSİYON + DEFAULT. Aksiyon zaten ölüydü; default AKIYORDU.
+ *
+ * Ölçülmüş kusur (İnan, kurulu exe'de elle doğrulama): yardım katmanı
+ * açıkken Boşluk oynatmaya dokunmuyordu ama tuş tarayıcıya akıyor ve odaktaki
+ * katman GÖVDESİNİ kaydırıyordu (gerçek Chromium'da 281 px ölçüldü; ↓ 40 px).
+ * "Ölü" artık iki şeydir: eylem koşmaz VE varsayılan engellenir.
+ *
+ * Kapsam kayıtla sınırlı: yalnız SAHİPLENİLEN tuş (`kisayolBul` null değil)
+ * engellenir. Sahiplenilmeyenler — Esc, Tab, PageDown, End, F5, Ctrl+R —
+ * modalda da tarayıcınındır; PageDown gövdeyi kaydırmaya devam eder.
+ *
+ * İstisna: hedef modalın KENDİ kontrolüyse tuş ona aittir. Render/analiz
+ * diyaloglarında odak radyodadır; orada oklar grubu gezer, Boşluk seçer —
+ * bunları engellemek diyaloğu klavyeyle kullanılamaz kılardı. Aynı sebeple
+ * Tab ile ✕'e gelinmişse Boşluk ✕'i basar (erişilebilirlik). */
+function modalDefaultOlu(ev) {
+  if (kisayolBul(ev) === null) return; // sahiplenilmeyen: aynen akar
+  if (modalKontroluMu(ev.target)) return; // modalın kendi tuşu
+  ev.preventDefault();
+}
+
+function modalKontroluMu(hedef) {
+  if (!hedef || typeof hedef.closest !== "function") return false;
+  return hedef.closest(
+    "input, textarea, select, button, summary, a[href], [contenteditable='true']"
+  ) !== null;
 }
 
 el("btn-yardim").addEventListener("click", yardimAc);

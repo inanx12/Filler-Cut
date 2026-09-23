@@ -1164,3 +1164,113 @@ class TestYardim:
         )
         for mevcut in ("J", "K", "L", "Boşluk", "←", "→"):
             assert any(s["etiket"] == mevcut for s in satirlar), mevcut
+
+
+def _yardim_kaydirilabilir_ac(sayfa: Any) -> None:
+    """Yardım katmanını gövdesi KAYDIRILABİLİR hâlde açar.
+
+    1280×800'de içerik 80vh'ye sığar ve kusur görünmez; pencere alçaltılır
+    ki gövde gerçekten taşsın (ön koşul ayrıca doğrulanır)."""
+    sayfa.set_viewport_size({"width": 1280, "height": 460})
+    sayfa.keyboard.press("?")
+    assert _yardim_acik(sayfa)
+    olcu = sayfa.evaluate(
+        """() => {
+          const g = document.getElementById("yardim-govde");
+          return { kh: g.scrollHeight, ch: g.clientHeight, odak: document.activeElement.id };
+        }"""
+    )
+    assert olcu["kh"] > olcu["ch"] + 40, f"ön koşul: gövde taşmıyor {olcu}"
+    assert olcu["odak"] == "yardim-govde", f"ön koşul: odak gövdede değil {olcu}"
+
+
+def _govde_kaydirma(sayfa: Any) -> int:
+    return int(sayfa.evaluate("() => document.getElementById('yardim-govde').scrollTop"))
+
+
+class TestModalDefaultOlu:
+    """Modal kilidi = AKSİYON + DEFAULT. Aksiyon zaten ölüydü; default akıyordu.
+
+    ÖLÇÜLMÜŞ KUSUR (İnan, kurulu exe'de elle doğrulama): yardım katmanı
+    açıkken Boşluk katmanın GÖVDESİNİ kaydırıyordu — oynatma ölüydü ama tuş
+    tarayıcıya akıyordu. Kural artık: modal açıkken kayıtta SAHİPLENİLEN
+    tuşun varsayılanı da engellenir; sahiplenilmeyenler (Esc, Tab, PageDown,
+    F5…) aynen akar; modalın KENDİ kontrolündeki (radyo, düğme) tuş ona aittir.
+    """
+
+    def test_yardim_acikken_bosluk_govdeyi_kaydirmaz(self, sayfa: Any) -> None:
+        _yardim_kaydirilabilir_ac(sayfa)
+        once = _durum(sayfa)
+        sayfa.keyboard.press("Space")
+        sayfa.wait_for_timeout(150)  # yumuşak kaydırma bitsin
+        assert _govde_kaydirma(sayfa) == 0, "Boşluk yardım gövdesini kaydırdı"
+        assert _durum(sayfa) == once, "Boşluk modal açıkken oynatmaya dokundu"
+        assert _son_karar(sayfa)["onlendi"] is True
+        assert _yardim_acik(sayfa)
+
+    @pytest.mark.parametrize("tus", ["ArrowDown", "ArrowRight"])
+    def test_yardim_acikken_sahiplenilen_ok_govdeyi_kaydirmaz(
+        self, sayfa: Any, tus: str
+    ) -> None:
+        _yardim_kaydirilabilir_ac(sayfa)
+        once = _durum(sayfa)
+        sayfa.keyboard.press(tus)
+        sayfa.wait_for_timeout(150)
+        assert _govde_kaydirma(sayfa) == 0, f"{tus} yardım gövdesini kaydırdı"
+        assert _durum(sayfa) == once
+        assert _son_karar(sayfa)["onlendi"] is True
+
+    @pytest.mark.parametrize("tus", ["PageDown", "End"])
+    def test_sahiplenilmeyen_tus_akar(self, sayfa: Any, tus: str) -> None:
+        """Kayıtta olmayan tuş modalda da tarayıcınındır: gövde kayar."""
+        _yardim_kaydirilabilir_ac(sayfa)
+        sayfa.keyboard.press(tus)
+        sayfa.wait_for_timeout(150)
+        assert _son_karar(sayfa)["onlendi"] is False, f"{tus} engellendi"
+        assert _govde_kaydirma(sayfa) > 0, f"{tus} gövdeyi kaydırmadı (akmadı)"
+
+    @pytest.mark.parametrize("tus", ["Tab", "Escape", "F5", "Control+r"])
+    def test_modal_acikken_sahiplenilmeyen_engellenmez(self, sayfa: Any, tus: str) -> None:
+        _yardim_kaydirilabilir_ac(sayfa)
+        sayfa.keyboard.press(tus)
+        if tus == "Escape":
+            assert not _yardim_acik(sayfa), "Esc katmanı kapatmadı"
+        assert _son_karar(sayfa)["onlendi"] is False, f"{tus} engellendi"
+
+    def test_klavyeyle_odaklanan_kapat_dugmesi_boslugu_alir(self, sayfa: Any) -> None:
+        """Erişilebilirlik: Tab ile ✕'e gelen kullanıcı Boşlukla kapatır."""
+        _yardim_kaydirilabilir_ac(sayfa)
+        sayfa.keyboard.press("Tab")
+        assert sayfa.evaluate("() => document.activeElement.id") == "btn-yardim-kapat"
+        sayfa.keyboard.press("Space")
+        assert not _yardim_acik(sayfa), "✕ Boşlukla basılamadı"
+
+    def test_form_diyaloğunda_radyo_boslugu_ve_oklari_alir(self, sayfa: Any) -> None:
+        """Render diyaloğu: odak radyodayken oklar grubu gezer (modalın kendi
+        tuşu) — kural modalın kontrollerini kilitlemez."""
+        sayfa.evaluate(
+            """() => {
+              document.getElementById("dlg-render").showModal();
+              document.querySelector('#dlg-render input[value="mp4"]').focus();
+            }"""
+        )
+        sayfa.keyboard.press("ArrowDown")
+        assert _son_karar(sayfa)["onlendi"] is False, "radyonun oku engellendi"
+        assert sayfa.evaluate(
+            "() => document.querySelector('input[name=\"cikti\"]:checked').value"
+        ) == "xml", "ok radyo grubunda gezinmedi"
+
+    def test_form_diyaloğunda_kontrol_disi_hedefte_default_olu(self, sayfa: Any) -> None:
+        """Aynı kural her modalda: odak bir kontrolde değilse sahiplenilen
+        tuşun varsayılanı engellenir."""
+        sayfa.evaluate(
+            """() => {
+              document.getElementById("dlg-render").showModal();
+              document.activeElement.blur();
+            }"""
+        )
+        once = _durum(sayfa)
+        sayfa.keyboard.press("Space")
+        _bekle(sayfa)
+        assert _son_karar(sayfa)["onlendi"] is True
+        assert _durum(sayfa) == once
