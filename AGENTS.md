@@ -341,6 +341,32 @@ açıkken Boşluk ölü, Esc/✕ kapatıyor; (7) Release Kontrol Listesi madde 1
 (kenar sürükleme + mıknatıs + boş alan) — zaman çizelgesine yeni bir katman
 girdi.
 
+**ELLE DOĞRULAMA SONUCU (İnan, 2026-09-23): 6/7 TEMİZ, 1 BULGU.** Kurulu
+`Filler-Cut-Setup-1.3.2.exe` (2026-09-23 build'i; WebView2 stub'ı 1.3.271.7 —
+`packaging/webview2.json` tazelemesi İnan kararıyla henüz commit'siz) üzerinde
+yedi madde elle denendi. Bulgu madde 6'daydı: yardım katmanı açıkken Boşluk
+oynatmaya dokunmuyor ama katmanın GÖVDESİNİ kaydırıyordu. Düzeltme `b58bc99`.
+
+**Tuzak (bir sonraki agent için) — MODAL KİLİDİ AKSİYONU KİLİTLER, DEFAULT'U
+KİLİTLEMEYİ UNUTMAK.** Dalga 1'in dağıtıcısı modal açıkken `return` ediyordu:
+eylem koşmuyordu, test de yalnız eylemin koşmadığını ölçüyordu ("durum
+değişmedi") — yeşildi. Ama tuşun varsayılanı tarayıcıya AKIYORDU ve odak
+katman gövdesinde olduğu için Boşluk onu kaydırıyordu (gerçek Chromium'da
+281 px; ↓ 40 px). **"Ölü"nün tanımı artık AKSİYON + DEFAULT'tur**; bir
+kilidin "hiçbir şey olmadı" iddiası `defaultPrevented`i ve kaydırma gibi
+TARAYICI yan etkilerini de ölçmelidir, yalnız kendi durumumuzu değil.
+Kural sınırlıdır: yalnız kayıtta SAHİPLENİLEN tuş engellenir (Esc, Tab,
+PageDown, F5, Ctrl+R akar) ve hedef modalın KENDİ kontrolüyse (radyo, düğme)
+tuş ona aittir — form diyaloglarında oklar radyo grubunu gezmeye devam eder.
+Kusur yalnız gövde KAYDIRILABİLİRKEN görünür: 1280×800'de yardım içeriği
+80vh'ye sığıyordu; kilit pencereyi alçaltıp taşmayı ön koşul olarak doğrular.
+
+**İzleme notu — 7. skip:** tam koşuda `test_cli.py::TestPortDoluyken`
+atlanabilir ("8765 zaten dolu"): kullanıcının kurulu Filler-Cut'ı açıkken
+testin işgal kuramaması TASARIM gereğidir, regresyon değildir. `exe`
+smoke'ları da `dist\fillercut` varken gerçekten koşar ve tam koşuyu
+~1,5 dk uzatır.
+
 **v1.3.0 PRE-RELEASE DÜZELTMESİ (2026-09-05) — sürükleme regresyonu (P0) +
 başlık çubuğu rengi (P2).** Sürüm bump YOK: 1.3.0 commit'li ama TAG ATILMADI,
 düzeltmeler 1.3.0'ın İÇİNE girdi. Push/tag/release YOK.
@@ -2331,7 +2357,9 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/static/app.js` — `zoomTavani`/`zoomOdakli`/`zoomTusu`/`zoomSigdir` + `{ passive: false }` Ctrl+tekerlek; sabitler 16 / 12 px / 32768 px (31 yeni) | `802dd83` |
 | `web/static/` — `?` yardım katmanı, içerik kayıttan üretilir; oynatıcıdaki elle yazılmış ipucu satırı kalktı; drift kilidi statik + gerçek tarayıcı (26 yeni) | `0df6aa8` |
 | `web/static/keymap.js` — Boşluk/K/Y/M `tekrar: false`; kural tüm kayda uygulanır (12 yeni) | `8e8f6d0` |
-| AGENTS kaydı (karar + tuzaklar + kilit değişiklikleri + test dökümü) | bu commit |
+| AGENTS kaydı (karar + tuzaklar + kilit değişiklikleri + test dökümü) | `70cca28` |
+| `web/static/app.js` — `modalDefaultOlu` + `modalKontroluMu`: modal açıkken sahiplenilen tuşun default'u da ölü; sahiplenilmeyen akar, modalın kendi kontrolü korunur (14 yeni = 6 red-first + 8 companion) | `b58bc99` |
+| AGENTS — modal default tuzağı + elle doğrulama sonucu (6/7) | bu commit |
 
 **v1.3.2 (config.json şablonu + playhead akıcılığı)**
 
