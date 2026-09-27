@@ -170,7 +170,183 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 "Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
 kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
-## Mevcut Durum (2026-09-22)
+## Mevcut Durum (2026-09-27)
+
+**v1.4.0 DALGA 2 TAMAMLANDI (2026-09-27) — manuel review düzenlemeleri.**
+Sürüm bump YOK, push/tag/release YOK. Yeni tuşlar: **Ctrl+K** (blade),
+**Delete** (tutulan parçayı sil), **Ctrl+Z / Ctrl+Shift+Z** (geri al /
+yinele), **Alt+, / Alt+.** (nudge); yeni düğme **"Otomatik plana dön"**
+(onaylı). Durum BELLEKTE: blade'ler ve geri alma yığını hiçbir yere
+yazılmaz (plan.json / config / %APPDATA% / localStorage yasağı aynen, statik
+kilitli). `git diff` web katmanı + `tests/` + TEK eklemeli plan dokunuşu
+(`cutplan.apply_review_edits(min_keep_muaf=...)`, aşağıda). Pipeline, render,
+XML/SRT dışa aktarım koduna dokunulmadı.
+
+**KİLİTLİ KARARLAR (İnan, brief) — sapma yok:**
+
+* **RIPPLE = AYRI KOD YOK.** Çıktı tutulan parçaların art arda eklenmesidir
+  (concat); Delete zaten ripple'dır. Repoda "ripple" adlı bir fonksiyon,
+  bayrak ya da mod YOKTUR ve olmamalıdır.
+* **BLADE (Ctrl+K) KESİM DEĞİLDİR, İŞARETTİR.** Tutulan bölgenin İÇİNE,
+  playhead'in düştüğü karenin İLK ms'ine konur (Dalga 1'in kare kuralı:
+  `kareBasMs(kareAlt(ms))`, kaynak `export/medya.py:110` floor). Sunucuya
+  gitmez; bitişik tutulan parçalar dışa aktarımda tek segment kalır, yani
+  blade tek başına çıktıyı DEĞİŞTİRMEZ (kilit: onaylanan plan == orijinal).
+  Kesim içinde / sınırda no-op; aynı karede ikinci basış çizgiyi kaldırır.
+  Çizgi `#kesim-katmani`nın çocuğudur, z-index'i yok, `pointer-events:
+  none` — yeni `--tl-kat-*` AÇILMADI. Bir kesimin içine / kenarına düşen
+  işaret çizilmez ama bellekte kalır (kesim geri alınırsa geri görünür).
+* **DELETE:** playhead'i taşıyan tutulan parçayı (sınırlar: çevreleyen aktif
+  kesimler + blade'ler; yarı açık — blade noktası sağdaki parçanın başıdır)
+  kesime çevirir. Sunucuda SIRADAN bir elle eklemedir (v1.0 `eklemeler`).
+  Kesim içinde no-op (TEK YÖNLÜ); geri getirmek listedeki "Geri al" ya da
+  Ctrl+Z. Son tutulan parça istemcide engellenir, `CutPlanError` sınıfında
+  açık mesajla ("Son tutulan parça silinemez — … boş video üretilmez");
+  sunucu da aynı isteği `CutPlanError` ile reddeder (hata alanı + onay 400).
+* **"manuel" — REPODA ZATEN VARDI, YENİ DEĞER EKLENMEDİ.** Brief "reason
+  zincirine TEK yeni değer: manuel" diyordu; ölçüldü: `MANUEL_REASON =
+  "manuel: kullanıcı elle ekledi"` (`plan/cutplan.py:52`), `SegmentKind`
+  Literal'inde `"manuel"` (`models.py:21`) ve KI-3'ün dördüncü kategorisi
+  (`json_report.reason_kategorileri`) v1.0 Dilim 2'den beri var. Delete bu
+  değeri taşır — zincire hiçbir şey eklenmedi. "Bilinmeyen reason reddi" de
+  kelimesi kelimesine yok: şemanın reddettiği bilinmeyen KIND'dır (pydantic
+  Literal) ve BOŞ reason'dır; reason METNİ dışlayıcı sınıflandırılır (önek
+  taşımayan parça sessizlik sayılır). Üçü de aynen duruyor ve kilitli
+  (`test_export_manuel.py::TestSema`); istemci reason/kind GÖNDEREMEZ
+  (istek modelleri `extra="forbid"`).
+* **min_keep YALNIZ PLAN İNVARİANTIDIR; MANUEL OP'LAR MUAFTIR.** Delete ve
+  nudge'ın kesimleri `muaf`tır: `EditsIstek.muaf` / `Overlay.muaf` /
+  `KesimGorunumu.muaf` (EKLEMELİ, varsayılan boş — alanı göndermeyen istek
+  v1.x'i birebir alır). Muaf kesim (1) snap'lenmez (kare-kesin kenar 150 ms
+  içindeki sessizlik kenarına kaymaz), (2) normalize'ın min_keep clamp'iyle
+  itilmez, (3) uygulanan planın min_keep zinciri kenarına DEĞEN kısa tutulan
+  parçayı yutmaz. (3) için TEK plan dokunuşu:
+  `apply_review_edits(..., min_keep_muaf=())` → `_min_keep_zinciri(muaf=)`.
+  Varsayılan boş küme; `build_cutplan` onu hiç geçirmez; düzenlemesiz web
+  yolu CLI ile hash-identik (parite kilidi aşağıda). Muafiyet KESİME
+  aittir: muafsız komşu ona karşı v1.x kuralıyla clamp'lenir; kenarından
+  SÜRÜKLENEN muaf kesim muafiyetini kaybeder (mıknatıslı sıradan düzenleme).
+* **UNDO/REDO SNAPSHOT TABANLI, KAPSAMI TÜM REVIEW OP'LARI.** Her op'tan
+  ÖNCE tam durum (sunucunun overlay'i `overlayCikar` + blade'ler) kopyalanır;
+  geri alma kopyayı edits ucuna TAM anlık görüntü olarak yazar (snap KAPALI —
+  kopya zaten normalize; mıknatıs arada açılmışsa serbest bir kenar yeniden
+  yapışırdı). Ters-işlem mantığı YOK → yarım undo olamaz. Kapsam: kenar
+  sürükleme, boş alanda elle ekleme, Geri al/ver toggle'ı, yasla, blade,
+  Delete, nudge, Otomatik plana dön — hepsi üç kapıdan geçer (`editsGonder`,
+  `yaslaGonder`, `bicakToggle`). Değişmeyen op iz bırakmaz; yeni op ileri
+  yığınını siler. **Derinlik 100** (en eski düşer; adım başına birkaç KB).
+  Ctrl+Z / Ctrl+Shift+Z repeat'lidir (adım sınıfı).
+* **NUDGE (Alt+, / Alt+.):** playhead'e EN YAKIN kesim kenarı bir kare
+  geri/ileri. Kenarlar AKTİF (union'lanmış) aralıklardan — birleşik aralığın
+  içine gömülü kenar itilemez; itilen kenarın SAHİBİ kesim(ler) güncellenir
+  ve muaf olur. **Eşitlikte SOL (küçük ms) kenar** (kesin `<`, artan gezinti).
+  Quantize Dalga 1'in kare adımıyla AYNI: `kareBasMs(kareAlt(kenar) ± 1)`.
+  Uç clamp: [0, total_ms] dışına itilemez, kesim çökemez (başı sonuna
+  erişirse) — ikisinde de istek YOK. Kare hızı yoksa etkisiz ama sahiplenilir.
+  Tek-atımlık (brief kararı).
+
+**DEĞİŞTİRİCİ DİSİPLİNİ GENİŞLEDİ (Dalga 1 kilidi BİLİNÇLİ değişti).**
+Dalga 1: "Ctrl/Alt'lı HİÇBİR kombinasyon sahiplenilmez". Dalga 2'nin tuşları
+NLE sözleşmesidir, o yüzden kural: **Ctrl/Alt'lı kombinasyon YALNIZ kayıtta
+AÇIKÇA ilan edilmişse sahiplenilir ve eşleşme TAMDIR** (girdinin `ctrl`/
+`alt` bayrağı olayınkine eşit; değiştiricili girdide `shift` de). Ctrl+K
+kaydı Ctrl+Shift+K'yı, Alt+K'yı ya da düz K'yı (mekik-dur) YAKALAMAZ; plain
+`,`/`.` Dalga 1'in kare adımı olarak kalır. Değiştiricili kısayolların TAM
+listesi statik kilitte SABİT (`TestDegistiriciDisiplini.ILAN_EDILEN`, beş
+girdi) — sessiz büyüme yok. Meta hiç sahiplenilmez; AltGr istisnası aynen.
+
+| Kilit | Eski | Yeni | Niyet |
+|---|---|---|---|
+| `test_web_klavye_statik::TestDegistiriciDisiplini` | eşleşmede yalnız `kod`/`tus` | alanlar ⊆ {kod, tus, ctrl, alt, shift} + ilan listesi SABİT + eşleştiricide bayrak EŞİTLİĞİ | tarayıcı tuşları (F5, Ctrl+R, Ctrl+±) sessizce ele geçirilemez |
+| `test_web_klavye::TestPreventDefault::test_sahiplenilmeyen_akar` | `Control+k` akar | `Control+k` çıktı; `Control+Shift+k` ve `Control+j` girdi | ilan edilmeyen komşu kombinasyonlar akmaya devam eder |
+| `test_web_klavye_statik::TestTekKayit::test_tus_cakismasi_yok` | anahtar `kod:`/`tus:` | anahtar DEĞİŞTİRİCİ NİTELİKLİ (`ctrl+kod:KeyK`) | bir tuş iki eyleme bağlanamaz |
+
+**PARİTE KİLİDİ ARTIK OTOMATİK — `tests/test_parite.py`** (`ffmpeg` +
+`wcpp` marker). Referans `F5185E7E…D89004` v1.0'dan beri yalnız ELLE
+ölçülüyordu; artık Test1.mp4 gerçek ffmpeg + whisper-cli (Vulkan) + AMF ile
+TMP dizine işlenir ve SHA-256 tam değerle kıyaslanır — iki yoldan: `cli`
+(`yes=True`) ve `web` (`review_cb`, boş overlay → `uygulanmis_plan`). Varlık
+yoksa (`FILLERCUT_KORPUS_DIR`, `FILLERCUT_WCPP_BINARY/MODEL`) ya da encoder
+`h264_amf` değilse eyleme dökülebilir gerekçeyle skip. ~20 sn. Kullanıcının
+`Filler-Cut-Test` klasörüne DOKUNMAZ. Dalga 2'nin her commit'inden önce
+"dörtlü" koşuldu: `pytest -x --tb=short` / `ruff check .` / `mypy .` /
+`pytest tests/test_parite.py tests/test_review_edits.py::TestDuzenlemesizParity
+tests/test_pipeline.py::TestReviewCbParity` — hepsi exit 0.
+
+**BULGU (İnan kararına açık) — blade'in KEEP SONU tarafında XML asimetrisi.**
+Blade karenin İLK ms'ine konur (`ceil(n·T)`). Delete [b1, b2) için sonraki
+keep b2'de başlar ve XML `in` TAM b2'nin karesidir (floor). Ama önceki keep
+b1'de BİTER ve XML bitişi `ceil`le yuvarlar: kare başı tam ms değilse
+(30000/1001'de 30 karede 29'u) keep BİR KARE uzar — kullanıcının silmek
+istediği n1. kare XML'de kalır. Bu, XML'in bilinçli kuralıdır ("konuşmadan
+tek kare eksilmez", v1.2.1) ve Dalga 2'de AYNEN geçerlidir; iki durum da
+kilitli (`test_export_manuel.py::TestXmlKareKesin`). Alternatif: blade'in
+sol kenar rolünde `floor(n·T)` kullanmak XML'de de kare-kesin olurdu ama
+playhead o ms'de bir ÖNCEKİ kareyi gösterir. Karar verilmedi, kayda geçti.
+
+**"OTOMATİK PLANA DÖN" + YENİDEN ANALİZ UYARISI.** Düğme sağ panelin
+analiz_tamam özetinde; düzenleme yokken pasif. Onay diyaloğunun İLK düğmesi
+"Vazgeç" (showModal odağı ona verir). Onay: overlay BOŞ + blade'ler silinir;
+TEK geçmiş adımıdır (Ctrl+Z geri getirir). **Ölçüldü: analiz_tamam'da
+yeniden analiz YOLU YOK** (`btn-analiz` yalnız `yuklendi`de etkin, medya
+değiştirme ve bırakma `bos/yuklendi/hata`da) — yani "yeniden analiz
+düzenlemeleri düşürür" uyarısı bir yolu engellemez, diyaloğun kendi metninde
+ÖNCEDEN söylenir. Brief'in commit planında bu maddenin ayrı yeri yoktu;
+tek geçmiş adımı olduğu için undo/redo commit'ine girdi.
+
+**TEST HARNESS'I — GERÇEK SUNUCU VEKİLİ (`test_web_duzenleme.py`).** Dalga
+1'in klavye harness'ı API'yi SABİT cevapla karşılıyordu; Dalga 2'nin tuşları
+planı değiştirir ve doğruluğun kaynağı sunucudur. `page.route` ile
+`/api/jobs/**` GERÇEK `create_app`'e (`TestClient`) vekil edilir: iş sahte
+koşucuyla gerçek `review` durumunda bekler, "Render Al" gerçekten POST edilir
+ve pipeline'a giden plan koşucudan okunur (undo sonrası export kilidi böyle).
+
+**Tuzaklar (bir sonraki agent için):**
+
+* **`TestOluCagriYok` PARAMETRE ÇAĞRISINI tanımsız sayar.** `async function
+  duzenle(islem) { await islem(); }` → "tanımsız fonksiyon: islem". Tarama
+  kaba ve bilinçli; geri çağırım yerine açık `onceki = anlikGoruntu();
+  … gecmiseYaz(onceki)` yazıldı. Kilidi gevşetme.
+* **Red-first'i ESKİ commit'e karşı koşarken PYTHONPATH Windows yolu
+  olmalı.** Git Bash'te `PYTHONPATH=/c/...` Windows Python'u için geçersizdir
+  ve sessizce editable kurulumun (GÜNCEL kodun) paketine düşülür — "kırmızı"
+  sanılan koşu yanlış koddan geçer. `cygpath -w` ile çevir ve
+  `fillercut.__file__`'ı yazdırarak DOĞRULA.
+* **Playwright'ta Alt+nokta `Alt+Period` / `Alt+Comma`dır;** `ev.key` yine
+  `.`/`,` gelir. TR-Q fiziksel klavyede Alt+, / Alt+. doğrulaması İnan'da.
+
+**TEST DÖKÜMÜ.** Koleksiyon 1942 → **2099** (+157). Red-first = eski
+kodda GERÇEKTEN düşen (ölçüldü); companion = aynı turda eklenen, eski kodda
+da yeşil kilitler.
+
+| Commit | Yeni | Red-first | Companion |
+|---|---|---|---|
+| `b2cd943` blade + Ctrl+K | 35 | 34 (27 tarayıcı + 7 statik) | 1 |
+| `d8e31bd` Delete + muaf | 45 | 37 (15 tarayıcı + 15 sunucu + 3 plan + 4 statik) | 8 |
+| `0d6c84f` undo/redo + otomatik plana dön | 34 | 31 (22 tarayıcı + 9 statik) | 3 |
+| `bad3ab0` nudge | 21 | 16 (12 tarayıcı + 4 statik) | 5 |
+| `3178f91` XML/SRT/şema + parite | 22 | 11 (Dalga 2 öncesi koda karşı) | 11 (9 invariant + 2 parite) |
+
+Marker dağılımı: `tarayici` **318**, `web` 640, `xml` **134**, `ffmpeg`
+**19**, `wcpp` **5** (+2'şer: `test_parite.py`), `exe` 7, `ag` 1; CI
+konvansiyonu (`-m "not exe and not ffmpeg and not wcpp and not ag and not
+tarayici"`) 1753. Tam koşu: **2093 passed / 6 skipped** (skip'ler NVENC+QSV
+donanım yokluğu), ruff + mypy temiz. Dalga boyunca commit başına koşulan
+altı tam koşunun hiçbirinde `test_ui_yasam_dongusu` düşmedi (Dalga 1 izleme
+notu: TEKRARLAMADI). 7. skip (`TestPortDoluyken`) görülmedi — kurulu
+uygulama kapalıydı.
+
+**İNAN'IN KURULU EXE'DE ELLE DOĞRULAYACAKLARI:** (1) Ctrl+K — tutulan
+bölgede çizgi, aynı yerde ikinci basış kaldırır, kesim içinde bir şey olmaz;
+(2) Delete — iki blade arası / blade ile kesim arası parça silinir, render
+çıktısında o bölüm yok; son parçada Türkçe uyarı; (3) Alt+, / Alt+. (TR-Q
+fiziksel klavyede) — kenar bir kare kayar, mıknatıs açıkken geri yapışmaz;
+(4) Ctrl+Z / Ctrl+Shift+Z her op'ta (sürükleme dahil) ve Otomatik plana dön
++ Ctrl+Z; (5) **GERİ DÖNEN MADDE:** `?` katmanı ve Otomatik plana dön
+diyaloğu açıkken Boşluk sayfayı/gövdeyi KAYDIRMAMALI (Dalga 1 bulgusu,
+`b58bc99`); (6) Release Kontrol Listesi madde 10 (kenar sürükleme +
+mıknatıs + boş alan) — kesim katmanına blade çizgisi girdi; (7) bir XML
+dışa aktarımını Resolve/Premiere'de aç: Delete'in kestiği bölüm yok.
 
 **v1.4.0 DALGA 1 TAMAMLANDI (2026-09-22) — çekirdek review kısayolları.**
 Sürüm bump YOK, push/tag/release YOK. Kapsam YALNIZ web katmanı: pipeline,
@@ -2359,7 +2535,18 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/static/keymap.js` — Boşluk/K/Y/M `tekrar: false`; kural tüm kayda uygulanır (12 yeni) | `8e8f6d0` |
 | AGENTS kaydı (karar + tuzaklar + kilit değişiklikleri + test dökümü) | `70cca28` |
 | `web/static/app.js` — `modalDefaultOlu` + `modalKontroluMu`: modal açıkken sahiplenilen tuşun default'u da ölü; sahiplenilmeyen akar, modalın kendi kontrolü korunur (14 yeni = 6 red-first + 8 companion) | `b58bc99` |
-| AGENTS — modal default tuzağı + elle doğrulama sonucu (6/7) | bu commit |
+| AGENTS — modal default tuzağı + elle doğrulama sonucu (6/7) | `9a02e9c` |
+
+**v1.4.0 Dalga 2 (manuel review düzenlemeleri)**
+
+| Modül | Commit |
+|---|---|
+| `web/static/` — blade (Ctrl+K): kare-oturtulmuş bellek içi işaret, sunucuya gitmez; keymap değiştirici disiplini "açıkça ilan edilen + TAM eşleşme"ye genişledi; `test_web_duzenleme.py` (gerçek sunucu vekilli harness) (35 yeni) | `b2cd943` |
+| `web/static/` Delete + `web/review.py` eklemeli `muaf` kanalı + `plan/cutplan.py` `apply_review_edits(min_keep_muaf=)` (varsayılan boş); `test_web_review_muaf.py` (45 yeni) | `d8e31bd` |
+| `web/static/` — snapshot tabanlı geri al / yinele (derinlik 100, bellek) + "Otomatik plana dön" (onaylı, tek geçmiş adımı) (34 yeni) | `0d6c84f` |
+| `web/static/app.js` — nudge (Alt+, / Alt+.): en yakın aktif kenar, eşitlikte sol, Dalga 1 kare kuralı, uç clamp, muaf (21 yeni) | `bad3ab0` |
+| `test_export_manuel.py` (XML kare kuralı + SRT remap + şema) + `test_parite.py` (Test1 SHA-256, cli + web yolu) (22 yeni) | `3178f91` |
+| AGENTS — Dalga 2 kaydı (ripple kararı, blade semantiği, undo kapsamı, nudge kuralı, XML asimetri bulgusu) | bu commit |
 
 **v1.3.2 (config.json şablonu + playhead akıcılığı)**
 
