@@ -574,3 +574,309 @@ class TestDelete:
         _bas(sayfa, "Delete")
         assert _bicaklar(sayfa) == [b1, b2]
         assert sayfa.locator(".bicak").count() == 0
+
+
+# ── Undo / redo (Ctrl+Z / Ctrl+Shift+Z) ──────────────────────────────────────
+
+
+def _durum(sayfa: Any, sunucu: Sunucu) -> dict[str, Any]:
+    """Geri almanın geri getirmesi gereken HER şey: sunucunun saklı overlay'i
+    (görünümden — id, sınır, aktiflik, muafiyet) + bellekteki blade'ler."""
+    g = sunucu.gorunum()
+    return {
+        "kesimler": [
+            (k["id"], k["bas_ms"], k["bit_ms"], k["aktif"], k["muaf"]) for k in g["kesimler"]
+        ],
+        "araliklar": g["aktif_araliklar"],
+        "bicaklar": _bicaklar(sayfa),
+    }
+
+
+def _yigin(sayfa: Any) -> tuple[int, int]:
+    return tuple(sayfa.evaluate("() => [gecmis.geri.length, gecmis.ileri.length]"))
+
+
+def _geri(sayfa: Any) -> None:
+    _bas(sayfa, "Control+z")
+
+
+def _ileri(sayfa: Any) -> None:
+    _bas(sayfa, "Control+Shift+z")
+
+
+def _surukle_sag_kenar(sayfa: Any, kimlik: str, dx: float) -> None:
+    kutu = sayfa.locator(f".kesim-blok[data-id='{kimlik}'] .tutamac.sag").bounding_box()
+    assert kutu is not None
+    x, y = kutu["x"] + kutu["width"] / 2, kutu["y"] + kutu["height"] / 2
+    sayfa.mouse.move(x, y)
+    sayfa.mouse.down()
+    for i in range(1, 6):
+        sayfa.mouse.move(x + dx * i / 5, y)
+    sayfa.mouse.up()
+    sayfa.wait_for_function("() => !review.gonderiliyor")
+    _bekle(sayfa)
+
+
+def _bos_alanda_ciz(sayfa: Any, bas_ms: int, bit_ms: int) -> None:
+    kutu = sayfa.locator("#kesim-katmani").bounding_box()
+    assert kutu is not None
+    y = kutu["y"] + kutu["height"] / 2
+    x0 = kutu["x"] + kutu["width"] * bas_ms / TOPLAM
+    x1 = kutu["x"] + kutu["width"] * bit_ms / TOPLAM
+    sayfa.mouse.move(x0, y)
+    sayfa.mouse.down()
+    for i in range(1, 6):
+        sayfa.mouse.move(x0 + (x1 - x0) * i / 5, y)
+    sayfa.mouse.up()
+    sayfa.wait_for_function("() => !review.gonderiliyor")
+    _bekle(sayfa)
+
+
+def _op_blade(sayfa: Any) -> None:
+    _blade(sayfa, 10_010)
+
+
+def _op_delete(sayfa: Any) -> None:
+    _git(sayfa, 5_000)
+    _bas(sayfa, "Delete")
+
+
+def _op_kenar(sayfa: Any) -> None:
+    _surukle_sag_kenar(sayfa, "k1", 40)
+
+
+def _op_geri_al_dugmesi(sayfa: Any) -> None:
+    sayfa.locator("#kesim-listesi li[data-id='k0'] .geri").click()
+    sayfa.wait_for_function("() => !review.gonderiliyor")
+    _bekle(sayfa)
+
+
+def _op_elle_ekleme(sayfa: Any) -> None:
+    _bos_alanda_ciz(sayfa, 10_000, 12_000)
+
+
+def _op_yasla(sayfa: Any) -> None:
+    sayfa.evaluate("() => { review.secili = 'k1'; }")
+    _bas(sayfa, "y")
+
+
+OPLAR = {
+    "blade": _op_blade,
+    "delete": _op_delete,
+    "kenar-surukleme": _op_kenar,
+    "geri-al-toggle": _op_geri_al_dugmesi,
+    "elle-ekleme": _op_elle_ekleme,
+    "yasla": _op_yasla,
+}
+
+
+class TestUndoRedo:
+    """Snapshot tabanlı: her op'tan ÖNCE tam durum (overlay + blade'ler)
+    kopyalanır; geri alma o kopyayı sunucuya TAM anlık görüntü olarak geri
+    yazar (snap kapalı — kopya zaten normalize edilmiş değerlerdir). Kapsam:
+    MEVCUT TÜM review op'ları — yarım undo yok."""
+
+    @pytest.mark.parametrize("op", list(OPLAR))
+    def test_her_op_ileri_geri(self, sayfa: Any, sunucu: Sunucu, op: str) -> None:
+        once = _durum(sayfa, sunucu)
+        OPLAR[op](sayfa)
+        sonra = _durum(sayfa, sunucu)
+        assert sonra != once, f"{op} durumu değiştirmedi — test kurgusu boş"
+        assert _yigin(sayfa) == (1, 0)
+        _geri(sayfa)
+        assert _durum(sayfa, sunucu) == once, f"{op} geri alınamadı"
+        assert _yigin(sayfa) == (0, 1)
+        _ileri(sayfa)
+        assert _durum(sayfa, sunucu) == sonra, f"{op} yinelenemedi"
+        assert _yigin(sayfa) == (1, 0)
+
+    def test_zincir_sirayla_geri_ve_ileri(self, sayfa: Any, sunucu: Sunucu) -> None:
+        durumlar = [_durum(sayfa, sunucu)]
+        for op in ("blade", "delete", "kenar-surukleme", "geri-al-toggle"):
+            OPLAR[op](sayfa)
+            durumlar.append(_durum(sayfa, sunucu))
+        for beklenen in reversed(durumlar[:-1]):
+            _geri(sayfa)
+            assert _durum(sayfa, sunucu) == beklenen
+        for beklenen in durumlar[1:]:
+            _ileri(sayfa)
+            assert _durum(sayfa, sunucu) == beklenen
+
+    def test_yeni_op_ileri_yiginini_siler(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _op_delete(sayfa)
+        _geri(sayfa)
+        assert _yigin(sayfa) == (0, 1)
+        _op_blade(sayfa)
+        assert _yigin(sayfa) == (1, 0)
+        once = _durum(sayfa, sunucu)
+        _ileri(sayfa)  # yinelenecek bir şey kalmadı
+        assert _durum(sayfa, sunucu) == once
+
+    def test_bos_yiginda_no_op(self, sayfa: Any, sunucu: Sunucu) -> None:
+        once = _durum(sayfa, sunucu)
+        _geri(sayfa)
+        _ileri(sayfa)
+        assert _durum(sayfa, sunucu) == once
+        assert sunucu.duzenleme_istekleri() == []
+
+    def test_degismeyen_op_iz_birakmaz(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Kesim içinde Delete (no-op) geçmişe boş bir adım yazmaz."""
+        _git(sayfa, 2_500)
+        _bas(sayfa, "Delete")
+        assert _yigin(sayfa) == (0, 0)
+
+    def test_yigin_siniri_100(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Derinlik 100: en eski adım düşer, geri alma 100 adımda durur."""
+        assert sayfa.evaluate("() => GECMIS_DERINLIK") == 100
+        noktalar = [8_100 + 60 * i for i in range(105)]
+        for ms in noktalar:
+            sayfa.evaluate(
+                f"() => {{ document.getElementById('oynatici').currentTime = {ms} / 1000;"
+                " bicakToggle(); }"
+            )
+        assert len(_bicaklar(sayfa)) == 105
+        assert _yigin(sayfa) == (100, 0)
+        for _ in range(100):
+            sayfa.evaluate("() => gecmisAdim(-1)")
+        sayfa.wait_for_function("() => !review.gonderiliyor")
+        assert len(_bicaklar(sayfa)) == 5  # ilk 5 adım yığından düştü
+        sayfa.evaluate("() => gecmisAdim(-1)")  # 101. geri alma: no-op
+        assert len(_bicaklar(sayfa)) == 5
+
+    def test_undo_sonrasi_export_orijinal(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _op_delete(sayfa)
+        _op_kenar(sayfa)
+        _geri(sayfa)
+        _geri(sayfa)
+        assert _onayla(sayfa, sunucu) == PLAN
+
+    def test_redo_sonrasi_export_duzenlemeyi_tasir(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _op_delete(sayfa)
+        _geri(sayfa)
+        _ileri(sayfa)
+        plan = _onayla(sayfa, sunucu)
+        assert [(c.start_ms, c.end_ms) for c in plan.cut] == [(2_000, 8_000), (15_000, 16_000)]
+
+    def test_miknatis_degisse_de_birebir_geri_gelir(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Geri yazım snap KAPALI yapılır: kopya zaten normalize edilmiş
+        değerlerdir; mıknatıs sonradan açılmış olsa bile yeniden yapışmaz."""
+        _bas(sayfa, "m")  # mıknatıs kapalı
+        sayfa.evaluate("() => sinirGonder('k1', 7_000, 8_167)")
+        sayfa.wait_for_function("() => !review.gonderiliyor")
+        serbest = _durum(sayfa, sunucu)
+        assert ("k1", 7_000, 8_167, True, False) in serbest["kesimler"]
+        _bas(sayfa, "m")  # mıknatıs açık
+        _op_delete(sayfa)
+        _geri(sayfa)
+        assert _durum(sayfa, sunucu) == serbest
+
+    def test_basili_tutmak_tekrar_eder(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Adım sınıfı (repeat'li): basılı Ctrl+Z her tekrarda bir adım."""
+        for ms in (9_000, 10_000, 11_000):
+            _blade(sayfa, ms)
+        sayfa.keyboard.down("Control")
+        sayfa.keyboard.down("z")
+        sayfa.keyboard.down("z")  # repeat
+        sayfa.keyboard.down("z")  # repeat
+        sayfa.keyboard.up("z")
+        sayfa.keyboard.up("Control")
+        _bekle(sayfa)
+        assert _bicaklar(sayfa) == []
+
+    def test_metin_girisinde_girdiye_ait(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _op_blade(sayfa)
+        sayfa.evaluate(
+            "() => { const i = document.createElement('input'); i.id = 't-girdi';"
+            " document.querySelector('.oynatici-alt').appendChild(i); }"
+        )
+        sayfa.click("#t-girdi")
+        sayfa.keyboard.press("Control+z")
+        _bekle(sayfa)
+        assert len(_bicaklar(sayfa)) == 1
+
+    def test_modal_acikken_olu(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _op_blade(sayfa)
+        sayfa.keyboard.press("?")
+        sayfa.keyboard.press("Control+z")
+        _bekle(sayfa)
+        assert len(_bicaklar(sayfa)) == 1
+        assert _son_karar(sayfa)["onlendi"] is True
+
+    def test_tarayici_varsayilani_engellenir(self, sayfa: Any) -> None:
+        sayfa.keyboard.press("Control+z")
+        assert _son_karar(sayfa)["onlendi"] is True
+        sayfa.keyboard.press("Control+Shift+z")
+        assert _son_karar(sayfa)["onlendi"] is True
+
+
+# ── Otomatik plana dön ───────────────────────────────────────────────────────
+
+
+#: Onay `setTimeout(onay, 0)` ile koşar (dialogKur, KI-17): bitişi DURUMDAN okunur.
+OTOMATIK_BITTI = """() => !review.gonderiliyor && review.bicaklar.length === 0
+  && review.gorunum.kesimler.every((k) => !k.manuel && k.aktif && !k.duzenlendi)"""
+
+
+def _dlg_acik(sayfa: Any) -> bool:
+    return bool(sayfa.evaluate("() => document.getElementById('dlg-otomatik').open"))
+
+
+class TestOtomatikPlanaDon:
+    def test_duzenleme_yokken_pasif(self, sayfa: Any) -> None:
+        assert sayfa.locator("#btn-otomatik-plan").is_disabled()
+
+    def test_duzenleme_varken_etkin(self, sayfa: Any) -> None:
+        _op_blade(sayfa)
+        assert sayfa.locator("#btn-otomatik-plan").is_enabled()
+
+    def test_onay_diyalogu_uyarir(self, sayfa: Any) -> None:
+        _op_delete(sayfa)
+        sayfa.locator("#btn-otomatik-plan").click()
+        assert _dlg_acik(sayfa)
+        metin = sayfa.locator("#dlg-otomatik").inner_text()
+        assert "elle düzenlemeler" in metin
+        assert "yeniden analiz" in metin.lower()
+
+    def test_vazgec_hicbir_sey_yapmaz(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _op_delete(sayfa)
+        once = _durum(sayfa, sunucu)
+        sayfa.locator("#btn-otomatik-plan").click()
+        sayfa.locator("#dlg-otomatik button[value='iptal']").click()
+        _bekle(sayfa)
+        assert not _dlg_acik(sayfa)
+        assert _durum(sayfa, sunucu) == once
+
+    def test_onay_orijinal_plana_doner(self, sayfa: Any, sunucu: Sunucu) -> None:
+        for op in ("blade", "delete", "kenar-surukleme", "geri-al-toggle"):
+            OPLAR[op](sayfa)
+        sayfa.locator("#btn-otomatik-plan").click()
+        sayfa.locator("#dlg-otomatik button[value='tamam']").click()
+        sayfa.wait_for_function(OTOMATIK_BITTI)
+        _bekle(sayfa, 80)
+        g = sunucu.gorunum()
+        assert all(not k["manuel"] and k["aktif"] and not k["duzenlendi"] for k in g["kesimler"])
+        assert g["aktif_araliklar"] == [[2_000, 3_000], [7_000, 8_000], [15_000, 16_000]]
+        assert _bicaklar(sayfa) == []
+        assert _onayla(sayfa, sunucu) == PLAN
+
+    def test_geri_alinabilir(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _op_blade(sayfa)
+        _op_delete(sayfa)
+        once = _durum(sayfa, sunucu)
+        sayfa.locator("#btn-otomatik-plan").click()
+        sayfa.locator("#dlg-otomatik button[value='tamam']").click()
+        sayfa.wait_for_function(OTOMATIK_BITTI)
+        _bekle(sayfa, 80)
+        _geri(sayfa)
+        assert _durum(sayfa, sunucu) == once
+
+    def test_diyalog_acikken_kisayollar_olu(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _op_blade(sayfa)
+        sayfa.locator("#btn-otomatik-plan").click()
+        once = _durum(sayfa, sunucu)
+        _git(sayfa, 5_000)
+        for tus in ("Delete", "Control+z", "Control+k"):
+            sayfa.keyboard.press(tus)
+        _bekle(sayfa)
+        assert _dlg_acik(sayfa)
+        assert _durum(sayfa, sunucu) == once

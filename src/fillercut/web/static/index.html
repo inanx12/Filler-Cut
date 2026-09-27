@@ -201,6 +201,12 @@
       </div>
       <ul id="tur-kirilim" class="kirilim"></ul>
       <div id="ozet-plan" class="ozet-satir soluk-metin"></div>
+      <!-- v1.4.0 Dalga 2: bütün elle düzenlemeleri bırak — onay ister,
+           Ctrl+Z ile geri alınır. Düzenleme yokken pasif. -->
+      <button id="btn-otomatik-plan" class="dugme ikincil dar otomatik-plan" disabled
+              title="Tüm elle düzenlemeleri kaldırıp analizin ürettiği plana döner">
+        Otomatik plana dön
+      </button>
       <div id="review-hata" class="hata-kutu gizli" role="alert"></div>
     </section>
 
@@ -374,6 +380,24 @@
     <menu class="dlg-eylem">
       <button value="iptal" class="dugme ikincil">Vazgeç</button>
       <button value="tamam" class="dugme birincil">Render al</button>
+    </menu>
+  </form>
+</dialog>
+
+<!-- Otomatik plana dön (v1.4.0 Dalga 2): yıkıcı toplu eylem — onay ister.
+     İlk düğme "Vazgeç": showModal odağı ona verir, Enter/Boşluk vazgeçer. -->
+<dialog id="dlg-otomatik" class="dlg">
+  <form method="dialog">
+    <h2>Otomatik plana dön</h2>
+    <p class="dlg-metin">Bu işteki tüm elle düzenlemeler kaldırılır: taşınan
+    sınırlar, geri alınan kesimler, elle eklenen ve silinen parçalar, blade
+    işaretleri. Analizin ürettiği plan geri gelir. Ctrl+Z ile geri
+    alabilirsiniz.</p>
+    <p class="dlg-metin uyari">Unutmayın: videoyu yeniden analiz etmek de elle
+    düzenlemeleri düşürür — yeni analiz planı sıfırdan üretir.</p>
+    <menu class="dlg-eylem">
+      <button value="iptal" class="dugme ikincil">Vazgeç</button>
+      <button value="tamam" class="dugme birincil">Otomatik plana dön</button>
     </menu>
   </form>
 </dialog>

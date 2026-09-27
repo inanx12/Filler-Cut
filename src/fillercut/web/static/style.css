@@ -1229,6 +1229,11 @@ h2.ust-bosluk { margin-top: 20px; }
   margin: 0 0 14px;
 }
 
+/* Otomatik plana dön (v1.4.0 Dalga 2) onay metni. */
+.dlg-metin { color: var(--soluk); font-size: 14px; margin: 0 0 10px; }
+.dlg-metin.uyari { color: var(--metin); border-left: 3px solid var(--kirmizi); padding-left: 10px; }
+.otomatik-plan { margin-top: 10px; }
+
 .dlg-eylem {
   display: flex;
   justify-content: flex-end;

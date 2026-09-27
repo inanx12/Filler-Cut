@@ -224,6 +224,8 @@ class TestTekrarDisiplini:
         "onceki-kesim-noktasi", "sonraki-kesim-noktasi",
         "kare-geri", "kare-ileri",
         "zoom-yakin", "zoom-uzak",
+        # v1.4.0 Dalga 2: geri al / yinele ADIM atar (basılı Ctrl+Z geriye yürür)
+        "duzenleme-geri", "duzenleme-ileri",
     })
 
     def test_kural_tum_kayda_uygulanir(self) -> None:
@@ -263,6 +265,8 @@ class TestDegistiriciDisiplini:
     #: Ctrl/Alt kısayolu bu kilidi bilerek güncellemeden kayda giremez.
     ILAN_EDILEN = {
         "blade": ("ctrl+kod:KeyK",),
+        "duzenleme-geri": ("ctrl+kod:KeyZ",),
+        "duzenleme-ileri": ("ctrl+shift+kod:KeyZ",),
     }
 
     def test_eslesme_alanlari_bilinen(self) -> None:
@@ -630,3 +634,70 @@ class TestDelete:
         assert "muaf:" in js[bas : js.index("\n}", bas)]
         bas = js.index("function sinirGonder")
         assert "overlay.muaf.filter(" in js[bas : js.index("\n}", bas)]
+
+
+class TestGeriAlYinele:
+    """Ctrl+Z / Ctrl+Shift+Z — snapshot tabanlı geçmiş (davranış:
+    `test_web_duzenleme.py::TestUndoRedo`)."""
+
+    @staticmethod
+    def _fonk(ad: str) -> str:
+        js = _oku("app.js")
+        bas = js.index(f"function {ad}")
+        return js[bas : js.index("\n}", bas)]
+
+    def test_derinlik_100(self) -> None:
+        assert "const GECMIS_DERINLIK = 100;" in _oku("app.js")
+
+    def test_sunucuya_giden_her_duzenleme_gecmise_yazar(self) -> None:
+        """Kapılar: `editsGonder`, `yaslaGonder`, yerel `bicakToggle` — üçü de
+        ÖNCE anlık görüntü alır, SONRA geçmişe yazar."""
+        for ad in ("editsGonder", "yaslaGonder", "bicakToggle", "otomatikPlanaDon"):
+            govde = self._fonk(ad)
+            assert govde.index("anlikGoruntu()") < govde.index("gecmiseYaz(onceki)"), ad
+
+    def test_geri_yazim_iz_birakmaz_ve_snap_kapali(self) -> None:
+        govde = self._fonk("durumaDon")
+        assert 'reviewPost("/review/edits", { ...hedef.overlay, snap: false })' in govde
+        assert "editsGonder" not in govde  # geçmişe yazan kapıdan GEÇMEZ
+
+    def test_yeni_dal_ileri_yiginini_siler(self) -> None:
+        govde = self._fonk("gecmiseYaz")
+        assert "gecmis.ileri = [];" in govde
+        assert "GECMIS_DERINLIK" in govde
+
+    def test_bellekte_kalir(self) -> None:
+        for ad in ("gecmiseYaz", "gecmisAdim", "durumaDon", "anlikGoruntu"):
+            govde = self._fonk(ad)
+            for yasak in ("localStorage", "sessionStorage", "indexedDB"):
+                assert yasak not in govde, (ad, yasak)
+
+    def test_is_degisince_sifirlanir(self) -> None:
+        assert "gecmisSifirla();" in self._fonk("reviewAc")
+        assert "gecmisSifirla();" in self._fonk("yeniIs")
+
+
+class TestOtomatikPlanaDon:
+    """"Otomatik plana dön" — onaylı, tek geçmiş adımı (davranış:
+    `test_web_duzenleme.py::TestOtomatikPlanaDon`)."""
+
+    def test_dugme_analiz_tamam_ozetinde(self) -> None:
+        html = _oku("index.html")
+        bas = html.index('data-goster="analiz_tamam"')
+        bolum = html[bas : html.index("</section>", bas)]
+        assert 'id="btn-otomatik-plan"' in bolum
+
+    def test_onay_diyalogu_yeniden_analiz_uyarisi(self) -> None:
+        html = _oku("index.html")
+        bas = html.index('<dialog id="dlg-otomatik"')
+        diyalog = html[bas : html.index("</dialog>", bas)]
+        assert "yeniden analiz" in diyalog
+        # ilk düğme Vazgeç: showModal odağı ona verir (yıkıcı eylem varsayılan değil)
+        assert diyalog.index('value="iptal"') < diyalog.index('value="tamam"')
+
+    def test_bos_overlay_gonderir(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("function otomatikPlanaDon")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "devre_disi: [], sinirlar: [], eklemeler: [], muaf: []" in govde
+        assert "review.bicaklar = [];" in govde

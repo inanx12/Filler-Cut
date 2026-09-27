@@ -115,6 +115,12 @@ const KISAYOLLAR = [
   { eylem: "sil", tuslar: [{ kod: "Delete" }],
     etiket: "Delete", aciklama: "Playhead'deki tutulan parçayı sil (kesimler + blade'ler arası)",
     grup: "Düzenleme", tekrar: false },
+  { eylem: "duzenleme-geri", tuslar: [{ kod: "KeyZ", ctrl: true }],
+    etiket: "Ctrl+Z", aciklama: "Son düzenlemeyi geri al (100 adıma kadar)",
+    grup: "Düzenleme", tekrar: true },
+  { eylem: "duzenleme-ileri", tuslar: [{ kod: "KeyZ", ctrl: true, shift: true }],
+    etiket: "Ctrl+Shift+Z", aciklama: "Geri alınan düzenlemeyi yinele",
+    grup: "Düzenleme", tekrar: true },
 ];
 
 function kisayolBul(ev) {

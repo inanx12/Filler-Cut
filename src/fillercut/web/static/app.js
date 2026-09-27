@@ -150,6 +150,8 @@ function dugmeleriTazele() {
   const planBozuk = !!(review.gorunum && review.gorunum.hata);
   el("btn-analiz").disabled = durum.asama !== "yuklendi";
   el("btn-onayla").disabled = durum.asama !== "analiz_tamam" || planBozuk;
+  el("btn-otomatik-plan").disabled =
+    durum.asama !== "analiz_tamam" || !duzenlemeVar();
   el("btn-medya-degistir").disabled = !medyaDegistirilebilir();
 }
 
@@ -1348,6 +1350,7 @@ const review = {
 async function reviewAc(jobId) {
   durum.jobId = jobId;
   review.bicaklar = []; // işaretler işe aittir: yeni planda anlamı yok
+  gecmisSifirla(); // geçmiş de işe aittir
   asamaAyarla("analiz_tamam");
   await reviewYukle();
 }
@@ -1587,16 +1590,25 @@ function overlayCikar() {
 async function yaslaGonder(id) {
   /* "Sessizliğe yasla" — hesabı SUNUCU yapar (aynı sessizlik haritası,
      aynı tavan). İstemcide ikinci bir kopya tutulmaz; dönen görünüm
-     sıradan bir sınır editinden ayırt edilemez. */
-  await reviewPost("/review/yasla", { id });
+     sıradan bir sınır editinden ayırt edilemez. Geçmişe yazılır. */
+  const onceki = anlikGoruntu();
+  const tamam = await reviewPost("/review/yasla", { id });
+  gecmiseYaz(onceki);
+  return tamam;
 }
 
 async function editsGonder(overlay) {
-  await reviewPost("/review/edits", overlay);
+  /* Her kullanıcı düzenlemesinin sunucu kapısı — geçmişe (Ctrl+Z) yazılır.
+     Geri alma/yineleme ise `reviewPost`u DOĞRUDAN çağırır (iz bırakmaz). */
+  const onceki = anlikGoruntu();
+  const tamam = await reviewPost("/review/edits", overlay);
+  gecmiseYaz(onceki);
+  return tamam;
 }
 
 async function reviewPost(yol, govde) {
-  if (review.gonderiliyor) return;
+  /* Döner: sunucu düzenlemeyi kabul etti mi (görünüm tazelendi mi)? */
+  if (review.gonderiliyor) return false;
   review.gonderiliyor = true;
   try {
     const cevap = await fetch("/api/jobs/" + durum.jobId + yol, {
@@ -1606,20 +1618,116 @@ async function reviewPost(yol, govde) {
     });
     if (cevap.status === 404) {
       isYok();
-      return;
+      return false;
     }
     if (!cevap.ok) {
       reviewHata(await apiHatasi(cevap));
       await reviewYukle(); // sunucudaki gerçek duruma geri dön
-      return;
+      return false;
     }
     review.gorunum = await cevap.json();
     reviewCiz();
+    return true;
   } catch (_) {
     reviewHata("Sunucuya ulaşılamıyor — düzenleme kaydedilmedi.");
+    return false;
   } finally {
     review.gonderiliyor = false;
   }
+}
+
+/* ── geri al / yinele: Ctrl+Z / Ctrl+Shift+Z (v1.4.0 Dalga 2) ────────────
+ *
+ * SNAPSHOT TABANLI. Plan küçük veridir: her düzenlemeden ÖNCE tam durum —
+ * sunucunun overlay'i (görünümden türetilir, `overlayCikar`) + bellekteki
+ * blade'ler — kopyalanır. Geri alma o kopyayı sunucuya TAM anlık görüntü
+ * olarak yazar; edits ucu zaten "bütün overlay'i gönder" sözleşmesiyle
+ * çalışır, yani ayrı bir ters-işlem mantığı YOKTUR ve yarım undo olamaz.
+ *
+ * Kapsam: bütün review op'ları — kenar sürükleme, elle ekleme, geri al /
+ * geri ver (toggle), yasla, blade, Delete, nudge, otomatik plana dön. Hepsi
+ * iki kapıdan birinden geçer: sunucuya gidenler `editsGonder`/`yaslaGonder`,
+ * yerel blade `bicakToggle` — üçü de önce `anlikGoruntu`, sonra `gecmiseYaz`. Durumu DEĞİŞTİRMEYEN op (kesim
+ * içinde Delete, reddedilen istek) geçmişe iz bırakmaz.
+ *
+ * Geri yazım snap KAPALI yapılır: kopya zaten normalize edilmiş değerlerdir;
+ * mıknatıs arada açılmışsa serbest bırakılmış bir kenar yeniden yapışır ve
+ * "geri alınan durum" sessizce başka bir durum olurdu. min_keep clamp'i
+ * koşar ama normalize edilmiş değerde etkisizdir (idempotent).
+ *
+ * Derinlik 100 adım (en eski düşer; bir adım birkaç KB — bellekte 100'ü
+ * ihmal edilebilir, Premiere/Resolve varsayılanlarıyla aynı mertebe). Yığın
+ * BELLEKTEDİR: diske, config'e, localStorage'a yazılmaz; iş değişince
+ * sıfırlanır. */
+const GECMIS_DERINLIK = 100;
+const gecmis = { geri: [], ileri: [] };
+
+function gecmisSifirla() {
+  gecmis.geri = [];
+  gecmis.ileri = [];
+}
+
+function anlikGoruntu() {
+  const { snap: _snap, ...overlay } = overlayCikar(); // snap UI tercihidir, veri değil
+  return { overlay, bicaklar: review.bicaklar.slice() };
+}
+
+function ayniDurum(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function gecmiseYaz(onceki) {
+  if (ayniDurum(onceki, anlikGoruntu())) return; // değişmeyen op iz bırakmaz
+  gecmis.geri.push(onceki);
+  if (gecmis.geri.length > GECMIS_DERINLIK) gecmis.geri.shift();
+  gecmis.ileri = []; // yeni bir dal: yinelenecek adımlar geçersizdir
+}
+
+async function gecmisAdim(yon) {
+  /* yon < 0: geri al, yon > 0: yinele. */
+  if (!review.gorunum || durum.asama !== "analiz_tamam" || review.gonderiliyor) return;
+  const kaynak = yon < 0 ? gecmis.geri : gecmis.ileri;
+  const karsi = yon < 0 ? gecmis.ileri : gecmis.geri;
+  if (!kaynak.length) return;
+  const simdiki = anlikGoruntu();
+  const hedef = kaynak.pop();
+  if (await durumaDon(hedef, simdiki)) karsi.push(simdiki);
+  else kaynak.push(hedef); // yazılamadı: adım yerinde kalır
+}
+
+async function durumaDon(hedef, simdiki) {
+  if (!ayniDurum(hedef.overlay, simdiki.overlay)) {
+    const tamam = await reviewPost("/review/edits", { ...hedef.overlay, snap: false });
+    if (!tamam) return false;
+  }
+  review.bicaklar = hedef.bicaklar.slice();
+  bloklariCiz();
+  dugmeleriTazele();
+  return true;
+}
+
+/* ── Otomatik plana dön (v1.4.0 Dalga 2) ─────────────────────────────────
+ *
+ * Bütün elle düzenlemeleri bırakır: overlay BOŞ gönderilir (orijinal plan
+ * hiç değişmemişti — overlay modeli) ve blade'ler silinir. Yıkıcı bir toplu
+ * eylemdir: onay diyaloğu ister ve TEK geçmiş adımıdır (Ctrl+Z geri getirir).
+ * Diyalog ayrıca yeniden analizin de düzenlemeleri düşüreceğini ÖNCEDEN
+ * söyler: analiz planı sıfırdan üretir, overlay yeni plana taşınmaz. */
+function duzenlemeVar() {
+  if (!review.gorunum) return false;
+  return review.bicaklar.length > 0 ||
+    review.gorunum.kesimler.some((k) => k.manuel || !k.aktif || k.duzenlendi);
+}
+
+async function otomatikPlanaDon() {
+  if (!review.gorunum || durum.asama !== "analiz_tamam" || review.gonderiliyor) return;
+  const onceki = anlikGoruntu();
+  const bos = { devre_disi: [], sinirlar: [], eklemeler: [], muaf: [], snap: review.snap };
+  if (!(await reviewPost("/review/edits", bos))) return;
+  review.bicaklar = [];
+  bloklariCiz();
+  dugmeleriTazele();
+  gecmiseYaz(onceki);
 }
 
 function kesimToggle(id) {
@@ -2192,6 +2300,8 @@ const EYLEMLER = {
   "miknatis": () => miknatisToggle(),
   "blade": () => bicakToggle(),
   "sil": () => parcaSil(),
+  "duzenleme-geri": () => gecmisAdim(-1),
+  "duzenleme-ileri": () => gecmisAdim(1),
 };
 
 function saniyeKaydir(sn) {
@@ -2347,10 +2457,13 @@ function bicakToggle() {
   if (aktifKesimBul(ms) !== null) return;
   const nokta = bicakNoktasi(ms);
   if (tutulanParca(nokta) === null) return;
+  const onceki = anlikGoruntu();
   const i = review.bicaklar.indexOf(nokta);
-  if (i >= 0) review.bicaklar.splice(i, 1);
+  if (i >= 0) review.bicaklar = review.bicaklar.filter((b) => b !== nokta);
   else review.bicaklar = [...review.bicaklar, nokta].sort((a, b) => a - b);
   bloklariCiz();
+  dugmeleriTazele();
+  gecmiseYaz(onceki);
 }
 
 /* ── Delete: tutulan parçayı sil (v1.4.0 Dalga 2) ────────────────────────
@@ -2573,6 +2686,13 @@ function dialogKur(id, onay) {
 
 const dlgAnaliz = dialogKur("dlg-analiz", analiziBaslat);
 const dlgRender = dialogKur("dlg-render", onayGonder);
+const dlgOtomatik = dialogKur("dlg-otomatik", otomatikPlanaDon);
+
+el("btn-otomatik-plan").addEventListener("click", () => {
+  if (durum.asama !== "analiz_tamam" || !duzenlemeVar()) return;
+  dlgOtomatik.returnValue = "";
+  dlgOtomatik.showModal();
+});
 
 el("btn-analiz").addEventListener("click", () => {
   if (durum.asama !== "yuklendi") return;
@@ -2723,6 +2843,7 @@ function yeniIs() {
   review.gorunum = null;
   review.secili = null;
   review.bicaklar = [];
+  gecmisSifirla();
   el("medya-bos").classList.remove("gizli");
   el("medya-dolu").classList.add("gizli");
   el("ekran-yok").classList.add("gizli");
