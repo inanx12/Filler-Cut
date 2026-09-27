@@ -32,6 +32,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fillercut.export.medya import Kare
+from fillercut.plan.cutplan import MANUEL_REASON
 from fillercut.web.app import create_app
 from fillercut.web.jobs import JobKayit
 from tests.test_web_klavye import MEDYA_SAHTESI
@@ -395,3 +396,181 @@ class TestBladeGorsel:
         istekler = sunucu.duzenleme_istekleri()
         assert istekler and istekler[-1]["govde"]["sinirlar"][0]["id"] == "k1"
 
+
+# ── Delete ───────────────────────────────────────────────────────────────────
+
+
+def _kesim(sunucu: Sunucu, kimlik: str) -> dict[str, Any]:
+    return next(k for k in sunucu.gorunum()["kesimler"] if k["id"] == kimlik)
+
+
+def _blade(sayfa: Any, ms: int) -> int:
+    _git(sayfa, ms)
+    _bas(sayfa, "Control+k")
+    return _kare_basi(ms)
+
+
+class TestDelete:
+    """Delete — playhead'in içindeki TUTULAN parçayı kesime çevirir (tek yönlü).
+
+    Parçanın sınırları çevreleyen aktif kesimler ve blade'lerdir. Sonuç
+    sunucuda sıradan bir ELLE EKLENEN kesimdir (``MANUEL_REASON``, v1.0'dan
+    beri var — reason zincirine yeni değer girmez) ve muaftır: snap onu
+    kaydırmaz, min_keep onu itmez / komşu kısa parçayı yutmaz."""
+
+    def test_tutulan_parca_kesime_doner_ve_birlesir(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 5_000)
+        _bas(sayfa, "Delete")
+        m0 = _kesim(sunucu, "m0")
+        assert (m0["bas_ms"], m0["bit_ms"]) == (3_000, 7_000)
+        assert m0["manuel"] is True and m0["muaf"] is True and m0["tur"] == "manuel"
+        assert sunucu.gorunum()["aktif_araliklar"] == [[2_000, 8_000], [15_000, 16_000]]
+
+    def test_onaylanan_planda_manuel_reason(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 5_000)
+        _bas(sayfa, "Delete")
+        plan = _onayla(sayfa, sunucu)
+        birlesik = next(c for c in plan.cut if c.start_ms == 2_000)
+        assert (birlesik.start_ms, birlesik.end_ms) == (2_000, 8_000)
+        assert MANUEL_REASON in birlesik.reason.split(" + ")
+
+    @pytest.mark.parametrize("ms", [2_000, 2_500, 7_999, 15_000])
+    def test_kesim_icinde_no_op(self, sayfa: Any, sunucu: Sunucu, ms: int) -> None:
+        _git(sayfa, ms)
+        _bas(sayfa, "Delete")
+        assert sunucu.duzenleme_istekleri() == []
+
+    def test_iki_blade_arasi(self, sayfa: Any, sunucu: Sunucu) -> None:
+        b1 = _blade(sayfa, 10_010)
+        b2 = _blade(sayfa, 12_000)
+        _git(sayfa, 11_000)
+        _bas(sayfa, "Delete")
+        m0 = _kesim(sunucu, "m0")
+        assert (m0["bas_ms"], m0["bit_ms"]) == (b1, b2)
+
+    def test_yalniz_soldaki_blade(self, sayfa: Any, sunucu: Sunucu) -> None:
+        b = _blade(sayfa, 10_010)
+        _git(sayfa, 12_000)
+        _bas(sayfa, "Delete")
+        m0 = _kesim(sunucu, "m0")
+        assert (m0["bas_ms"], m0["bit_ms"]) == (b, 15_000)
+
+    def test_yalniz_sagdaki_blade(self, sayfa: Any, sunucu: Sunucu) -> None:
+        b = _blade(sayfa, 12_000)
+        _git(sayfa, 9_000)
+        _bas(sayfa, "Delete")
+        m0 = _kesim(sunucu, "m0")
+        assert (m0["bas_ms"], m0["bit_ms"]) == (8_000, b)
+
+    def test_playhead_blade_ustundeyse_sagdaki_parca(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Yarı açık kural: blade noktası sağındaki parçanın BAŞIDIR."""
+        b = _blade(sayfa, 10_010)
+        _git(sayfa, b)
+        _bas(sayfa, "Delete")
+        m0 = _kesim(sunucu, "m0")
+        assert (m0["bas_ms"], m0["bit_ms"]) == (b, 15_000)
+
+    def test_miknatis_acikken_blade_kenari_kaymaz(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """8142 ms, 8200'deki sessizlik kenarına 58 ms (eşik 150): muafsız bir
+        kesim oraya yapışırdı. Delete'in kenarı KAREYE oturmuştur, kaymaz."""
+        assert sayfa.evaluate("() => review.snap") is True
+        b = _blade(sayfa, 8_150)
+        assert b == 8_142
+        _git(sayfa, 9_000)
+        _bas(sayfa, "Delete")
+        m0 = _kesim(sunucu, "m0")
+        assert (m0["bas_ms"], m0["bit_ms"]) == (8_142, 15_000)
+
+    def test_min_keep_muaf_kisa_parca_kalir(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """[8000, b] silinir, k2'ye 151 ms kalır (< min_keep 300): muaf —
+        itilmez, yutulmaz; sonuç 'manuel' etiketiyle raporlanır."""
+        b = _blade(sayfa, 14_850)
+        assert 15_000 - b < 300
+        _git(sayfa, 12_000)
+        _bas(sayfa, "Delete")
+        g = sunucu.gorunum()
+        assert g["aktif_araliklar"] == [[2_000, 3_000], [7_000, b], [15_000, 16_000]]
+        assert g["tiers"]["manuel"] == 1
+
+    def test_ardisik_silmeler_birlesir(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 5_000)
+        _bas(sayfa, "Delete")
+        _git(sayfa, 10_000)
+        _bas(sayfa, "Delete")
+        assert sunucu.gorunum()["aktif_araliklar"] == [[2_000, 16_000]]
+
+    def test_son_tutulan_parca_engellenir(self, sayfa: Any, sunucu: Sunucu) -> None:
+        for ms in (1_000, 5_000, 10_000):
+            _git(sayfa, ms)
+            _bas(sayfa, "Delete")
+        assert sunucu.gorunum()["aktif_araliklar"] == [[0, 16_000]]
+        istek_sayisi = len(sunucu.duzenleme_istekleri())
+        _git(sayfa, 17_000)
+        _bas(sayfa, "Delete")
+        assert len(sunucu.duzenleme_istekleri()) == istek_sayisi, "istek gitti"
+        assert sunucu.gorunum()["aktif_araliklar"] == [[0, 16_000]]
+        kutu = sayfa.locator("#review-hata")
+        assert kutu.is_visible()
+        metin = kutu.inner_text()
+        assert "Son tutulan parça silinemez" in metin and "boş video üretilmez" in metin
+
+    def test_basili_tutmak_tek_atim(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 5_000)
+        sayfa.keyboard.down("Delete")
+        sayfa.keyboard.down("Delete")  # repeat
+        sayfa.keyboard.down("Delete")  # repeat
+        sayfa.keyboard.up("Delete")
+        sayfa.wait_for_function("() => !review.gonderiliyor")
+        _bekle(sayfa, 80)
+        assert len(sunucu.duzenleme_istekleri()) == 1
+
+    def test_tarayici_varsayilani_engellenir(self, sayfa: Any) -> None:
+        _git(sayfa, 5_000)
+        _bas(sayfa, "Delete")
+        assert _son_karar(sayfa)["onlendi"] is True
+
+    def test_metin_girisinde_girdiye_ait(self, sayfa: Any, sunucu: Sunucu) -> None:
+        sayfa.evaluate(
+            "() => { const i = document.createElement('input'); i.id = 't-girdi';"
+            " i.value = 'abc'; document.querySelector('.oynatici-alt').appendChild(i); }"
+        )
+        _git(sayfa, 5_000)
+        sayfa.click("#t-girdi")
+        sayfa.keyboard.press("Home")
+        sayfa.keyboard.press("Delete")
+        _bekle(sayfa)
+        assert sayfa.evaluate("() => document.getElementById('t-girdi').value") == "bc"
+        assert sunucu.duzenleme_istekleri() == []
+
+    def test_geri_donus_mevcut_mekanizmadan(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Tek yönlü: kesimde Delete no-op'tur; geri getirmek listedeki
+        'Geri al' düğmesidir (v1.0 toggle'ı) — tutulan parça aynen döner."""
+        _git(sayfa, 5_000)
+        _bas(sayfa, "Delete")
+        sayfa.locator("#kesim-listesi li[data-id='m0'] .geri").click()
+        sayfa.wait_for_function("() => !review.gonderiliyor")
+        _bekle(sayfa)
+        g = sunucu.gorunum()
+        assert g["aktif_araliklar"] == [[2_000, 3_000], [7_000, 8_000], [15_000, 16_000]]
+
+    def test_surukleme_muafiyeti_kaldirir(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Delete'in kesimi kenarından SÜRÜKLENİRSE artık mıknatıslı sıradan
+        bir düzenlemedir: istek o id'yi `muaf`tan çıkarır."""
+        _git(sayfa, 5_000)
+        _bas(sayfa, "Delete")
+        sayfa.evaluate("() => sinirGonder('m0', 3_000, 6_500)")
+        sayfa.wait_for_function("() => !review.gonderiliyor")
+        son = sunucu.duzenleme_istekleri()[-1]["govde"]
+        assert "m0" not in son["muaf"]
+
+    def test_parcanin_ucundaki_blade_cizilmez_bellekte_kalir(
+        self, sayfa: Any, sunucu: Sunucu
+    ) -> None:
+        """Silinen parçanın sınırındaki blade artık bir KESİM kenarıdır — çizgi
+        gösterilmez; işaret bellekte kalır (geri alınırsa yeniden görünür)."""
+        b1 = _blade(sayfa, 10_010)
+        b2 = _blade(sayfa, 12_000)
+        _git(sayfa, 11_000)
+        _bas(sayfa, "Delete")
+        assert _bicaklar(sayfa) == [b1, b2]
+        assert sayfa.locator(".bicak").count() == 0

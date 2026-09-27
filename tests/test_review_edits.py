@@ -274,3 +274,42 @@ class TestDuzenlemesizParity:
             [*plan.cut, _manuel(15_000, 16_000)], total_duration_ms=TOPLAM
         )
         assert plan == kopya
+
+
+class TestMinKeepMuaf:
+    """v1.4.0 Dalga 2 — ``min_keep_muaf``: manuel op'un (Delete / nudge)
+    KENARINA değen kısa iç keep YUTULMAZ. Karar: min_keep yalnız PLAN
+    invariantıdır, kullanıcının kareye oturtulmuş açık iradesi muaftır.
+    Varsayılan boş küme: PLAN kuralı aynen (parite — ``build_cutplan`` bu
+    parametreyi hiç geçirmez)."""
+
+    def test_varsayilan_kural_aynen(self) -> None:
+        plan = apply_review_edits(
+            [_kesim(5_000, 6_000), _kesim(6_100, 7_000)], total_duration_ms=TOPLAM
+        )
+        assert [(c.start_ms, c.end_ms) for c in plan.cut] == [(5_000, 7_000)]
+
+    def test_muaf_baslangica_degen_kisa_keep_kalir(self) -> None:
+        plan = apply_review_edits(
+            [_kesim(5_000, 6_000), _manuel(6_100, 7_000)],
+            total_duration_ms=TOPLAM,
+            min_keep_muaf=[6_100, 7_000],
+        )
+        assert [(c.start_ms, c.end_ms) for c in plan.cut] == [(5_000, 6_000), (6_100, 7_000)]
+        assert (6_000, 6_100) in [(k.start_ms, k.end_ms) for k in plan.keep]
+
+    def test_muaf_bitise_degen_kisa_keep_kalir(self) -> None:
+        plan = apply_review_edits(
+            [_manuel(5_000, 6_000), _kesim(6_100, 7_000)],
+            total_duration_ms=TOPLAM,
+            min_keep_muaf=[5_000, 6_000],
+        )
+        assert [(c.start_ms, c.end_ms) for c in plan.cut] == [(5_000, 6_000), (6_100, 7_000)]
+
+    def test_muaf_olmayan_kenardaki_kisa_keep_yine_yutulur(self) -> None:
+        plan = apply_review_edits(
+            [_kesim(5_000, 6_000), _kesim(6_100, 7_000), _manuel(12_000, 13_000)],
+            total_duration_ms=TOPLAM,
+            min_keep_muaf=[12_000, 13_000],
+        )
+        assert [(c.start_ms, c.end_ms) for c in plan.cut] == [(5_000, 7_000), (12_000, 13_000)]

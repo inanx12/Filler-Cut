@@ -172,7 +172,10 @@ def _keep_bosluklari(cuts: list[_Aralik], total_ms: int) -> list[tuple[int, int]
 
 
 def _min_keep_zinciri(
-    cuts: list[_Aralik], total_ms: int, min_keep_ms: int
+    cuts: list[_Aralik],
+    total_ms: int,
+    min_keep_ms: int,
+    muaf: frozenset[int] = frozenset(),
 ) -> list[_Aralik]:
     """min_keep fixpoint döngüsü: kısa İÇ keep parçalarını kesime katar.
 
@@ -184,6 +187,11 @@ def _min_keep_zinciri(
     ``build_cutplan`` ve ``apply_review_edits`` bu tek gövdeyi paylaşır: web
     review'unda uygulanan plan da PLAN katmanıyla AYNI min_keep semantiğini
     taşımalı (iki ayrı kopya zamanla ayrışırdı).
+
+    ``muaf`` (v1.4.0 Dalga 2): bu kenarlardan birine DEĞEN keep parçası kısa
+    olsa da yutulmaz — kenar kullanıcının kareye oturtulmuş manuel op'udur
+    (Delete / nudge) ve min_keep yalnız PLAN invariantıdır. Boş küme
+    (varsayılan; ``build_cutplan`` hiç geçirmez) kuralı aynen bırakır.
     """
     while True:
         gaps = _keep_bosluklari(cuts, total_ms)
@@ -194,6 +202,8 @@ def _min_keep_zinciri(
             if e - s < min_keep_ms
             and not (i == 0 and s == 0)  # video başı kenar keep'i dokunulmaz
             and not (i == son and e == total_ms)  # video sonu kenar keep'i
+            and s not in muaf  # manuel op kenarı: kullanıcı bilerek bıraktı
+            and e not in muaf
         ]
         if not kisa:
             return cuts
@@ -302,6 +312,7 @@ def apply_review_edits(
     total_duration_ms: int,
     reddedilenler: Iterable[Segment] = (),
     min_keep_ms: int = MIN_KEEP_MS,
+    min_keep_muaf: Iterable[int] = (),
 ) -> CutPlan:
     """Review düzenlemeleri UYGULANMIŞ kesim listesinden CutPlan kurar (v1.0 web).
 
@@ -330,6 +341,11 @@ def apply_review_edits(
             ``"kullanıcı reddi: …"`` izi düşmek için kullanılır (``filter_cutplan``
             ile aynı sözcük). "Neden burayı KESMEDİ?" cevabı da dosyada dursun.
         min_keep_ms: İç keep alt sınırı (PLAN ile aynı kural).
+        min_keep_muaf: Manuel op KENARLARI (ms, v1.4.0 Dalga 2) — bunlardan
+            birine değen kısa iç keep min_keep zincirine KATILMAZ. Karar:
+            min_keep yalnız PLAN invariantıdır; kullanıcının kareye
+            oturtulmuş Delete/nudge kenarı muaftır. Varsayılan boş: kural
+            aynen (düzenlemesiz web koşusu CLI ile hash-identik kalır).
 
     Raises:
         CutPlanError: Uygulanmış plan tüm videoyu kesiyorsa (boş video yasağı).
@@ -352,7 +368,9 @@ def apply_review_edits(
         )
         if a is not None:
             araliklar.append(a)
-    cuts = _min_keep_zinciri(_merge(araliklar), total_duration_ms, min_keep_ms)
+    cuts = _min_keep_zinciri(
+        _merge(araliklar), total_duration_ms, min_keep_ms, frozenset(min_keep_muaf)
+    )
 
     gaps = _keep_bosluklari(cuts, total_duration_ms)
     if not gaps:

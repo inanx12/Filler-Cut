@@ -112,6 +112,9 @@ const KISAYOLLAR = [
   { eylem: "blade", tuslar: [{ kod: "KeyK", ctrl: true }],
     etiket: "Ctrl+K", aciklama: "Blade — playhead karesine işaret (aynı yerde tekrar: kaldır)",
     grup: "Düzenleme", tekrar: false },
+  { eylem: "sil", tuslar: [{ kod: "Delete" }],
+    etiket: "Delete", aciklama: "Playhead'deki tutulan parçayı sil (kesimler + blade'ler arası)",
+    grup: "Düzenleme", tekrar: false },
 ];
 
 function kisayolBul(ev) {

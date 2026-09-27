@@ -13,6 +13,12 @@ tek tıkla geri gelir. Elle eklenen kesim de aynı şekilde toggle'lanabilir.
 **id şeması:** plandaki i. kesim ``k{i}``, j. elle eklenen ``m{j}``. id'ler
 overlay boyunca sabittir; sıralama değişse bile kimlik kaymaz.
 
+**Muaf kesimler (v1.4.0 Dalga 2):** Delete ve nudge KAREYE oturtulmuş manuel
+op'lardır. Onların kesimleri ``Overlay.muaf``ta durur: snap kaydırmaz,
+min_keep clamp'i itmez, uygulanan planın min_keep zinciri kenarlarına değen
+kısa parçayı yutmaz (karar: min_keep yalnız PLAN invariantıdır). Kanal
+eklemelidir — alanı göndermeyen istek v1.x davranışını birebir alır.
+
 Kesim türü (``tur``) reason zincirinden türetilir — ``json_report``'un KI-3
 parse'ının AYNI gövdesiyle (``reason_kategorileri``); ikinci bir parse kopyası
 zamanla ayrışırdı.
@@ -87,6 +93,8 @@ class Overlay:
     devre_disi: frozenset[str] = frozenset()
     sinirlar: Mapping[str, tuple[int, int]] = field(default_factory=dict)
     eklemeler: tuple[tuple[int, int], ...] = ()
+    #: Kare-kesin manuel op kesimleri (Delete / nudge) — snap + min_keep muaf.
+    muaf: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -109,6 +117,7 @@ class _Aday:
     orijinal: Segment | None
     ham_bas: int = 0
     ham_bit: int = 0
+    muaf: bool = False
 
 
 class KesimGorunumu(BaseModel):
@@ -125,6 +134,9 @@ class KesimGorunumu(BaseModel):
     duzenlendi: bool
     manuel: bool
     reason: str
+    #: Kare-kesin manuel op kesimi mi (Delete / nudge — v1.4.0 Dalga 2)?
+    #: İstemci overlay'i buradan yeniden türetir (``overlayCikar``).
+    muaf: bool = False
     #: Bu kesimde kesilen filler sözcükleri (GÖRÜNTÜ formunda, zincir sırasıyla).
     #: Sol paneldeki Filler Listesi bunu gösterir; kaynağı reason zinciridir
     #: (``reason_kelimeleri`` — rapor istatistiğiyle AYNI gövde, KI-3 ailesi).
@@ -200,6 +212,10 @@ class EditsIstek(BaseModel):
     devre_disi: list[str] = []
     sinirlar: list[SinirIstek] = []
     eklemeler: list[EklemeIstek] = []
+    #: Kare-kesin manuel op kesimlerinin id'leri (v1.4.0 Dalga 2 — Delete,
+    #: nudge): snap ve min_keep clamp'i UYGULANMAZ, kenarlarına değen kısa
+    #: tutulan parça yutulmaz. Varsayılan boş: v1.x istemcisi aynen.
+    muaf: list[str] = []
     #: Mıknatıs (snap) açık mı? İstemcinin oturum içi UI tercihi; **veriye ait
     #: değildir**, o yüzden overlay'de saklanmaz — her istekte taşınır.
     #: Varsayılan ``True``: alan gönderilmediğinde davranış v1.0 ile birebir
@@ -297,6 +313,7 @@ def _adaylar(plan: CutPlan, overlay: Overlay) -> list[_Aday]:
                 duzenlendi=sinir is not None,
                 manuel=False,
                 orijinal=seg,
+                muaf=kid in overlay.muaf,
             )
         )
     for j, (e_bas, e_bit) in enumerate(overlay.eklemeler):
@@ -314,6 +331,7 @@ def _adaylar(plan: CutPlan, overlay: Overlay) -> list[_Aday]:
                 duzenlendi=True,  # manuel kesim baştan kullanıcı iradesidir
                 manuel=True,
                 orijinal=None,
+                muaf=mid in overlay.muaf,
             )
         )
     return adaylar
@@ -384,7 +402,7 @@ def dogrula(plan: CutPlan, istek: EditsIstek, *, total_ms: int) -> Overlay:
     gecerli_m = {manuel_id(j) for j in range(len(istek.eklemeler))}
     gecerli = gecerli_k | gecerli_m
 
-    for kimlik in istek.devre_disi:
+    for kimlik in [*istek.devre_disi, *istek.muaf]:
         if kimlik not in gecerli:
             raise ReviewHatasi(f"bilinmeyen kesim id'si: {kimlik}")
     for sinir in istek.sinirlar:
@@ -398,6 +416,7 @@ def dogrula(plan: CutPlan, istek: EditsIstek, *, total_ms: int) -> Overlay:
         devre_disi=frozenset(istek.devre_disi),
         sinirlar={s.id: (s.bas_ms, s.bit_ms) for s in istek.sinirlar},
         eklemeler=tuple((e.bas_ms, e.bit_ms) for e in istek.eklemeler),
+        muaf=frozenset(istek.muaf),
     )
 
 
@@ -442,14 +461,21 @@ def normalize(
 
     Döndürülen Overlay normalize edilmiş değerleri taşır: job bunu saklar,
     böylece kullanıcı ekranda gördüğü sayının aynısını geri alır.
+
+    **Muaf kesim (v1.4.0 Dalga 2) ne snap'lenir ne clamp'lenir** — yalnız
+    [0, total]'a kırpılır. Delete/nudge kenarı kareye oturtulmuştur; 150 ms
+    içindeki bir sessizlik kenarına kaydırmak kare-kesinliği, min_keep'e göre
+    itmek kullanıcının bilerek bıraktığı kısa parçayı bozardı. Muafiyet
+    kesime aittir: muafsız bir komşu ona karşı v1.x kuralıyla clamp'lenir.
     """
     adaylar = _adaylar(plan, overlay)
     for a in adaylar:
         if a.duzenlendi:
             a.ham_bas = max(0, min(total_ms, a.bas))
             a.ham_bit = max(0, min(total_ms, a.bit))
-            a.bas = max(0, min(total_ms, snap(a.ham_bas, kenarlar, snap_esik_ms)))
-            a.bit = max(0, min(total_ms, snap(a.ham_bit, kenarlar, snap_esik_ms)))
+            esik = 0 if a.muaf else snap_esik_ms
+            a.bas = max(0, min(total_ms, snap(a.ham_bas, kenarlar, esik)))
+            a.bit = max(0, min(total_ms, snap(a.ham_bit, kenarlar, esik)))
             if a.bas >= a.bit:
                 raise ReviewHatasi(
                     "kesim sessizliğe yapıştıktan sonra sıfır uzunluğa düştü — "
@@ -458,8 +484,8 @@ def normalize(
 
     aktifler = sorted((a for a in adaylar if a.aktif), key=lambda a: (a.bas, a.bit))
     for indeks, a in enumerate(aktifler):
-        if not a.duzenlendi:
-            continue  # dokunulmamış kesim çıpadır
+        if not a.duzenlendi or a.muaf:
+            continue  # dokunulmamış kesim çıpadır; muaf kesim kare-kesindir
         if indeks > 0:
             a.bas = _snape_ragmen_clampla(
                 a.bas,
@@ -586,6 +612,21 @@ def uygulanmis_plan(
         total_duration_ms=total_ms,
         reddedilenler=reddedilen_segmentler(plan, overlay),
         min_keep_ms=min_keep_ms,
+        min_keep_muaf=muaf_kenarlari(plan, overlay),
+    )
+
+
+def muaf_kenarlari(plan: CutPlan, overlay: Overlay) -> frozenset[int]:
+    """AKTİF muaf kesimlerin kenarları — min_keep zincirinin dokunmadığı yerler.
+
+    Geri alınmış (devre dışı) muaf kesim render'a gitmez; kenarı da muafiyet
+    taşımaz.
+    """
+    return frozenset(
+        kenar
+        for a in _adaylar(plan, overlay)
+        if a.aktif and a.muaf
+        for kenar in (a.bas, a.bit)
     )
 
 
@@ -643,6 +684,7 @@ def gorunum_kur(
             duzenlendi=a.duzenlendi,
             manuel=a.manuel,
             reason=a.reason,
+            muaf=a.muaf,
             kelimeler=reason_kelimeleri(a.reason),
         )
         for a in sorted(adaylar, key=lambda x: (x.bas, x.bit))

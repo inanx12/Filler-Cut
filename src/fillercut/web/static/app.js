@@ -1450,6 +1450,10 @@ function bloklariCiz() {
     katman.appendChild(blok);
   }
   for (const ms of review.bicaklar) {
+    /* Tutulan bölgenin içinde olmayan işaret (bir kesim onu yuttu ya da
+       artık bir kesim KENARI) çizilmez; bellekte kalır — kesim geri
+       alınırsa yeniden görünür. */
+    if (tutulanParca(ms) === null) continue;
     const cizgi = document.createElement("div");
     cizgi.className = "bicak";
     cizgi.dataset.ms = String(ms);
@@ -1575,6 +1579,7 @@ function overlayCikar() {
       .filter((x) => x.duzenlendi && !x.manuel)
       .map((x) => ({ id: x.id, bas_ms: x.bas_ms, bit_ms: x.bit_ms })),
     eklemeler: manueller.map((x) => ({ bas_ms: x.bas_ms, bit_ms: x.bit_ms })),
+    muaf: k.filter((x) => x.muaf).map((x) => x.id),
     snap: review.snap,
   };
 }
@@ -1631,6 +1636,9 @@ function kesimToggle(id) {
 
 function sinirGonder(id, bas, bit) {
   const overlay = overlayCikar();
+  /* Sürüklenen kenar mıknatıslı SIRADAN bir düzenlemedir: Delete/nudge'un
+     kare-kesin muafiyeti burada biter (sunucu yeniden snap + clamp eder). */
+  overlay.muaf = overlay.muaf.filter((x) => x !== id);
   const kesim = review.gorunum.kesimler.find((k) => k.id === id);
   if (kesim && kesim.manuel) {
     const sira = Number(id.slice(1));
@@ -2183,6 +2191,7 @@ const EYLEMLER = {
   },
   "miknatis": () => miknatisToggle(),
   "blade": () => bicakToggle(),
+  "sil": () => parcaSil(),
 };
 
 function saniyeKaydir(sn) {
@@ -2342,6 +2351,65 @@ function bicakToggle() {
   if (i >= 0) review.bicaklar.splice(i, 1);
   else review.bicaklar = [...review.bicaklar, nokta].sort((a, b) => a - b);
   bloklariCiz();
+}
+
+/* ── Delete: tutulan parçayı sil (v1.4.0 Dalga 2) ────────────────────────
+ *
+ * Playhead'i taşıyan TUTULAN parça kesime çevrilir. Parçanın sınırları
+ * çevreleyen aktif kesimler ve blade'lerdir; yarı açık kural: blade noktası
+ * sağındaki parçanın BAŞIDIR (playhead tam blade'in üstündeyse sağdaki
+ * parça silinir).
+ *
+ * RIPPLE AYRI KOD DEĞİLDİR: çıktı tutulan parçaların art arda eklenmesidir,
+ * yani silinen parçanın sağı kendiliğinden sola kayar.
+ *
+ * Sonuç sunucuda SIRADAN bir elle eklenen kesimdir (v1.0 `eklemeler`,
+ * `MANUEL_REASON` — reason zincirine yeni değer girmez) ve MUAFTIR: kenarları
+ * kareye oturmuş komşu kenarlar / blade'lerdir; sunucu onları sessizlik
+ * kenarına kaydırmaz, min_keep'e göre itmez, kenarına değen kısa tutulan
+ * parçayı yutmaz (karar: min_keep yalnız PLAN invariantıdır).
+ *
+ * TEK YÖNLÜ: kesimin içinde Delete no-op'tur. Geri getirmek v1.0'ın
+ * mekanizmasıdır — listedeki "Geri al" (toggle) ya da geri alma (Ctrl+Z).
+ *
+ * Son tutulan parça silinemez: sunucu bunu `CutPlanError` ile zaten
+ * reddederdi (boş video yasağı, invariant 6); istemci isteği HİÇ atmadan
+ * aynı sınıftan açık bir mesaj gösterir. */
+const SON_PARCA_MESAJI =
+  "Son tutulan parça silinemez — kesim planı tüm videoyu kapsardı, boş video üretilmez.";
+
+function silinecekAralik(ms) {
+  /* `ms`i taşıyan tutulan parça, blade'lerle daraltılmış: [bas, bit). */
+  let bas = 0;
+  let bit = zc.total_ms;
+  for (const [kBas, kBit] of review.gorunum.aktif_araliklar) {
+    if (kBit <= ms) bas = Math.max(bas, kBit);
+    else if (kBas > ms) {
+      bit = Math.min(bit, kBas);
+      break;
+    }
+  }
+  for (const b of review.bicaklar) { // artan sıralı
+    if (b > bas && b <= ms) bas = b;
+    if (b > ms && b < bit) bit = b;
+  }
+  return [bas, bit];
+}
+
+function parcaSil() {
+  if (!review.gorunum || durum.asama !== "analiz_tamam" || !zc.total_ms) return;
+  const ms = Math.min(oynaticiMs(), zc.total_ms - 1);
+  if (aktifKesimBul(ms) !== null) return; // kesimin içi: no-op (tek yönlü)
+  const [bas, bit] = silinecekAralik(ms);
+  if (bit <= bas) return;
+  if (bit - bas >= review.gorunum.kalan_ms) {
+    reviewHata(SON_PARCA_MESAJI);
+    return;
+  }
+  const overlay = overlayCikar();
+  overlay.eklemeler.push({ bas_ms: bas, bit_ms: bit });
+  overlay.muaf.push("m" + (overlay.eklemeler.length - 1)); // yeni id: m{j}
+  editsGonder(overlay);
 }
 
 /* TEK keydown dinleyicisi — global tuş disiplini burada, SIRAYLA:

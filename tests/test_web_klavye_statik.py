@@ -596,3 +596,37 @@ class TestBlade:
         kural = css[bas : css.index("}", bas)]
         assert "pointer-events: none" in kural
         assert "z-index" not in kural  # yeni --tl-kat-* YOK
+
+
+class TestDelete:
+    """Delete (davranış: `test_web_duzenleme.py::TestDelete` + sunucu
+    `test_web_review_muaf.py`)."""
+
+    def _govde(self) -> str:
+        js = _oku("app.js")
+        bas = js.index("function parcaSil")
+        return js[bas : js.index("\n}", bas)]
+
+    def test_kayitta_tek_atimlik(self) -> None:
+        k = _kisayol("sil")
+        assert k.eslesmeler == ("kod:Delete",)
+        assert k.tekrar is False
+
+    def test_kesim_icinde_no_op_ve_son_parca_kapisi(self) -> None:
+        govde = self._govde()
+        assert "if (aktifKesimBul(ms) !== null) return;" in govde
+        i_kapi = govde.index("reviewHata(SON_PARCA_MESAJI)")
+        assert i_kapi < govde.index("editsGonder(overlay)"), "istek kapıdan ÖNCE gidiyor"
+
+    def test_manuel_ekleme_ve_muaf(self) -> None:
+        """Yeni reason YOK: sıradan elle ekleme (`MANUEL_REASON` sunucuda)."""
+        govde = self._govde()
+        assert "overlay.eklemeler.push(" in govde
+        assert "overlay.muaf.push(" in govde
+
+    def test_overlay_muafi_tasir_surukleme_birakir(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("function overlayCikar")
+        assert "muaf:" in js[bas : js.index("\n}", bas)]
+        bas = js.index("function sinirGonder")
+        assert "overlay.muaf.filter(" in js[bas : js.index("\n}", bas)]
