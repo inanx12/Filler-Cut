@@ -2300,6 +2300,8 @@ const EYLEMLER = {
   "miknatis": () => miknatisToggle(),
   "blade": () => bicakToggle(),
   "sil": () => parcaSil(),
+  "nudge-geri": () => kenarItele(-1),
+  "nudge-ileri": () => kenarItele(1),
   "duzenleme-geri": () => gecmisAdim(-1),
   "duzenleme-ileri": () => gecmisAdim(1),
 };
@@ -2522,6 +2524,66 @@ function parcaSil() {
   const overlay = overlayCikar();
   overlay.eklemeler.push({ bas_ms: bas, bit_ms: bit });
   overlay.muaf.push("m" + (overlay.eklemeler.length - 1)); // yeni id: m{j}
+  editsGonder(overlay);
+}
+
+/* ── Alt+, / Alt+. : nudge (v1.4.0 Dalga 2) ──────────────────────────────
+ *
+ * Playhead'e EN YAKIN kesim kenarını bir kare geri/ileri iter. Kenarlar
+ * AKTİF aralıklardan gelir (`aktif_araliklar` — union'lanmış, görünen
+ * kenarlar; birleşik bir aralığın içine gömülmüş kenar itilemez). Eşit
+ * uzaklıkta SOL (küçük ms) kenar kazanır: aralıklar artan sırada gezilir ve
+ * yalnız KESİN daha yakın olan yerini alır.
+ *
+ * Quantize Dalga 1'in kare adımıyla AYNIDIR (`kareAdimi`): kenarın düştüğü
+ * kare XML kuralıyla (`kareAlt`, floor) bulunur, komşu karenin İLK ms'ine
+ * gidilir. Kenar bir kez karenin ilk ms'ine oturunca her basış tam bir kare
+ * ilerler (mekân kaymaz).
+ *
+ * Uçlar clamp'tir: [0, total_ms] dışına itilemez ve kesim çökemez (başı
+ * sonuna erişirse no-op) — ikisinde de istek atılmaz. Kare hızı yoksa (yalnız
+ * ses) eylem etkisizdir; tuş yine sahiplenilir.
+ *
+ * İtilen kenarın SAHİBİ kesim(ler) muaf olur: mıknatıs açıkken bile 150 ms
+ * içindeki bir sessizlik kenarına geri yapışmaz, min_keep onu itmez (karar:
+ * min_keep yalnız PLAN invariantıdır). Tek-atımlık (kayıtta): basılı tutmak
+ * sunucuyu yağmalamaz. */
+function enYakinKenar(ms) {
+  let en = null;
+  for (const [bas, bit] of review.gorunum.aktif_araliklar) {
+    for (const [kenar, tur] of [[bas, "bas"], [bit, "bit"]]) {
+      if (en === null || Math.abs(kenar - ms) < Math.abs(en.kenar - ms)) {
+        en = { kenar, tur };
+      }
+    }
+  }
+  return en;
+}
+
+function kenarItele(yon) {
+  if (!review.gorunum || durum.asama !== "analiz_tamam" || !zc.total_ms) return;
+  if (!zc.kare) return; // kare kavramı yok (yalnız ses)
+  const hedef = enYakinKenar(oynaticiMs());
+  if (hedef === null) return;
+  const yeni = Math.min(Math.max(kareBasMs(kareAlt(hedef.kenar) + yon), 0), zc.total_ms);
+  if (yeni === hedef.kenar) return; // uçtayız: clamp
+  const sahipler = review.gorunum.kesimler.filter(
+    (k) => k.aktif && (hedef.tur === "bas" ? k.bas_ms : k.bit_ms) === hedef.kenar
+  );
+  if (!sahipler.length) return;
+  const overlay = overlayCikar();
+  for (const k of sahipler) {
+    const bas = hedef.tur === "bas" ? yeni : k.bas_ms;
+    const bit = hedef.tur === "bit" ? yeni : k.bit_ms;
+    if (bas >= bit) return; // kesim çökerdi: no-op
+    if (k.manuel) {
+      overlay.eklemeler[Number(k.id.slice(1))] = { bas_ms: bas, bit_ms: bit };
+    } else {
+      overlay.sinirlar = overlay.sinirlar.filter((s) => s.id !== k.id);
+      overlay.sinirlar.push({ id: k.id, bas_ms: bas, bit_ms: bit });
+    }
+    if (!overlay.muaf.includes(k.id)) overlay.muaf.push(k.id);
+  }
   editsGonder(overlay);
 }
 

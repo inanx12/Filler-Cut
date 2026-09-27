@@ -880,3 +880,177 @@ class TestOtomatikPlanaDon:
         _bekle(sayfa)
         assert _dlg_acik(sayfa)
         assert _durum(sayfa, sunucu) == once
+
+
+# ── Nudge (Alt+, / Alt+.) ────────────────────────────────────────────────────
+
+
+def _kare_ilk_ms(n: int) -> int:
+    """`n`. karenin İLK ms'i — `Kare.kare_alt(ms) == n` olan EN KÜÇÜK ms
+    (arama ile; JS formülü kopyalanmaz)."""
+    ms = max(0, (n * KARE.payda * 1000) // KARE.pay - 2)
+    while KARE.kare_alt(ms) < n:
+        ms += 1
+    return ms
+
+
+def _iter(ms: int, yon: int) -> int:
+    """Dalga 1 kare adımı kuralı: `ms`nin karesi (floor) ± 1, o karenin ilk ms'i."""
+    return _kare_ilk_ms(KARE.kare_alt(ms) + yon)
+
+
+class TestNudge:
+    """Alt+, / Alt+. — playhead'e EN YAKIN kesim kenarını bir kare geri/ileri
+    taşır. Kenarlar AKTİF (union'lanmış) aralıklardan gelir; eşitlikte SOL
+    (küçük ms) kenar. Quantize Dalga 1'in kare adımı kuralıdır (XML'in
+    `kare_alt`i, floor → komşu karenin ilk ms'i). Taşınan kesim muaftır:
+    mıknatıs açıkken bile sessizlik kenarına geri yapışmaz."""
+
+    def test_bitis_kenari_bir_kare_ileri(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 8_100)  # en yakın: k1 bitişi 8000
+        _bas(sayfa, "Alt+Period")
+        k1 = _kesim(sunucu, "k1")
+        assert (k1["bas_ms"], k1["bit_ms"]) == (7_000, _iter(8_000, 1))
+        assert k1["muaf"] is True
+
+    def test_bitis_kenari_bir_kare_geri(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 8_100)
+        _bas(sayfa, "Alt+Comma")
+        k1 = _kesim(sunucu, "k1")
+        assert (k1["bas_ms"], k1["bit_ms"]) == (7_000, _iter(8_000, -1))
+
+    def test_baslangic_kenari(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 6_950)  # en yakın: k1 başı 7000
+        _bas(sayfa, "Alt+Period")
+        k1 = _kesim(sunucu, "k1")
+        assert (k1["bas_ms"], k1["bit_ms"]) == (_iter(7_000, 1), 8_000)
+
+    def test_kesim_icindeyken_yakin_kenar(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 7_400)  # 7000'e 400, 8000'e 600
+        _bas(sayfa, "Alt+Comma")
+        k1 = _kesim(sunucu, "k1")
+        assert (k1["bas_ms"], k1["bit_ms"]) == (_iter(7_000, -1), 8_000)
+
+    def test_esitlikte_sol_kenar(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """5000: k0 bitişine (3000) ve k1 başına (7000) EŞİT uzak → sol (3000)."""
+        _git(sayfa, 5_000)
+        _bas(sayfa, "Alt+Period")
+        k0 = _kesim(sunucu, "k0")
+        assert (k0["bas_ms"], k0["bit_ms"]) == (2_000, _iter(3_000, 1))
+        assert _kesim(sunucu, "k1")["duzenlendi"] is False
+
+    def test_ardisik_basislar_kare_kare(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Her basış TAM bir kare: kenar artık bir karenin ilk ms'idir ve
+        bir sonraki basış komşu karenin ilk ms'ine gider (mekân kaymaz)."""
+        _git(sayfa, 8_100)
+        beklenen = 8_000
+        for _ in range(3):
+            _bas(sayfa, "Alt+Period")
+            beklenen = _iter(beklenen, 1)
+            assert _kesim(sunucu, "k1")["bit_ms"] == beklenen
+        n = KARE.kare_alt(beklenen)
+        assert beklenen == _kare_ilk_ms(n)
+
+    def test_miknatis_acikken_geri_yapismaz(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """k1 bitişi 8000 → 8008: 8200'deki sessizlik kenarı 150 ms eşiğin
+        dışında; üç kare sonra (8075) İÇİNDE — muafsız olsa yapışırdı."""
+        assert sayfa.evaluate("() => review.snap") is True
+        _git(sayfa, 8_050)
+        for _ in range(3):
+            _bas(sayfa, "Alt+Period")
+        bit = _kesim(sunucu, "k1")["bit_ms"]
+        assert 8_200 - bit <= 150, "kurgu: kenar eşik içinde olmalı"
+        assert bit == _iter(_iter(_iter(8_000, 1), 1), 1)
+
+    def test_bastaki_uc_clamp(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """0'da başlayan kesimin başı daha geri gidemez: istek YOK."""
+        _git(sayfa, 1_000)
+        _bas(sayfa, "Delete")  # [0, 2000) → [0, 3000) birleşik
+        istek = len(sunucu.duzenleme_istekleri())
+        _git(sayfa, 100)
+        _bas(sayfa, "Alt+Comma")
+        assert len(sunucu.duzenleme_istekleri()) == istek
+
+    def test_sondaki_uc_clamp(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 18_000)
+        _bas(sayfa, "Delete")  # [16000, 20000) → [15000, 20000) birleşik
+        istek = len(sunucu.duzenleme_istekleri())
+        _git(sayfa, TOPLAM - 50)
+        _bas(sayfa, "Alt+Period")
+        assert len(sunucu.duzenleme_istekleri()) == istek
+
+    def test_kesim_cokmez(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Tek karelik kesimin başı ileri itilemez (başı sonuna erişirdi)."""
+        b1 = _blade(sayfa, 10_010)
+        b2 = _blade(sayfa, _iter(10_010, 1))
+        assert b2 == _iter(b1, 1)
+        _git(sayfa, b1)
+        _bas(sayfa, "Delete")  # tek karelik m0 = [b1, b2)
+        assert (_kesim(sunucu, "m0")["bas_ms"], _kesim(sunucu, "m0")["bit_ms"]) == (b1, b2)
+        istek = len(sunucu.duzenleme_istekleri())
+        _git(sayfa, b1 - 5)  # en yakın: m0 başı
+        _bas(sayfa, "Alt+Period")
+        assert len(sunucu.duzenleme_istekleri()) == istek
+
+    def test_elle_eklenen_kesimin_kenari(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Birleşik aralığın kenarının SAHİBİ elle eklenen kesimse (Delete)
+        overlay'deki `eklemeler[j]` güncellenir; kesim muaf kalır."""
+        b = _blade(sayfa, 12_000)
+        _git(sayfa, 10_000)
+        _bas(sayfa, "Delete")  # m0 = [8000, b) → birleşik [7000, b)
+        _git(sayfa, b + 50)  # en yakın: birleşik bitiş b — sahibi m0
+        _bas(sayfa, "Alt+Period")
+        m0 = _kesim(sunucu, "m0")
+        assert (m0["bas_ms"], m0["bit_ms"]) == (8_000, _iter(b, 1))
+        assert m0["muaf"] is True
+        assert _kesim(sunucu, "k1")["duzenlendi"] is False
+
+    def test_tek_atimlik(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 8_100)
+        sayfa.keyboard.down("Alt")
+        sayfa.keyboard.down("Period")
+        sayfa.keyboard.down("Period")  # repeat
+        sayfa.keyboard.down("Period")  # repeat
+        sayfa.keyboard.up("Period")
+        sayfa.keyboard.up("Alt")
+        sayfa.wait_for_function("() => !review.gonderiliyor")
+        _bekle(sayfa, 80)
+        assert len(sunucu.duzenleme_istekleri()) == 1
+        assert _kesim(sunucu, "k1")["bit_ms"] == _iter(8_000, 1)
+
+    def test_tarayici_varsayilani_engellenir(self, sayfa: Any) -> None:
+        _git(sayfa, 8_100)
+        _bas(sayfa, "Alt+Period")
+        assert _son_karar(sayfa)["onlendi"] is True
+
+    def test_duz_nokta_kare_adimi_kalir(self, sayfa: Any, sunucu: Sunucu) -> None:
+        """Değiştiricisiz , / . Dalga 1'in kare adımıdır — nudge DEĞİL."""
+        _git(sayfa, 8_100)
+        _bas(sayfa, "Period")
+        assert sunucu.duzenleme_istekleri() == []
+        assert int(sayfa.evaluate("() => Math.round(window.__t * 1000)")) == _iter(8_100, 1)
+
+    def test_kare_hizi_yoksa_etkisiz(self, sayfa: Any, sunucu: Sunucu) -> None:
+        sayfa.evaluate("() => { zc.kare = null; }")
+        _git(sayfa, 8_100)
+        _bas(sayfa, "Alt+Period")
+        assert sunucu.duzenleme_istekleri() == []
+        assert _son_karar(sayfa)["onlendi"] is True  # tuş yine sahiplenilir
+
+    def test_geri_alinabilir(self, sayfa: Any, sunucu: Sunucu) -> None:
+        once = _durum(sayfa, sunucu)
+        _git(sayfa, 8_100)
+        _bas(sayfa, "Alt+Period")
+        sonra = _durum(sayfa, sunucu)
+        assert sonra != once
+        _geri(sayfa)
+        assert _durum(sayfa, sunucu) == once
+        _ileri(sayfa)
+        assert _durum(sayfa, sunucu) == sonra
+
+    def test_modal_acikken_olu(self, sayfa: Any, sunucu: Sunucu) -> None:
+        _git(sayfa, 8_100)
+        sayfa.keyboard.press("?")
+        sayfa.keyboard.press("Alt+Period")
+        _bekle(sayfa)
+        assert sunucu.duzenleme_istekleri() == []

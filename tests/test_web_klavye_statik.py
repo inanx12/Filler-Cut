@@ -265,6 +265,8 @@ class TestDegistiriciDisiplini:
     #: Ctrl/Alt kısayolu bu kilidi bilerek güncellemeden kayda giremez.
     ILAN_EDILEN = {
         "blade": ("ctrl+kod:KeyK",),
+        "nudge-geri": ("alt+tus:,",),
+        "nudge-ileri": ("alt+tus:.",),
         "duzenleme-geri": ("ctrl+kod:KeyZ",),
         "duzenleme-ileri": ("ctrl+shift+kod:KeyZ",),
     }
@@ -701,3 +703,38 @@ class TestOtomatikPlanaDon:
         govde = js[bas : js.index("\n}", bas)]
         assert "devre_disi: [], sinirlar: [], eklemeler: [], muaf: []" in govde
         assert "review.bicaklar = [];" in govde
+
+
+class TestNudge:
+    """Alt+, / Alt+. — en yakın kesim kenarı ± bir kare (davranış:
+    `test_web_duzenleme.py::TestNudge`)."""
+
+    @staticmethod
+    def _fonk(ad: str) -> str:
+        js = _oku("app.js")
+        bas = js.index(f"function {ad}")
+        return js[bas : js.index("\n}", bas)]
+
+    def test_kayitta_tek_atimlik_ve_alt(self) -> None:
+        assert _kisayol("nudge-geri").eslesmeler == ("alt+tus:,",)
+        assert _kisayol("nudge-ileri").eslesmeler == ("alt+tus:.",)
+        assert _kisayol("nudge-geri").tekrar is False
+        assert _kisayol("nudge-ileri").tekrar is False
+        # değiştiricisiz , / . Dalga 1'in kare adımı olarak kalır
+        assert _kisayol("kare-geri").eslesmeler == ("tus:,",)
+
+    def test_quantize_dalga1_kurali(self) -> None:
+        """Kare adımıyla AYNI ifade: kenarın karesi (floor) ± 1, ilk ms."""
+        assert "kareBasMs(kareAlt(hedef.kenar) + yon)" in self._fonk("kenarItele")
+        assert "kareAlt(ms) + yon" in self._fonk("kareAdimi")
+
+    def test_esitlikte_sol_kenar_kesin_esitsizlik(self) -> None:
+        govde = self._fonk("enYakinKenar")
+        assert "review.gorunum.aktif_araliklar" in govde
+        assert "Math.abs(kenar - ms) < Math.abs(en.kenar - ms)" in govde
+
+    def test_muaf_ve_uc_clamp(self) -> None:
+        govde = self._fonk("kenarItele")
+        assert "Math.min(Math.max(" in govde and "zc.total_ms)" in govde
+        assert "overlay.muaf.push(k.id)" in govde
+        assert "editsGonder(overlay)" in govde  # geçmişe yazan kapı
