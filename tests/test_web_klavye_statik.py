@@ -41,6 +41,9 @@ class Kisayol:
     aciklama: str
     grup: str
     tekrar: bool
+    #: Değiştirici NİTELİKLİ eşleşmeler — ``"ctrl+kod:KeyK"``, ``"tus:,"``.
+    #: Çakışma ve değiştirici kilitleri bunu okur (v1.4.0 Dalga 2).
+    eslesmeler: tuple[str, ...] = ()
 
 
 _GIRDI = re.compile(
@@ -58,6 +61,17 @@ def _kacis_coz(metin: str) -> str:
     """JS dize kaçışını çözer (kaynaktaki iki ters bölü → bir ters bölü).
     `unicode_escape` KULLANILMAZ: UTF-8 Türkçe metni bozar."""
     return re.sub(r"\\(.)", r"\1", metin)
+
+
+def _eslesmeler(tuslar: str) -> tuple[str, ...]:
+    """`tuslar` dizisindeki her nesneyi değiştirici önekli bir anahtara çevirir."""
+    sonuc = []
+    for nesne in re.findall(r"\{([^}]*)\}", tuslar):
+        alanlar = dict(re.findall(r'(\w+):\s*("(?:[^"\\]|\\.)*"|true|false)', nesne))
+        on = "".join(f"{d}+" for d in ("ctrl", "alt", "shift") if alanlar.get(d) == "true")
+        tur = "kod" if "kod" in alanlar else "tus"
+        sonuc.append(f"{on}{tur}:{_kacis_coz(alanlar[tur][1:-1])}")
+    return tuple(sonuc)
 
 
 def kayit() -> list[Kisayol]:
@@ -80,6 +94,7 @@ def kayit() -> list[Kisayol]:
                 aciklama=_kacis_coz(m.group("aciklama")),
                 grup=m.group("grup"),
                 tekrar=m.group("tekrar") == "true",
+                eslesmeler=_eslesmeler(tuslar),
             )
         )
     assert len(sonuc) == govde.count("eylem:"), "ayrıştırıcı bir kayıt girdisini kaçırdı"
@@ -124,10 +139,12 @@ class TestTekKayit:
         assert len(adlar) == len(set(adlar))
 
     def test_tus_cakismasi_yok(self) -> None:
-        """Bir tuş İKİ eyleme bağlanamaz — hangisinin ateşleneceği belirsizleşir."""
+        """Bir tuş İKİ eyleme bağlanamaz — hangisinin ateşleneceği belirsizleşir.
+        Anahtar DEĞİŞTİRİCİ NİTELİKLİDİR: K (mekik-dur) ile Ctrl+K (blade)
+        farklı tuşlardır, çünkü eşleştirici değiştiricileri TAM karşılaştırır."""
         gorulen: dict[str, str] = {}
         for k in kayit():
-            for anahtar in [f"kod:{c}" for c in k.kodlar] + [f"tus:{t}" for t in k.tuslar]:
+            for anahtar in k.eslesmeler:
                 assert anahtar not in gorulen, f"{anahtar} hem {gorulen[anahtar]} hem {k.eylem}"
                 gorulen[anahtar] = k.eylem
 
@@ -235,12 +252,21 @@ class TestTekrarDisiplini:
 
 
 class TestDegistiriciDisiplini:
-    """Ctrl/Alt/Meta'lı kombinasyonların HİÇBİRİ sahiplenilmez (F5, Ctrl+R,
-    Ctrl+K… tarayıcıya aynen akar). Tek istisna AltGr'dir: Windows onu
-    Ctrl+Alt olarak raporlar ve TR-Q'da `\\` ancak AltGr ile yazılır."""
+    """Ctrl/Alt'lı kombinasyon YALNIZ kayıtta AÇIKÇA ilan edilmişse
+    sahiplenilir ve eşleşme TAMDIR (v1.4.0 Dalga 2 — Dalga 1'de kural
+    "hiçbiri"ydi; NLE düzenleme tuşları için bilinçli genişletildi). İlan
+    edilmeyen her kombinasyon (F5, Ctrl+R, Ctrl+±) tarayıcıya aynen akar;
+    Meta hiç sahiplenilmez. AltGr istisnası aynen: Windows onu Ctrl+Alt
+    olarak raporlar ve TR-Q'da `\\` ancak AltGr ile yazılır."""
 
-    def test_kayitta_degistirici_alani_yok(self) -> None:
-        """Eşleşme nesnelerinde (`tuslar`) değiştirici alanı YOK. Açıklama
+    #: Değiştiricili kısayolların TAM listesi. Sessiz büyüme yok: yeni bir
+    #: Ctrl/Alt kısayolu bu kilidi bilerek güncellemeden kayda giremez.
+    ILAN_EDILEN = {
+        "blade": ("ctrl+kod:KeyK",),
+    }
+
+    def test_eslesme_alanlari_bilinen(self) -> None:
+        """Eşleşme nesnelerinde yalnız bilinen alanlar; `meta` YOK. Açıklama
         metni "Ctrl+tekerlek" diyebilir — o bir tuş sahiplenmesi değildir."""
         js = _oku("keymap.js")
         bas = js.index("const KISAYOLLAR = [")
@@ -249,14 +275,25 @@ class TestDegistiriciDisiplini:
         assert len(eslesmeler) == len(kayit())
         for tuslar in eslesmeler:
             alanlar = set(re.findall(r"(\w+):", tuslar))
-            assert alanlar <= {"kod", "tus"}, f"değiştiricili eşleşme: {tuslar}"
+            assert alanlar <= {"kod", "tus", "ctrl", "alt", "shift"}, tuslar
 
-    def test_eslestirici_degistiricileri_reddeder(self) -> None:
+    def test_degistiricili_kisayollar_yalniz_ilan_edilenler(self) -> None:
+        bulunan = {
+            k.eylem: tuple(e for e in k.eslesmeler if e.startswith(("ctrl+", "alt+")))
+            for k in kayit()
+        }
+        assert {e: v for e, v in bulunan.items() if v} == self.ILAN_EDILEN
+
+    def test_eslestirici_degistiricileri_tam_karsilastirir(self) -> None:
         js = _oku("keymap.js")
         bas = js.index("function kisayolBul")
         govde = js[bas : js.index("\n}", bas)]
-        for alan in ("ev.ctrlKey", "ev.altKey", "ev.metaKey", '"AltGraph"'):
+        for alan in ("ev.ctrlKey", "ev.altKey", "ev.metaKey", '"AltGraph"', "ev.shiftKey"):
             assert alan in govde, alan
+        assert "if (ev.metaKey) return null;" in govde
+        # bayrak EŞİTLİĞİ (varlığı değil): Ctrl+K kaydı Ctrl+Shift+K'yı yakalamaz
+        assert "!!t.ctrl !== ctrl || !!t.alt !== alt" in govde
+        assert "!!t.shift !== ev.shiftKey" in govde
 
 
 class TestKesimNoktasi:
@@ -520,3 +557,42 @@ class TestModalKilidiDefault:
         i_kontrol = govde.index("modalKontroluMu(ev.target)")
         i_engel = govde.index("ev.preventDefault()")
         assert i_sahip < i_kontrol < i_engel
+
+
+class TestBlade:
+    """Ctrl+K — blade (davranış: `test_web_duzenleme.py::TestBlade`, gerçek
+    Chromium + gerçek review sunucusu)."""
+
+    def _govde(self) -> str:
+        js = _oku("app.js")
+        bas = js.index("function bicakToggle")
+        return js[bas : js.index("\n}", bas)]
+
+    def test_kayitta_ctrl_k_tek_atimlik(self) -> None:
+        k = _kisayol("blade")
+        assert k.eslesmeler == ("ctrl+kod:KeyK",)
+        assert k.tekrar is False
+        assert _kisayol("mekik-dur").eslesmeler == ("kod:KeyK",)  # düz K aynen
+
+    def test_nokta_xml_kuraliyla_kareye_oturur(self) -> None:
+        js = _oku("app.js")
+        bas = js.index("function bicakNoktasi")
+        govde = js[bas : js.index("\n}", bas)]
+        assert "kareBasMs(kareAlt(ms))" in govde
+
+    def test_sunucuya_gitmez(self) -> None:
+        """Blade kesim DEĞİLDİR: overlay'e, fetch'e dokunmaz."""
+        govde = self._govde()
+        for yasak in ("editsGonder", "reviewPost", "fetch", "overlayCikar"):
+            assert yasak not in govde, yasak
+
+    def test_diske_yazmaz(self) -> None:
+        for yasak in ("localStorage", "sessionStorage"):
+            assert yasak not in self._govde()
+
+    def test_cizgi_kesim_katmaninda_isabet_disi(self) -> None:
+        css = _oku("style.css")
+        bas = css.index(".bicak {")
+        kural = css[bas : css.index("}", bas)]
+        assert "pointer-events: none" in kural
+        assert "z-index" not in kural  # yeni --tl-kat-* YOK

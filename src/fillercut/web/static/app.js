@@ -1340,10 +1340,14 @@ const review = {
      her edits isteğinde taşınır (sunucu snap'i yeniden uygular, yoksa
      anahtar etkisiz kalırdı). Varsayılan açık = v1.0 davranışı. */
   snap: true,
+  /* Blade (Ctrl+K) işaretleri — ms-int, artan sıralı. YALNIZ bellekte:
+     kesim DEĞİLDİR, sunucuya gitmez (bkz. `bicakToggle`). */
+  bicaklar: [],
 };
 
 async function reviewAc(jobId) {
   durum.jobId = jobId;
+  review.bicaklar = []; // işaretler işe aittir: yeni planda anlamı yok
   asamaAyarla("analiz_tamam");
   await reviewYukle();
 }
@@ -1444,6 +1448,13 @@ function bloklariCiz() {
       blok.appendChild(tutamac);
     }
     katman.appendChild(blok);
+  }
+  for (const ms of review.bicaklar) {
+    const cizgi = document.createElement("div");
+    cizgi.className = "bicak";
+    cizgi.dataset.ms = String(ms);
+    cizgi.style.left = yuzde(ms) + "%";
+    katman.appendChild(cizgi);
   }
 }
 
@@ -2171,6 +2182,7 @@ const EYLEMLER = {
     if (review.secili && durum.asama === "analiz_tamam") yaslaGonder(review.secili);
   },
   "miknatis": () => miknatisToggle(),
+  "blade": () => bicakToggle(),
 };
 
 function saniyeKaydir(sn) {
@@ -2281,6 +2293,55 @@ function kareAdimi(yon) {
   const hedef = kareBasMs(hedefKare);
   if (hedef === ms) return; // uçtayız: boş arama yok
   oynatici.currentTime = hedef / 1000;
+}
+
+/* ── Ctrl+K: blade (v1.4.0 Dalga 2) ──────────────────────────────────────
+ *
+ * NLE'nin "jilet"i — ama burada bir KESİM DEĞİL, bir İŞARETTİR. Çıktı tutulan
+ * parçaların art arda eklenmesidir (concat); aynı tutulan bölgeyi ikiye bölen
+ * bir çizgi dışa aktarımda iki BİTİŞİK parça üretir, ikisi tek segment olarak
+ * birleşir — yani blade tek başına çıktıyı DEĞİŞTİRMEZ ve sunucuya hiçbir şey
+ * gitmez. Anlamı Delete'tedir: silinecek parçanın sınırlarından biridir.
+ *
+ * Nokta kareye OTURTULUR — kural Dalga 1'in kare adımıyla aynı, yani FCP7
+ * XML dışa aktarımınınki (`kareAlt`, floor): playhead'in düştüğü karenin İLK
+ * ms'i. Kare hızı bilinmiyorsa (yalnız ses) playhead'in ms-int değeri.
+ *
+ * Yalnız TUTULAN bölgenin İÇİNE konur: nokta bir aktif kesimin içindeyse ya
+ * da tam sınırındaysa (orada zaten bir kenar var) eylem etkisizdir. Aynı
+ * noktaya ikinci basış çizgiyi KALDIRIR (toggle) — karşılaştırma kare
+ * noktasıyladır, aynı karenin başka bir ms'i aynı çizgidir. */
+function bicakNoktasi(ms) {
+  return zc.kare ? kareBasMs(kareAlt(ms)) : ms;
+}
+
+function tutulanParca(ms) {
+  /* `ms`i İÇİNDE (uçlar hariç) taşıyan tutulan bölge [bas, bit]; `ms` bir
+     aktif kesimin içinde ya da bir sınırın üstündeyse null. Aktif aralıklar
+     sunucudan sıralı ve union'lanmış gelir. */
+  let bas = 0;
+  for (const [kBas, kBit] of review.gorunum.aktif_araliklar) {
+    if (ms < kBas) return ms > bas ? [bas, kBas] : null;
+    if (ms < kBit) return null; // kesimin içi
+    bas = kBit;
+  }
+  return ms > bas && ms < zc.total_ms ? [bas, zc.total_ms] : null;
+}
+
+function bicakToggle() {
+  if (!review.gorunum || durum.asama !== "analiz_tamam" || !zc.total_ms) return;
+  const ms = Math.min(oynaticiMs(), zc.total_ms);
+  /* İki kapı: playhead kesimin içindeyse (yarı açık [bas, bit) — kesim başı
+     kesimin içidir) no-op; kareye oturan nokta kesime ya da bir sınıra
+     düşerse de no-op (kesim başındaki playhead'in karesi önceki tutulan
+     bölgede başlayabilir — çizgi kullanıcının durduğu yere konmamış olurdu). */
+  if (aktifKesimBul(ms) !== null) return;
+  const nokta = bicakNoktasi(ms);
+  if (tutulanParca(nokta) === null) return;
+  const i = review.bicaklar.indexOf(nokta);
+  if (i >= 0) review.bicaklar.splice(i, 1);
+  else review.bicaklar = [...review.bicaklar, nokta].sort((a, b) => a - b);
+  bloklariCiz();
 }
 
 /* TEK keydown dinleyicisi — global tuş disiplini burada, SIRAYLA:
@@ -2593,6 +2654,7 @@ function yeniIs() {
   oynatici.load(); // önceki videonun tamponunu bırak
   review.gorunum = null;
   review.secili = null;
+  review.bicaklar = [];
   el("medya-bos").classList.remove("gizli");
   el("medya-dolu").classList.add("gizli");
   el("ekran-yok").classList.add("gizli");

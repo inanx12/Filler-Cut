@@ -885,6 +885,21 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 
 .kesim-blok.pasif .tutamac { display: none; } /* geri alınan kesim sürüklenmez */
 
+/* Blade (Ctrl+K — v1.4.0 Dalga 2): kesim DEĞİL işaret. Kesim katmanının
+   ÇOCUĞUDUR — yeni bir `--tl-kat-*` AÇILMADI, z-index'i yoktur (kendi yığın
+   bağlamı da yok), dört katmanlı sıra invariantı aynen durur. İsabet
+   testine girmez: çizginin üstünde başlayan sürükleme kesim katmanına düşer
+   (boş alanda yeni kesim çizme bozulmaz). Renk hiçbir kesim türüyle,
+   playhead'le ya da A-B bandıyla karışmaz. Kilit: gerçek tarayıcıda
+   `test_web_duzenleme.py::TestBladeGorsel`. */
+.bicak {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: #39c5cf;
+  pointer-events: none;
+}
+
 .yeni-secim {
   position: absolute;
   top: 0; bottom: 0;

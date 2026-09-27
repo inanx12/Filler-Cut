@@ -19,6 +19,8 @@
  *                 Fiziksel yeri düzene göre DEĞİŞİR: TR-Q'da "?" Shift+"*"
  *                 tuşudur, "," Enter'ın yanındadır, "+" Shift+4'tür. Kodla
  *                 eşleşseydi Türkçe klavyede yanlış tuş ateşlenirdi.
+ *             İsteğe bağlı değiştirici bayrakları: `ctrl: true`,
+ *             `alt: true`, `shift: true` (bkz. değiştirici disiplini).
  *   etiket    yardımda gösterilen tuş adı
  *   aciklama  yardımda gösterilen eylem metni
  *   grup      yardımdaki başlık
@@ -36,10 +38,16 @@
  *             semantiğini korur (basılı tutmak hızı KATLAMAZ).
  *   herAsamada  (isteğe bağlı) medya yokken (`bos`) de çalışır
  *
- * Değiştirici DİSİPLİNİ: Ctrl/Alt/Meta'lı HİÇBİR kombinasyon sahiplenilmez —
- * F5, Ctrl+R, F12, Ctrl+K, Ctrl+± tarayıcıya aynen akar. Shift serbesttir:
- * karakter eşleşmesinde zaten `ev.key`in içindedir ("?" = Shift+/), harf
- * eşleşmesinde v1.x davranışı (Shift+J = J) korunur.
+ * Değiştirici DİSİPLİNİ: Ctrl/Alt'lı bir kombinasyon YALNIZ kayıtta AÇIKÇA
+ * yazılmışsa sahiplenilir ve eşleşme TAMDIR — Ctrl+K kaydı Ctrl+Shift+K'yı,
+ * Alt+K'yı ya da düz K'yı YAKALAMAZ; Shift de değiştiricili girdide tam
+ * eşleşir (Ctrl+Z ≠ Ctrl+Shift+Z). Kaydın ilan etmediği her kombinasyon —
+ * F5, Ctrl+R, F12, Ctrl+± — tarayıcıya aynen akar; Meta hiç sahiplenilmez.
+ * (v1.4.0 Dalga 1'de kural "hiçbiri"ydi; Dalga 2'nin düzenleme tuşları —
+ * Ctrl+K, Ctrl+Z, Alt+, / Alt+. — NLE sözleşmesidir ve AÇIKÇA ilan edilir.)
+ * Değiştiricisiz girdide Shift serbesttir: karakter eşleşmesinde zaten
+ * `ev.key`in içindedir ("?" = Shift+/), harf eşleşmesinde v1.x davranışı
+ * (Shift+J = J) korunur.
  */
 "use strict";
 
@@ -101,6 +109,9 @@ const KISAYOLLAR = [
   { eylem: "miknatis", tuslar: [{ kod: "KeyM" }],
     etiket: "M", aciklama: "Mıknatısı aç / kapat",
     grup: "Düzenleme", tekrar: false },
+  { eylem: "blade", tuslar: [{ kod: "KeyK", ctrl: true }],
+    etiket: "Ctrl+K", aciklama: "Blade — playhead karesine işaret (aynı yerde tekrar: kaldır)",
+    grup: "Düzenleme", tekrar: false },
 ];
 
 function kisayolBul(ev) {
@@ -110,14 +121,21 @@ function kisayolBul(ev) {
      AltGr: Windows onu Ctrl+Alt olarak raporlar (`ctrlKey` ve `altKey`
      birlikte true). AltGraph durumu açıkken Ctrl/Alt değiştirici SAYILMAZ,
      ama o hâlde yalnız KARAKTER eşleşmesi geçerlidir — AltGr+J gibi
-     fiziksel harf kombinasyonları sahiplenilmez. */
+     fiziksel harf kombinasyonları sahiplenilmez.
+
+     Değiştiriciler TAM eşleşir: girdinin `ctrl`/`alt` bayrağı olayınkine
+     eşit olmalı; değiştiricili girdide `shift` de. Değiştiricisiz girdide
+     Shift serbesttir (v1.x). */
   if (ev.isComposing) return null; // IME dizisi: tuş metne aittir
   const altgr = typeof ev.getModifierState === "function" &&
     ev.getModifierState("AltGraph");
   if (ev.metaKey) return null;
-  if (!altgr && (ev.ctrlKey || ev.altKey)) return null;
+  const ctrl = !altgr && ev.ctrlKey;
+  const alt = !altgr && ev.altKey;
   for (const girdi of KISAYOLLAR) {
     for (const t of girdi.tuslar) {
+      if (!!t.ctrl !== ctrl || !!t.alt !== alt) continue;
+      if ((t.ctrl || t.alt) && !!t.shift !== ev.shiftKey) continue;
       if (t.kod !== undefined) {
         if (!altgr && ev.code === t.kod) return girdi;
       } else if (ev.key === t.tus) {

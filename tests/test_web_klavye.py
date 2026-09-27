@@ -405,8 +405,13 @@ class TestPreventDefault:
         sayfa.keyboard.press(tus)
         assert _son_karar(sayfa)["onlendi"] is True
 
+    #: v1.4.0 Dalga 2: `Control+k` bu listeden ÇIKTI — Ctrl+K artık blade'dir
+    #: (kayıtta açıkça ilan edildi). Yerine, ilan EDİLMEMİŞ komşuları girdi:
+    #: değiştiriciler TAM eşleştiği için Ctrl+Shift+K ve Ctrl+J akmaya devam eder.
     @pytest.mark.parametrize(
-        "tus", ["Control+r", "F5", "F12", "Control+k", "Control+Space", "Tab", "q", "Alt+j"]
+        "tus",
+        ["Control+r", "F5", "F12", "Control+Shift+k", "Control+j", "Control+Space",
+         "Tab", "q", "Alt+j"],
     )
     def test_sahiplenilmeyen_akar(self, sayfa: Any, tus: str) -> None:
         once = _durum(sayfa)
