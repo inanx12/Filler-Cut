@@ -12,6 +12,20 @@ okuma da açılır. Savunma katmanlıdır; her katman bir sınıfı keser:
    ``localhost`` / ``127.0.0.1`` / ``[::1]`` (portlu hâlleri) olabilir.
    Rebinding'de tarayıcı ``Host: saldirgan.example`` gönderir — başlık
    JS'ten değiştirilemez (yasaklı başlık), yani bu katman rebinding'i ÖLDÜRÜR.
+2. **Origin kontrolü** (durum değiştiren yöntemler — POST/PUT/PATCH/DELETE):
+   ``Origin`` ya YOKTUR ya da isteğin kendi kökenidir (``http://`` + ``Host``;
+   Host zaten 1. katmandan geçmiştir, yani ``http://localhost:PORT`` /
+   ``http://127.0.0.1:PORT`` / ``http://[::1]:PORT``). Yabancı bir sayfanın
+   POST'u (CSRF) burada ölür; aynı makinedeki BAŞKA porttaki bir uygulama da
+   yabancıdır. GET bu kapıya girmez — durum değiştirmez.
+
+   **ÖLÇÜLDÜ, varsayılmadı** (gerçek pywebview/WebView2 koşusu, 2026-10-08):
+   uygulamanın kendi sayfası ``POST``ta ``Origin: http://127.0.0.1:PORT``
+   gönderir, ``GET``te Origin HİÇ göndermez; her alt istekte
+   ``Sec-Fetch-Site: same-origin`` vardır. "Origin yok → kabul" dalı
+   tarayıcı DIŞI istemciler içindir (``cli.ui``nin yoklaması, urllib):
+   tarayıcılar çapraz-köken durum değiştiren istekte Origin'i her zaman
+   gönderir, yani bu dal bir tarayıcı saldırganına kapı açmaz.
 
 Kapı saf ASGI'dir (``BaseHTTPMiddleware`` DEĞİL): SSE akışını ve
 ``FileResponse``'un Range/arka plan görevlerini sarmalamaz, yalnız isteği
@@ -38,10 +52,32 @@ _HOST_RE = re.compile(r"(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?", re.IGN
 
 HOST_REDDI = "İzin verilmeyen Host başlığı — Filler-Cut yalnız localhost üzerinden kullanılır."
 
+#: Origin kapısının baktığı yöntemler. GET/HEAD/OPTIONS durum değiştirmez.
+DURUM_DEGISTIREN = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+ORIGIN_REDDI = "İzin verilmeyen Origin — bu istek Filler-Cut arayüzünden gelmiyor."
+
 
 def host_izinli(host: str | None) -> bool:
     """``Host`` başlığı loopback beyaz listesinde mi (saf fonksiyon)?"""
     return host is not None and _HOST_RE.fullmatch(host) is not None
+
+
+def origin_izinli(originler: list[str], host: str) -> bool:
+    """Durum değiştiren istekte Origin kabul edilir mi (saf fonksiyon)?
+
+    ``originler`` başlığın TÜM değerleridir. Hiç yoksa kabul (tarayıcı dışı
+    istemci — modül docstring'i). Tek değer varsa isteğin kendi kökeni
+    olmalıdır; ``host`` beyaz listeden GEÇMİŞ olmalı. Birden çok değer
+    belirsizliktir, reddedilir. Karşılaştırma büyük/küçük harf duyarsız
+    (şema ve host RFC 6454'e göre öyle), başka hiçbir normalleştirme yok:
+    sondaki ``/``, yol ya da ``null`` eşleşmez.
+    """
+    if not originler:
+        return True
+    if len(originler) != 1:
+        return False
+    return originler[0].lower() == f"http://{host.lower()}"
 
 
 def _basliklar(scope: Scope, ad: bytes) -> list[str]:
@@ -79,5 +115,10 @@ class GuvenlikKapisi:
         hostlar = _basliklar(scope, b"host")
         if len(hostlar) != 1 or not host_izinli(hostlar[0]):
             await _reddet(send, HOST_REDDI)
+            return
+        if scope["method"] in DURUM_DEGISTIREN and not origin_izinli(
+            _basliklar(scope, b"origin"), hostlar[0]
+        ):
+            await _reddet(send, ORIGIN_REDDI)
             return
         await self.app(scope, receive, send)

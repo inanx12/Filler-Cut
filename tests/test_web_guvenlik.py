@@ -93,3 +93,84 @@ class TestHostBeyazListesi:
         """Yabancı Host'a 404 bile sızmaz (uç keşfi yok)."""
         assert client.get("/api/yok", headers={"host": "evil.example"}).status_code == 403
         assert client.get("/api/yok", headers={"host": "localhost"}).status_code == 404
+
+
+HOST = "127.0.0.1:8765"
+
+#: Durum değiştiren yöntemlerde kabul edilen Origin'ler — Host'la AYNI köken.
+YABANCI_ORIGINLER = [
+    "http://evil.example",
+    "https://evil.example",
+    "http://localhost:3000",       # aynı makinede BAŞKA bir port (başka uygulama)
+    "http://127.0.0.1:9999",
+    "http://localhost:8765",       # ad farklı: Host 127.0.0.1 iken localhost başka kökendir
+    "https://127.0.0.1:8765",      # şema farklı
+    "http://127.0.0.1:8765.evil.example",
+    "null",                        # sandbox'lı iframe / file:// / veri URL'si
+    "",
+]
+
+
+class TestOriginKontrolu:
+    """CSRF savunması: yabancı bir sayfanın gönderdiği durum değiştiren istek
+    (same-origin politikası GÖNDERMEYİ engellemez) route'a varamaz.
+
+    ÖLÇÜLDÜ (gerçek pywebview/WebView2 koşusu, 2026-10-08): uygulamanın kendi
+    sayfası `POST`ta `Origin: http://127.0.0.1:PORT` gönderir, `GET`te Origin
+    HİÇ göndermez. "Origin yok → kabul" dalı bu yüzden vardır ve tarayıcı
+    DIŞI istemcileri de kapsar (`cli.ui`nin yoklaması, urllib, PowerShell);
+    tarayıcılar çapraz-köken POST'ta Origin'i her zaman gönderir."""
+
+    @pytest.mark.parametrize("yontem", ["POST", "PUT", "PATCH", "DELETE"])
+    @pytest.mark.parametrize("origin", YABANCI_ORIGINLER)
+    def test_yabanci_origin_durum_degistirende_403(
+        self, client: TestClient, yontem: str, origin: str
+    ) -> None:
+        r = client.request(yontem, "/api/kapat", headers={"host": HOST, "origin": origin})
+        assert r.status_code == 403
+        assert "Origin" in r.json()["detail"]
+
+    @pytest.mark.parametrize(
+        ("host", "origin"),
+        [
+            ("127.0.0.1:8765", "http://127.0.0.1:8765"),
+            ("localhost:8765", "http://localhost:8765"),
+            ("[::1]:8765", "http://[::1]:8765"),
+            ("127.0.0.1:59446", "http://127.0.0.1:59446"),  # ephemeral port
+            ("LOCALHOST:8765", "http://localhost:8765"),     # büyük/küçük harf
+        ],
+    )
+    def test_uygulama_koku_gecer(self, client: TestClient, host: str, origin: str) -> None:
+        r = client.post("/api/kapat", headers={"host": host, "origin": origin})
+        assert r.status_code == 200, r.text
+
+    def test_origin_yoksa_gecer(self, client: TestClient) -> None:
+        """Ölçülen dal: tarayıcı dışı istemci ve (GET'te) uygulamanın kendisi."""
+        assert client.post("/api/kapat", headers={"host": HOST}).status_code == 200
+
+    @pytest.mark.parametrize("origin", [None, "http://127.0.0.1:8765", "http://evil.example"])
+    @pytest.mark.parametrize("yol", ["/", "/api/instance", "/api/fs/browse", "/static/app.js"])
+    def test_get_origin_kontrolune_girmez(
+        self, client: TestClient, origin: str | None, yol: str
+    ) -> None:
+        """GET durum değiştirmez: Origin kapısı ona bakmaz. Yabancı kökenin
+        cevabı OKUMASINI CORS reddi (allow başlığı yok) ve oturum tokeni keser."""
+        basliklar = {"host": HOST} | ({"origin": origin} if origin is not None else {})
+        assert client.get(yol, headers=basliklar).status_code == 200
+
+    def test_yabanci_origin_route_a_varmaz(self, tmp_path: Path) -> None:
+        cagrildi: list[int] = []
+        ev = tmp_path / "ev"
+        ev.mkdir()
+        with TestClient(create_app(fs_home=ev, kapanis=lambda: cagrildi.append(1))) as c:
+            r = c.post("/api/kapat", headers={"host": HOST, "origin": "http://evil.example"})
+            assert r.status_code == 403 and cagrildi == []
+
+    def test_yinelenen_origin_403(self, client: TestClient) -> None:
+        """İki Origin başlığı (biri bizim) belirsizliktir: reddedilir."""
+        r = client.post(
+            "/api/kapat",
+            headers=[("host", HOST), ("origin", "http://127.0.0.1:8765"),
+                     ("origin", "http://evil.example")],
+        )
+        assert r.status_code == 403
