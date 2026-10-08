@@ -6,7 +6,9 @@ takar ve yaşam döngüsünü kurar. Sunucuyu BAŞLATMAZ — bağlama/port/taray
 
 GÜVENLİK: /docs, /redoc ve /openapi.json kapalıdır — arayüz tek kullanıcılık
 lokal bir kabuktur, API yüzeyi keşfedilebilir olmak zorunda değil. Dosya
-gezgini ev dizini dışına çıkamaz (``web/fs.py``).
+gezgini izinli köklerin dışına çıkamaz (``web/fs.py``). Her istek route'tan
+önce ``web/guvenlik.GuvenlikKapisi``nden geçer (v1.4.0 Dalga 3 — localhost
+sertleştirmesi; tehdit modeli orada).
 
 pywebview taşınabilirlik kısıtı (handoff): tek port, tek pencere varsayımı;
 tarayıcıya özgü API'lere (çoklu sekme vb.) bel bağlanmaz.
@@ -30,7 +32,7 @@ from starlette.background import BackgroundTask
 from fillercut import __version__
 from fillercut.config import Config
 from fillercut.pipeline import run as pipeline_run
-from fillercut.web import fs, geri_bildirim, jobs
+from fillercut.web import fs, geri_bildirim, guvenlik, jobs
 from fillercut.web import kurulum as kurulum_mod
 from fillercut.web import medya as medya_mod
 from fillercut.web.jobs import Job, JobKayit, JobOzet, Kosucu
@@ -206,6 +208,10 @@ def create_app(
     app.state.kayit = job_kayit
     app.state.kurulum = kurulum_yoneticisi
     app.state.medya = medya_onbellegi
+
+    # İstek kapısı (v1.4.0 Dalga 3): route'lardan ÖNCE koşar — statik, kök ve
+    # API dahil HER isteğe. Tehdit modeli ve katmanlar `web/guvenlik.py`de.
+    app.add_middleware(guvenlik.GuvenlikKapisi)
 
     # Windows'ta registry .js/.css için yanlış MIME dönebilir (text/plain) —
     # tarayıcı stylesheet'i reddeder. Tipler açıkça sabitlenir (idempotent).
