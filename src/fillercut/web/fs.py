@@ -43,6 +43,17 @@ VIDEO_UZANTILARI = frozenset({".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v"})
 #: sayılır — "hepsi" zaten en geniş kümedir.
 TUM_SURUCULER = "*"
 
+#: HİÇBİR yerel config kök vermediğinde geçerli olan kod-seviyesi varsayılan
+#: (v1.4.0 Dalga 3): makinedeki tüm takılı sürücüler. v1.3.x'e kadar boş
+#: kümeydi (yalnız ev dizini). Değişim bir GÜVEN MODELİ değişimidir ve
+#: localhost sertleştirmesinin (``web/guvenlik.py``: Host + Origin + oturum
+#: tokeni + CORS reddi) ARKASINDAN geldi — önce kapı, sonra geniş varsayılan.
+#: Kısıtlama mekanizması AYNEN durur: ``filler-cut.toml`` ya da
+#: ``config.json`` tek bir kök bile verirse varsayılan DEVREDEN ÇIKAR ve
+#: hapis "ev + yazılan kökler" olur. Değeri değiştiren bir API ucu, CLI
+#: bayrağı ya da env değişkeni YOKTUR (invariant aynen).
+VARSAYILAN_KOKLER: tuple[str, ...] = (TUM_SURUCULER,)
+
 router = APIRouter()
 
 
@@ -259,6 +270,12 @@ def etkin_ham_kokler(
 
     Boş toml listesi "ayarlanmadı" sayılır — "açıkça hiçbir ek kök" demenin
     ayrı bir yolu yoktur (gerekirse ``config.json``'daki bölüm silinir).
+
+    Bu fonksiyon varsayılanı UYGULAMAZ (v1.4.0 Dalga 3): boş dönüş "hiçbir
+    config kök vermedi" demektir; ``etkin_kokler_coz`` o durumda
+    ``VARSAYILAN_KOKLER``'e düşer. Ayrım bilinçli — "kullanıcı ne yazdı?" ile
+    "sonuçta hangi kökler geçerli?" iki ayrı sorudur (``cli.ui`` ilkini
+    native diyaloğun açılış klasörü için sorar).
     """
     if cfg_kokler:
         return list(cfg_kokler)
@@ -271,12 +288,13 @@ def etkin_kokler_coz(
     """Kaynak seçimi + disk çözümü tek çağrıda (çağıranların TEK kapısı).
 
     ``etkin_ham_kokler`` hangi dosyanın konuştuğuna karar verir,
-    ``izinli_kokler_coz`` sonucu diske bağlar. ``dogrula`` ikisine de aynen
+    ``izinli_kokler_coz`` sonucu diske bağlar. İkisi de kök vermediyse
+    ``VARSAYILAN_KOKLER`` (``"*"`` — tüm sürücüler) geçerlidir. ``dogrula`` ikisine de aynen
     geçer: startup'ta açık hata, istek başına sessiz atlama.
     """
-    return izinli_kokler_coz(
-        etkin_ham_kokler(cfg_kokler, dogrula=dogrula), ev, dogrula=dogrula
-    )
+    ham = etkin_ham_kokler(cfg_kokler, dogrula=dogrula)
+    # İki yerel config de kök vermedi: kod-seviyesi varsayılan (v1.4.0 Dalga 3).
+    return izinli_kokler_coz(ham or VARSAYILAN_KOKLER, ev, dogrula=dogrula)
 
 
 def guvenli_yol(

@@ -259,15 +259,41 @@ WebView2 runtime), backed by a local server on `http://127.0.0.1:8765`
 (loopback only — never binds beyond localhost). Without WebView2 — or without
 the optional `pywebview` package — nothing breaks: it falls back to your
 browser and prints one line saying why. Pick a video with the server-side
-file browser (files are **not** uploaded; the tool reads them from disk, and
-browsing is confined to your home directory), choose Normal/Aggressive mode,
-and watch the 6-stage pipeline progress live.
+file browser (files are **not** uploaded; the tool reads them from disk),
+choose Normal/Aggressive mode, and watch the 6-stage pipeline progress live.
 
 For the native window: `pip install "fillercut[native]"`.
 
-**If your videos live on another drive** (D:\, E:\ …), the browser is
-confined to your home directory by default. Extend the jail by adding
-allowed roots in `filler-cut.toml`:
+#### Which folders the UI can see — and why that is safe
+
+**Since v1.4.0 the file browser sees every mounted drive by default** (your
+home folder plus `C:\`, `D:\`, a USB disk plugged in later…). Up to v1.3.x it
+was confined to your home directory unless you edited a config file.
+
+This is a deliberate **trust-model change**, and it came *after* the local
+server was hardened — not instead of it:
+
+- **Host allow-list.** Requests are accepted only for `localhost`,
+  `127.0.0.1` or `[::1]`. This kills DNS rebinding (a web page whose domain
+  is re-pointed at your machine).
+- **Origin check.** State-changing requests must come from the app's own
+  origin. A page on the internet — or another app on a different local port —
+  cannot make Filler-Cut do anything.
+- **Session token.** Each launch generates a random token that lives only in
+  memory (never on disk, never in a URL or a cookie). The UI sends it in an
+  `X-Fillercut-Oturum` header; every `/api/*` call without it is rejected.
+  A foreign page cannot read the token, so it cannot call the API.
+- **No CORS.** No response ever grants cross-origin access.
+
+What this does **not** protect against: other programs running under your own
+Windows account. They can already read your files directly; the localhost UI
+adds nothing to what they can do.
+
+**Want the old, narrower behaviour?** List the folders yourself — as soon as a
+config file names at least one root, the "all drives" default is switched off
+and the browser sees only your home folder plus what you listed. To confine it
+to your home folder alone, list the home folder itself
+(`izinli_kokler = ['C:\Users\you']`). In `filler-cut.toml`:
 
 ```toml
 config_version = 1
@@ -291,12 +317,14 @@ there) — add the `"ui"` object next to them and leave the rest alone. If
 only when the `.toml` sets none. A broken `config.json` stops `fillercut ui`
 with a clear error naming the file, rather than silently ignoring your edit.
 
-If you'd rather not list drives one by one, `izinli_kokler = ["*"]` allows
-**every mounted drive** on the machine; the list is refreshed **per request**
-(not frozen at startup), so a USB disk plugged in later shows up on its own.
+`izinli_kokler = ["*"]` is the explicit spelling of the default: **every
+mounted drive**, refreshed **per request** (not frozen at startup), so a USB
+disk plugged in later shows up on its own. An empty list (`[]`, what the
+first-run template writes) means "not configured" and gets the same default.
 
-> ⚠️ **Security:** `"*"` lists all your drives to the localhost UI; it is not
-> recommended on a shared or untrusted machine — list drives individually there.
+> ⚠️ **Shared or untrusted machine?** List your folders explicitly instead of
+> relying on the default — the hardening above stops web pages, not other
+> people or programs using the same Windows account.
 
 These roots are read **only from local config files** — there is no UI control
 that changes them, so the security boundary can't be moved from inside the

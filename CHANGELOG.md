@@ -7,6 +7,66 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## Yayımlanmamış — 1.4.0 hedefi
+
+> Bu bölüm henüz bir sürüm DEĞİLDİR (başlığı bilerek `## [x.y.z]` biçiminde
+> değil: release notları ve sürüm tutarlılık kilidi onu görmez). 1.4.0 kesilirken
+> `## [1.4.0] — tarih` başlığına çevrilir; `tests/test_release.py` sürüm 1.4.0'a
+> yükseldiği anda bu başlık duruyorsa kırmızıya döner. v1.4.0'ın öteki
+> değişiklikleri (review kısayolları, manuel düzenlemeler) sürüm kesilirken
+> buraya eklenecek.
+
+**Güven modeli değişti: arayüz artık varsayılan olarak tüm diskleri görür — ve lokal sunucu bunun için sertleştirildi.**
+
+### Değişti — GÜVENLİK MODELİ
+
+- **Dosya gezgini varsayılan olarak takılı TÜM sürücüleri görür.** v1.3.x'e
+  kadar config'siz bir kurulum yalnız ev dizinini görürdü; başka bir diski
+  açmak için `filler-cut.toml` ya da `%APPDATA%\fillercut\config.json`
+  düzenlemek gerekiyordu. Artık hiçbir config kök vermiyorsa varsayılan `"*"`
+  (tüm sürücüler, her istekte tazelenir) geçerlidir. **Bu bir güven modeli
+  değişikliğidir, saklanmıyor:** arayüzün dosya sistemi yüzeyi büyüdü.
+  - **Kısıtlama mekanizması aynen duruyor.** Bir config dosyası en az bir kök
+    verdiği anda varsayılan devreden çıkar ve gezgin "ev + yazdıklarınız"la
+    sınırlanır; öncelik yine `filler-cut.toml` > `config.json`. Yalnız ev
+    dizinine dönmek için köke ev dizininin kendisini yazın.
+  - Boş liste (`"izinli_kokler": []` — v1.3.2 şablonunun yazdığı) "ayarlanmadı"
+    sayılır ve varsayılanı alır. v1.3.2 notu "boş liste ek kök yok demek"
+    diyordu; o cümle artık geçerli değil.
+  - Kökleri değiştiren bir arayüz düğmesi, API ucu, CLI bayrağı ya da ortam
+    değişkeni yine YOK — yalnız yerel config dosyaları.
+  - Native dosya diyaloğu varsayılanda yine ev dizininde açılır (`C:\`'de değil).
+
+### Eklendi — localhost sertleştirmesi (yukarıdaki değişikliğin ÖN KOŞULU)
+
+Tehdit: tarayıcınızda açık kötü niyetli bir web sayfası arka planda
+`http://localhost:8765`'e istek atabilir (tarayıcı cevabı okumayı engeller,
+isteği göndermeyi engellemez); DNS rebinding ile okuma da açılabilir. Dört
+katman eklendi:
+
+- **Host beyaz listesi.** `Host` başlığı yalnız `localhost` / `127.0.0.1` /
+  `[::1]` olabilir; değilse 403. DNS rebinding'i keser.
+- **Origin kontrolü.** Durum değiştiren isteklerde `Origin` ya yoktur ya da
+  uygulamanın kendi kökenidir. İnternetteki bir sayfa ya da başka bir yerel
+  porttaki uygulama Filler-Cut'a işlem yaptıramaz.
+- **Oturum tokeni.** Her açılışta rastgele üretilir, yalnız bellekte yaşar
+  (diske yazılmaz, URL'e ve cookie'ye girmez), sayfanın HTML'ine gömülür ve
+  her `/api/*` çağrısında `X-Fillercut-Oturum` başlığıyla istenir. Tek muaf
+  uç `/api/instance`'tır (ikinci başlatmanın "zaten çalışıyor mu" sorusu) ve
+  yalnız ad/sürüm/pid döner. Video oynatıcı ve canlı ilerleme akışı özel
+  başlık gönderemediği için o üç uç tarayıcının yazdığı
+  `Sec-Fetch-Site: same-origin` başlığıyla tanınır.
+- **CORS kapalı.** Hiçbir cevap çapraz-köken izin başlığı taşımaz; preflight
+  reddedilir.
+
+**Sizi etkileyen:** arayüzü komut satırından ya da betikle çağırıyorsanız
+(`curl`, PowerShell) `/api/*` uçları artık token ister — `/api/instance` hariç.
+Uygulama yeniden başladıktan sonra açık kalmış eski bir tarayıcı sekmesi
+"Oturum doğrulanamadı — sayfayı yenileyin" der; sayfayı yenilemek yeter.
+
+**Korumadığı şey:** kendi Windows hesabınız altında çalışan diğer programlar.
+Onlar dosyalarınıza zaten doğrudan erişebilir.
+
 ## [1.3.2] — 2026-09-06
 
 **Ek disk eklemek artık dosya oluşturmayı gerektirmiyor; oynatma başlığı akıcı.**

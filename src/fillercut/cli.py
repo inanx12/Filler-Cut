@@ -778,13 +778,21 @@ def ui(
         from fillercut.web import fs as _fs
 
         izinli_kokler = _fs.etkin_kokler_coz(cfg.ui.izinli_kokler, Path.home())
+        acik_kokler = _fs.etkin_ham_kokler(cfg.ui.izinli_kokler)
     except ConfigError as exc:
         typer.echo(f"Hata: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
     # Native dosya diyaloğunun açılış klasörü: ilk izinli kök, yoksa ev dizini
     # (basit ve tahmin edilebilir — "son kullanılan" durumu tutmak IPC ister).
-    baslangic_dizini = str(izinli_kokler[0]) if izinli_kokler else str(Path.home())
+    #
+    # v1.4.0 Dalga 3: kökler kod-seviyesi varsayılandan ("*" — tüm sürücüler)
+    # geliyorsa diyalog yine EV'de açılır. Varsayılanın ilk kökü `C:\`tir;
+    # kullanıcının videoları oradan değil evinden başlar. Açılış klasörünü
+    # yalnız kullanıcının KENDİ yazdığı kök değiştirir (v1.2.x davranışı).
+    baslangic_dizini = (
+        str(izinli_kokler[0]) if acik_kokler and izinli_kokler else str(Path.home())
+    )
 
     # 1) Port zaten dolu ve oradaki BİZSEK: ikinci sunucu başlatma, VAR OLANI GÖSTER.
     sock = _dinleyici_ac(port)

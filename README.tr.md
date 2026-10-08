@@ -257,8 +257,8 @@ bir sunucu koşar (yalnız loopback — localhost dışına asla bağlanmaz).
 WebView2 yoksa — ya da opsiyonel `pywebview` paketi kurulu değilse — hiçbir
 şey bozulmaz: tarayıcı moduna düşer ve konsola tek satır neden yazar. Videoyu
 sunucu taraflı dosya gezginiyle seçersiniz (dosya tarayıcıya **yüklenmez**;
-araç diskten okur, gezgin ev dizininizle sınırlıdır), Normal/Agresif modu
-seçer ve 6 aşamalı pipeline'ın ilerlemesini canlı izlersiniz.
+araç diskten okur), Normal/Agresif modu seçer ve 6 aşamalı pipeline'ın
+ilerlemesini canlı izlersiniz.
 
 Videoyu **sürükleyip bırakabilirsiniz** de: kendi penceresinde açıldığında
 dosyayı pencereye bırakmak ya da "Dosya seç…" ile Windows'un kendi dosya
@@ -268,9 +268,37 @@ seçicidir ve arayüz sizi oraya yönlendirir.
 
 Native pencere için: `pip install "fillercut[native]"`.
 
-**Videolarınız başka bir sürücüdeyse** (D:\, E:\ …) gezgin varsayılan
-olarak ev dizininizle sınırlıdır. `filler-cut.toml`'a izinli kök ekleyerek
-hapsi genişletebilirsiniz:
+#### Arayüz hangi klasörleri görür — ve bu neden güvenli
+
+**v1.4.0'dan itibaren dosya gezgini varsayılan olarak takılı tüm sürücüleri
+görür** (ev dizininiz, `C:\`, `D:\`, sonradan taktığınız USB disk…). v1.3.x'e
+kadar bir config dosyası düzenlemediğiniz sürece yalnız ev dizininizle
+sınırlıydı.
+
+Bu bilinçli bir **güven modeli değişikliğidir** ve lokal sunucunun
+sertleştirilmesinin *yerine* değil, *ardından* geldi:
+
+- **Host beyaz listesi.** İstekler yalnız `localhost`, `127.0.0.1` ya da
+  `[::1]` için kabul edilir. DNS rebinding'i (alan adı sizin makinenize
+  çevrilen bir web sayfası) öldürür.
+- **Origin kontrolü.** Durum değiştiren istekler uygulamanın kendi kökeninden
+  gelmek zorundadır. İnternetteki bir sayfa — ya da başka bir yerel porttaki
+  başka bir uygulama — Filler-Cut'a hiçbir şey yaptıramaz.
+- **Oturum tokeni.** Her açılışta yalnız bellekte yaşayan rastgele bir token
+  üretilir (diske yazılmaz, URL'e ya da cookie'ye girmez). Arayüz onu
+  `X-Fillercut-Oturum` başlığında gönderir; token'sız her `/api/*` çağrısı
+  reddedilir. Yabancı bir sayfa token'ı okuyamaz, dolayısıyla API'yi çağıramaz.
+- **CORS yok.** Hiçbir cevap çapraz-köken erişim izni vermez.
+
+Bunun **korumadığı** şey: kendi Windows hesabınız altında çalışan diğer
+programlar. Onlar dosyalarınızı zaten doğrudan okuyabilir; localhost arayüzü
+yapabildiklerine bir şey eklemez.
+
+**Eski, dar davranışı mı istiyorsunuz?** Klasörleri kendiniz yazın — bir
+config dosyası en az bir kök verdiği anda "tüm sürücüler" varsayılanı devreden
+çıkar ve gezgin yalnız ev dizininizi ve yazdıklarınızı görür. Yalnız ev
+dizinine hapsetmek için ev dizininin kendisini yazın
+(`izinli_kokler = ['C:\Users\siz']`). `filler-cut.toml`'da:
 
 ```toml
 config_version = 1
@@ -295,13 +323,15 @@ dokunmayın. `filler-cut.toml`'da da kök varsa **`.toml` kazanır**;
 `config.json`, düzenlemenizi sessizce yok saymak yerine `fillercut ui`'yi
 dosyanın adını veren açık bir hatayla durdurur.
 
-Sürücüleri tek tek yazmak istemezseniz `izinli_kokler = ["*"]` **makinedeki
-tüm takılı sürücüleri** izinli yapar; liste her açılışta değil **her istekte**
-tazelenir, yani sonradan taktığınız bir USB disk de kendiliğinden görünür.
+`izinli_kokler = ["*"]` varsayılanın açık yazımıdır: **makinedeki tüm takılı
+sürücüler**; liste her açılışta değil **her istekte** tazelenir, yani sonradan
+taktığınız bir USB disk de kendiliğinden görünür. Boş liste (`[]`, ilk
+açılış şablonunun yazdığı) "ayarlanmadı" demektir ve aynı varsayılanı alır.
 
-> ⚠️ **Güvenlik:** `"*"` localhost arayüzüne tüm disklerinizi listeler;
-> paylaşımlı ya da güvenmediğiniz bir makinede önerilmez — orada sürücüleri
-> tek tek yazın.
+> ⚠️ **Paylaşımlı ya da güvenmediğiniz bir makine mi?** Varsayılana
+> güvenmek yerine klasörlerinizi açıkça yazın — yukarıdaki sertleştirme web
+> sayfalarını durdurur, aynı Windows hesabını kullanan başka kişileri ya da
+> programları değil.
 
 Bu kökler **yalnızca yerel config dosyalarından** okunur (arayüzde onları değiştiren
 bir düğme yoktur — güvenlik sınırı config'in dışına taşmasın diye). Var

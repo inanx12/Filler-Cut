@@ -70,6 +70,35 @@ class TestSurumTutarliligi:
         metin = CHANGELOG.read_text(encoding="utf-8")
         assert "## [Unreleased]" not in metin
 
+    def test_yayimlanmamis_bolum_surum_kesilince_kalamaz(self) -> None:
+        """Sürüm kesilmeden yazılan notların yeri (v1.4.0 Dalga 3).
+
+        `[Unreleased]` yasağı aynen duruyor (yukarıdaki kilit). Sürüm
+        yükseltilmeden kayda geçmesi GEREKEN bir değişiklik (ör. güven modeli
+        değişimi) `## Yayımlanmamış — X.Y.Z hedefi` başlığı altına yazılır:
+        başlık `## [x.y.z]` biçiminde olmadığı için `en_ust_surum` ve release
+        notları onu görmez. Bu kilit onun UNUTULMASINI önler — `pyproject`
+        sürümü hedefe ulaştığı anda başlık hâlâ duruyorsa kırmızıdır; yani
+        bölüm sürüm başlığına çevrilmeden release kesilemez.
+        """
+        metin = CHANGELOG.read_text(encoding="utf-8")
+        basliklar = re.findall(
+            r"^## Yayımlanmamış — (\d+)\.(\d+)\.(\d+) hedefi$", metin, flags=re.M
+        )
+        assert len(re.findall(r"^## Yayımlanmamış", metin, flags=re.M)) == len(basliklar) <= 1, (
+            "yayımlanmamış bölüm başlığı biçimi: '## Yayımlanmamış — X.Y.Z hedefi' (en çok bir)"
+        )
+        if not basliklar:
+            return
+        hedef = tuple(int(x) for x in basliklar[0])
+        simdiki = tuple(int(x) for x in _pyproject_surum().split("."))
+        assert simdiki < hedef, (
+            "sürüm hedefe ulaştı — 'Yayımlanmamış' bölümünü '## [x.y.z] — tarih' "
+            "başlığına çevirin"
+        )
+        # Bölüm, yayımlanmış ilk sürüm başlığının ÜSTÜNDE durur.
+        assert metin.index("## Yayımlanmamış") < metin.index(f"## [{_pyproject_surum()}]")
+
     def test_surum_baslik_tarihi_iso(self) -> None:
         surum = _pyproject_surum()
         metin = CHANGELOG.read_text(encoding="utf-8")

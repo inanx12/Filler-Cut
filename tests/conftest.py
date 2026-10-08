@@ -72,3 +72,29 @@ def _test_istemcisi_gocu(monkeypatch: pytest.MonkeyPatch) -> None:
             self.headers[OTURUM_BASLIGI] = token
 
     monkeypatch.setattr(TestClient, "__init__", kur)
+
+
+@pytest.fixture(autouse=True)
+def _varsayilan_kok_yalit(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Suite'in hapis kilitleri "yalnız ev" varsayılanıyla koşar (v1.4.0 Dalga 3).
+
+    Üretim varsayılanı artık `"*"`tir (`fs.VARSAYILAN_KOKLER` — config'siz
+    kurulum tüm diskleri görür). Suite'teki yüzlerce "ev dışı yol 403" kilidi
+    ise hapis MEKANİZMASINI sınar ve `create_app(fs_home=tmp)` ile "ek kök
+    yok" durumunu varsayar: `"*"` altında hiçbir yol "dışarısı" olmaz ve o
+    kilitler anlamsızlaşırdı (v1.3.1'de ölçülen tuzağın aynısı — bkz.
+    `_ayar_dizini_yalit`). Burada varsayılan TEK NOKTADAN boş kümeye
+    çekilir.
+
+    **Bu, üretim varsayılanını GİZLEMEZ:** değerin kendisi
+    `test_web_varsayilan_kok.py`de kilitlidir — hem kaynak metninden (bu
+    fixture'ın dokunamadığı yer) hem `gercek_varsayilan` işaretli testlerde
+    gerçek değerle uçtan uca.
+    """
+    if request.node.get_closest_marker("gercek_varsayilan") is not None:
+        return
+    from fillercut.web import fs
+
+    monkeypatch.setattr(fs, "VARSAYILAN_KOKLER", ())

@@ -121,5 +121,6 @@ markers = [
     "exe: PyInstaller build artefaktı gerektirir (dist/fillercut) — CI'da değil, build sonrası koşar (CI deselect: -m 'not exe')",
     "xml: FCP7 XML / SRT dışa aktarım kilitleri — SEÇİM marker'ıdır, dış kaynak gerektirmez ve CI'da koşar (yalnız bu takım: -m xml). Gerçek dosya okuyan tek test ayrıca 'ffmpeg' marker'lıdır.",
     "web: web arayuzu (fs/secim/native kopru) kilitleri — SECIM marker'idir, dis kaynak gerektirmez ve CI'da kosar (yalniz bu takim: -m web)",
+    "gercek_varsayilan: conftest'in 'yalniz ev' kok yalitimini KAPATIR - uretim varsayilani (fs.VARSAYILAN_KOKLER) gercek degeriyle kosar; dis kaynak gerektirmez, CI'da kosar",
     "tarayici: gercek tarayici (Playwright + Chromium) gerektirir — zaman cizelgesi surukleme kilitleri GERCEK fare olaylariyla kosar; CI'da degil, kullanici makinesinde (CI deselect: -m 'not tarayici')",
 ]
