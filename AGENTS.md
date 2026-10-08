@@ -170,7 +170,41 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 "Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
 kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
-## Mevcut Durum (2026-09-27)
+## Mevcut Durum (2026-10-09)
+
+**PARİTE REFERANSI GÜNCELLENDİ (2026-10-09) — ORTAM KAYMASI, KOD DEĞİL.**
+`tests/test_parite.py` Dalga 3'ün ilk dörtlüsünde kırmızıya döndü: Test1
+sıfır-düzenleme çıktısı `F5185E7E…D89004` yerine **`FAD99FEF…0F0826`**
+(tam değer testte). İnan kararıyla referans yeni değere çekildi. Üç kanıt:
+
+1. **Taban hash aynı.** Dokunulmamış `8051008` ayrı bir worktree'de (paketin
+   oradan yüklendiği `fillercut.__file__` ile doğrulandı) AYNI yeni hash'i
+   üretti — kayma repoda değil.
+2. **Plan aynı.** Kesim listesi eski referans koşusunun `Test1_temiz.json`'ı
+   ile BİREBİR: `(0,695) (11498,12611) (15245,17364) (22792,23999)
+   (24415,24845)`. Koşu deterministik (art arda iki koşu aynı bayt), encoder
+   yine `h264_amf`.
+3. **Değişen bileşenler.** ASR çıktısı kaydı: 21 → 19 kelime, kelime
+   sınırları oynadı (plan etkilenmedi); encode baytları da değişti. Sistemde
+   2026-09-27'den (son yeşil) beri değişenler: **Vulkan Runtime 1.4.357**
+   (`vulkan-1.dll`, 29.09) ve **AMD Install Manager 26.10** (02.10).
+   DEĞİŞMEYENLER: ekran sürücüsü (32.0.31041.1004, 17.08), ffmpeg 9.0.1
+   (`C:fmpegin`; PATH'te ikinci sırada winget'in 9.0.2'si var ama
+   çözülen 9.0.1), whisper-cli, GGML modeli, Test1.mp4.
+
+**Tuzak (bir sonraki agent için):** bayt-hash kilidi ORTAMA BAĞLI kalmaya
+mahkûmdur — sürücü/çalışma zamanı güncellemesi onu kod değişmeden kırar.
+Kırmızı görürsen ÖNCE taban commit'te koş (worktree + `cygpath -w`'li
+PYTHONPATH); orada da kırmızıysa kayma ortamdadır, referans İnan onayıyla
+güncellenir ve üç kanıt buraya yazılır. Onaysız güncelleme YOK.
+
+**BACKLOG — v1.4.x sertleştirme maddesi (bu dalgada YAPILMADI, scope
+disiplini):** *konserve ASR çıktısıyla PLAN → kare listesi kilidi.* Diskte
+duran sabit bir transkript + sessizlik haritasından `build_cutplan` →
+`export.fcp7` kare giriş/çıkış listesi üretilir ve o liste kilitlenir. GPU,
+sürücü, Vulkan ve encoder'dan BAĞIMSIZ gerçek invariant budur ("aynı
+tespit → aynı kareler"); bayt-hash kilidi onun yanında yalnız "bu makinede
+render baytı kaydı mı" sorusunu yanıtlamaya devam eder.
 
 **v1.4.0 DALGA 2 TAMAMLANDI (2026-09-27) — manuel review düzenlemeleri.**
 Sürüm bump YOK, push/tag/release YOK. Yeni tuşlar: **Ctrl+K** (blade),

@@ -42,8 +42,22 @@ from fillercut.web.review import Overlay, uygulanmis_plan
 pytestmark = [pytest.mark.ffmpeg, pytest.mark.wcpp]
 
 #: Test1.mp4 → düzenlemesiz `Test1_temiz.mp4` (wcpp/Vulkan + h264_amf).
-#: CLI ve kurulu UI aynı değeri üretir (v1.0 Dilim 2'den beri ölçüldü).
-REFERANS_SHA256 = "f5185e7e7e1e757939d7245f6d0308d3d23b1cec938e563b61d0645f38d89004"
+#: CLI ve web yolu aynı değeri üretir.
+#:
+#: **REFERANS ORTAMA BAĞLIDIR ve 2026-10-09'da GÜNCELLENDİ** (kod değişmeden
+#: kırıldı). Önceki değer `f5185e7e…d89004` v1.0 Dilim 2'den 2026-09-27'ye
+#: kadar geçerliydi. Kayma ölçümü — üç kanıt:
+#:   1. dokunulmamış taban commit (`8051008`) de AYNI yeni hash'i üretti;
+#:   2. kesim planı eski referans koşusuyla BİREBİR aynı (5 kesim, aynı ms);
+#:   3. koşu deterministik (art arda iki koşu aynı bayt) — değişen ASR
+#:      zaman damgaları (21 → 19 kelime) ve encode baytları; sistemde
+#:      27.09'dan beri değişenler: Vulkan Runtime 1.4.357 (29.09) ve AMD
+#:      Install Manager 26.10 (02.10). ffmpeg 9.0.1, whisper-cli ve model aynı.
+#: Bu kilit "KOD çıktıyı değiştirdi mi?" sorusunu ancak ortam sabitken
+#: yanıtlar; ortamdan bağımsız invariant (konserve ASR → PLAN → kare listesi)
+#: AGENTS.md'de v1.4.x sertleştirme maddesi olarak kayıtlı. Yeniden kırılırsa
+#: ÖNCE taban commit'te koş: orada da kırmızıysa kayma ortamdadır.
+REFERANS_SHA256 = "fad99fefe12cd1417948358c031c9b805a56a19142d358900306a3c88d0f0826"
 
 #: Referansın ölçüldüğü encoder. Başka bir encoder seçilirse bayt farklıdır.
 REFERANS_ENCODER = "h264_amf"
