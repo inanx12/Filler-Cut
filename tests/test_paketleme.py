@@ -26,6 +26,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.oturum import tokenli_istek
+
 REPO_KOK = Path(__file__).resolve().parent.parent
 SPEC = REPO_KOK / "packaging" / "fillercut.spec"
 DIST = REPO_KOK / "dist" / "fillercut"
@@ -229,8 +231,10 @@ class TestSmoke:
             # Statikler ve manifest bundle'dan servis ediliyor mu?
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as c:
                 assert b"ekran-kurulum" in c.read()
+            # v1.4.0 Dalga 3: API oturum tokeni ister; gerçek istemci gibi
+            # HTML'deki <meta>dan okunur (bayat build'de boş — orada zararsız).
             with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/api/kurulum", timeout=5
+                tokenli_istek(port, "/api/kurulum"), timeout=5
             ) as c:
                 assert len(json.load(c)["modeller"]) == 3
         finally:

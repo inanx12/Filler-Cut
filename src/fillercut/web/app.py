@@ -24,7 +24,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from starlette.background import BackgroundTask
@@ -55,8 +55,13 @@ class InstanceBilgisi(BaseModel):
     ``uygulama`` eşleşirse "zaten çalışıyor" deyip çıkar, eşleşmezse
     ephemeral porta düşer.
 
-    ``pid`` teşhis içindir (kullanıcı asılı kalan süreci görebilsin);
-    yüzey localhost'a bağlı ve tek kullanıcılıktır.
+    ``pid`` ikinci başlatmanın koşan pencereyi ÖNE GETİRMESİ içindir
+    (``cli._var_olan_ornegi_goster``, KI-13) ve teşhise yarar.
+
+    **Bu uç oturum tokeninden MUAFTIR (v1.4.0 Dalga 3)** — ikinci başlatma
+    token'ı bilemez. O yüzden cevap YALNIZ kimliktir ve öyle kalmalıdır: yol,
+    kök, iş, config ya da token TAŞIMAZ. Alan eklemek muafiyetin yüzeyini
+    büyütür; kilit ``tests/test_web_guvenlik.py::TestInstanceMuafiyeti``.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -209,9 +214,14 @@ def create_app(
     app.state.kurulum = kurulum_yoneticisi
     app.state.medya = medya_onbellegi
 
+    # Oturum tokeni: bu UYGULAMA ÖRNEĞİNE (yani sürece) özgü, yalnız bellekte.
+    # Diske/config'e/log'a yazılmaz; yeniden başlatma yeni token üretir.
+    oturum_tokeni = guvenlik.token_uret()
+    app.state.oturum_tokeni = oturum_tokeni
+
     # İstek kapısı (v1.4.0 Dalga 3): route'lardan ÖNCE koşar — statik, kök ve
     # API dahil HER isteğe. Tehdit modeli ve katmanlar `web/guvenlik.py`de.
-    app.add_middleware(guvenlik.GuvenlikKapisi)
+    app.add_middleware(guvenlik.GuvenlikKapisi, token=oturum_tokeni)
 
     # Windows'ta registry .js/.css için yanlış MIME dönebilir (text/plain) —
     # tarayıcı stylesheet'i reddeder. Tipler açıkça sabitlenir (idempotent).
@@ -224,9 +234,26 @@ def create_app(
     app.include_router(kurulum_mod.router)
     app.include_router(geri_bildirim.router)
 
+    yer_tutucu = f'<meta name="{guvenlik.OTURUM_META}" content="">'
+
     @app.get("/", include_in_schema=False)
-    def index() -> FileResponse:
-        return FileResponse(_STATIK / "index.html", media_type="text/html")
+    def index() -> HTMLResponse:
+        """Arayüzün HTML'i — oturum tokeni BURADA gömülür (başka hiçbir uçta).
+
+        Diskteki şablon boş bir ``<meta>`` yer tutucusu taşır; token her
+        cevapta bellekten yazılır. ``no-store`` ŞART: önbelleğe alınmış bir
+        HTML, süreç yeniden başladıktan sonra ÖLÜ token'ı servis ederdi ve
+        her API çağrısı 403 alırdı. Yer tutucu yoksa sessizce token'sız
+        sayfa vermek yerine açıkça düşülür (paketleme kusuru görünür olsun).
+        """
+        sablon = (_STATIK / "index.html").read_text(encoding="utf-8")
+        if sablon.count(yer_tutucu) != 1:
+            raise HTTPException(status_code=500, detail="index.html oturum yer tutucusu yok.")
+        token_meta = f'<meta name="{guvenlik.OTURUM_META}" content="{oturum_tokeni}">'
+        return HTMLResponse(
+            sablon.replace(yer_tutucu, token_meta),
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/api/instance", response_model=InstanceBilgisi)
     def instance_bilgisi() -> InstanceBilgisi:

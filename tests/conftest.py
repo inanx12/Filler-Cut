@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
+OTURUM_BASLIGI = "X-Fillercut-Oturum"
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 
@@ -51,13 +53,22 @@ def _test_istemcisi_gocu(monkeypatch: pytest.MonkeyPatch) -> None:
     değiştirilmek yerine burada, gerçek kullanımdaki kökene taşınır
     (`http://127.0.0.1`, `cli.ui`nin verdiği URL ile aynı ad).
 
+    Oturum tokeni de buradan eklenir: `create_app`in ürettiği değer
+    `app.state.oturum_tokeni`den okunur ve istemcinin varsayılan başlığı
+    olur — gerçek arayüzün `api()` sarmalayıcısının yaptığının aynısı.
+
     Kapının KENDİSİNİ sınayan testler (`test_web_guvenlik.py`) başlığı her
-    istekte açıkça ezer; bu fixture onların ölçtüğü şeyi gizlemez.
+    istekte açıkça ezer ya da siler; bu fixture onların ölçtüğünü gizlemez.
     """
     orijinal = TestClient.__init__
 
     def kur(self: TestClient, app: object, base_url: str = "http://127.0.0.1",
             **kw: object) -> None:
         orijinal(self, app, base_url=base_url, **kw)  # type: ignore[arg-type]
+        # Oturum tokeni UYGULAMADAN okunur (sabit bir test token'ı YOK: gerçek
+        # üretim yolu koşar, test ile üretim arasında ikinci bir kanal açılmaz).
+        token = getattr(getattr(app, "state", None), "oturum_tokeni", None)
+        if isinstance(token, str):
+            self.headers[OTURUM_BASLIGI] = token
 
     monkeypatch.setattr(TestClient, "__init__", kur)

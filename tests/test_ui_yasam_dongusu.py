@@ -35,6 +35,7 @@ from fastapi.testclient import TestClient
 from fillercut.cli import _Kapanis
 from fillercut.web import native
 from fillercut.web.app import create_app
+from tests.oturum import tokenli_istek
 
 REPO_KOK = Path(__file__).resolve().parent.parent
 
@@ -304,10 +305,7 @@ class TestKapatUctanUca:
         self, sunucu: tuple[int, dict[str, object], object]
     ) -> None:
         port, _, p = sunucu
-        r = urllib.request.urlopen(
-            urllib.request.Request(f"http://127.0.0.1:{port}/api/kapat", method="POST"),
-            timeout=10,
-        )
+        r = urllib.request.urlopen(tokenli_istek(port, "/api/kapat", method="POST"), timeout=10)
         assert r.status == 200
         assert _olu_bekle(port), "port hâlâ dinliyor — headless zombi"
         assert p.wait(timeout=30) == 0, "süreç temiz çıkmadı"  # type: ignore[attr-defined]
@@ -339,10 +337,7 @@ class TestKapatUctanUca:
                 )
                 pidler.append(kimlik["pid"])
                 urllib.request.urlopen(
-                    urllib.request.Request(
-                        f"http://127.0.0.1:{port}/api/kapat", method="POST"
-                    ),
-                    timeout=10,
+                    tokenli_istek(port, "/api/kapat", method="POST"), timeout=10
                 )
                 assert _olu_bekle(port), f"{tur}. turda port hâlâ dinliyor"
                 assert p.wait(timeout=30) == 0, f"{tur}. turda süreç temiz çıkmadı"

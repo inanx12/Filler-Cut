@@ -73,6 +73,32 @@ const durum = {
 
 /* ── yardımcılar ─────────────────────────────────────────────────────── */
 
+/* ── oturum tokeni (v1.4.0 Dalga 3 — localhost sertleştirmesi) ────────────
+ *
+ * Sunucu `GET /`te HTML'e süreç başına rastgele bir token gömer
+ * (`<meta name="fillercut-oturum">`); `/api/*` uçları onu
+ * `X-Fillercut-Oturum` BAŞLIĞINDA geri ister, yoksa 403. Yabancı bir sayfa
+ * bu HTML'i okuyamadığı için token'ı bilemez — arka planda localhost'a
+ * istek atan kötü niyetli sayfa (drive-by) burada ölür.
+ *
+ * TEK KAPI `api()`: bu dosyadaki HER sunucu çağrısı buradan geçer; çıplak
+ * `fetch` YOKTUR (kilit: `tests/test_web_guvenlik_statik.py`). Token URL'e,
+ * cookie'ye ya da depolamaya (localStorage) YAZILMAZ — yalnız bu sayfanın
+ * belleğinde yaşar; sunucu yeniden başlayınca sayfa yenilenir, yeni token
+ * gelir.
+ *
+ * İki öğe özel başlık GÖNDEREMEZ ve buradan geçmez: `<video src>` ve
+ * `EventSource`. O üç GET ucunu sunucu tarayıcının kendi yazdığı
+ * `Sec-Fetch-Site: same-origin` başlığıyla tanır (JS'ten sahtelenemez). */
+const OTURUM_BASLIGI = "X-Fillercut-Oturum";
+const oturumTokeni =
+  (document.querySelector('meta[name="fillercut-oturum"]') || {}).content || "";
+
+function api(yol, secenek) {
+  const s = secenek || {};
+  return fetch(yol, { ...s, headers: { ...(s.headers || {}), [OTURUM_BASLIGI]: oturumTokeni } });
+}
+
 function mmss(ms) {
   const dk = Math.floor(ms / 60000);
   const sn = Math.floor((ms % 60000) / 1000);
@@ -230,7 +256,7 @@ async function onizlemeYokla() {
   if (!onizleme.yol) return;
   let veri;
   try {
-    const cevap = await fetch(
+    const cevap = await api(
       "/api/medya/onizleme?path=" + encodeURIComponent(onizleme.yol)
     );
     if (!cevap.ok) {
@@ -356,7 +382,7 @@ async function gezginYukle(yol) {
   let cevap;
   try {
     const q = yol ? "?path=" + encodeURIComponent(yol) : "";
-    cevap = await fetch("/api/fs/browse" + q);
+    cevap = await api("/api/fs/browse" + q);
   } catch (_) {
     hata.textContent = "Sunucuya ulaşılamıyor — fillercut ui çalışıyor mu?";
     hata.classList.remove("gizli");
@@ -496,7 +522,7 @@ async function yoluSec(yol) {
   /* Tek kapı: sürükle-bırak da native diyalog da buradan geçer. */
   let cevap;
   try {
-    cevap = await fetch("/api/fs/sec", {
+    cevap = await api("/api/fs/sec", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path: yol }),
@@ -1214,7 +1240,7 @@ async function analiziBaslat() {
     /* Çıktı kolu BURADA sorulmaz (onaylanmış varyant 1): iş `mp4`
        varsayılanıyla başlar, format "Render Al"da seçilip onay gövdesiyle
        gider. Sunucu tarafında `ReviewKarari.cikti` bunu taşır. */
-    cevap = await fetch("/api/jobs", {
+    cevap = await api("/api/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1265,7 +1291,7 @@ function sseAc(jobId) {
     el("kosu-durum").textContent = "Bağlantı koptu — yeniden bağlanılıyor…";
     el("kosu-durum").classList.add("uyari");
     try {
-      const cevap = await fetch("/api/jobs/" + jobId);
+      const cevap = await api("/api/jobs/" + jobId);
       if (cevap.status === 404) isYok();
     } catch (_) { /* sunucu tamamen kapalı: yeniden deneme sürsün */ }
   };
@@ -1356,7 +1382,7 @@ async function reviewAc(jobId) {
 }
 
 async function reviewYukle() {
-  const cevap = await fetch("/api/jobs/" + durum.jobId + "/review");
+  const cevap = await api("/api/jobs/" + durum.jobId + "/review");
   if (cevap.status === 404) {
     isYok();
     return;
@@ -1611,7 +1637,7 @@ async function reviewPost(yol, govde) {
   if (review.gonderiliyor) return false;
   review.gonderiliyor = true;
   try {
-    const cevap = await fetch("/api/jobs/" + durum.jobId + yol, {
+    const cevap = await api("/api/jobs/" + durum.jobId + yol, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(govde),
@@ -2778,7 +2804,7 @@ async function onayGonder() {
     srt: el("srt-iste").checked,
   };
   try {
-    const cevap = await fetch("/api/jobs/" + durum.jobId + "/approve", {
+    const cevap = await api("/api/jobs/" + durum.jobId + "/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(govde),
@@ -2877,7 +2903,7 @@ for (const dugme of document.querySelectorAll(".goster")) {
     const kutu = el("goster-hata");
     kutu.classList.add("gizli");
     try {
-      const cevap = await fetch("/api/reveal", {
+      const cevap = await api("/api/reveal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: yol }),
@@ -2927,7 +2953,7 @@ async function geriBildirim(notId) {
   not.textContent = "GitHub açılıyor…";
   let veri;
   try {
-    const cevap = await fetch("/api/geri-bildirim", { method: "POST" });
+    const cevap = await api("/api/geri-bildirim", { method: "POST" });
     if (!cevap.ok) throw new Error(await apiHatasi(cevap));
     veri = await cevap.json();
   } catch (_) {
@@ -3065,7 +3091,7 @@ function kurulumEkraniCiz(v) {
 async function kurulumYokla() {
   let cevap;
   try {
-    cevap = await fetch("/api/kurulum");
+    cevap = await api("/api/kurulum");
   } catch (_) {
     return; // sunucu geçici olarak yanıtsız; sonraki yoklamada tekrar dener
   }
@@ -3087,7 +3113,7 @@ async function kurulumBasla() {
     const govde = {};
     const sec = el("kurulum-model");
     if (sec.value) govde.model = sec.value;
-    const cevap = await fetch("/api/kurulum/indir", {
+    const cevap = await api("/api/kurulum/indir", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(govde),
@@ -3105,7 +3131,7 @@ async function kurulumBasla() {
 }
 
 async function kurulumIptal() {
-  await fetch("/api/kurulum/iptal", { method: "POST" });
+  await api("/api/kurulum/iptal", { method: "POST" });
   await kurulumYokla();
 }
 
@@ -3136,7 +3162,7 @@ async function kapat() {
   kurulumYoklamaDurdur();
   onizlemeDurdur();
   try {
-    const cevap = await fetch("/api/kapat", { method: "POST" });
+    const cevap = await api("/api/kapat", { method: "POST" });
     if (!cevap.ok) {
       el("btn-kapat").disabled = false;
       window.alert(await apiHatasi(cevap));
