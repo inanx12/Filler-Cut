@@ -1553,3 +1553,52 @@ karmaşa" sanıp `close`a geri dönmemeli.
 **Referans:** `src/fillercut/web/static/app.js::dialogKur`; diyaloglar
 `index.html` içinde `#dlg-analiz` ve `#dlg-render`. Kilit
 `tests/test_web_editor.py::TestDiyaloglar`.
+
+## KI-18 — "Kapat" sonrası süreç nadiren asılı kalıyor (kapanış yarışı) — **Açık**
+
+**Belirti.** `POST /api/kapat` cevap verir, port dinlemeyi bırakır, ama süreç
+ÇIKMAZ (30 sn sonra hâlâ yaşıyor). Otomatik suite'te
+`tests/test_ui_yasam_dongusu.py::TestKapatUctanUca::test_ac_kapat_uc_dongu_zombi_birakmaz`
+aralıklı düşer ("süreç temiz çıkmadı"): v1.4.0 Dalga 1'de bir kez, Dalga 3'te
+(2026-10-09) üç kez. KI-14'ün (headless zombi) nadir, yarış koşullu kuzeni.
+
+**Ölçüm (2026-10-09).** Asılı süreçten yığın + asyncio dökümü alındı
+(sunucuyu aynı portta art arda açıp kapatan betik, 6–8 paralel kopya; yük
+altında 72 turda 2–3 asılma, tek başına 10 koşuda 0):
+
+- `uvicorn.Server.should_exit = True`, `force_exit = False`;
+- `server_state.connections` **0**, `server_state.tasks` **0**;
+- ana görev `Server.serve` → `_serve` içinde bekliyor, lifespan görevi de;
+- asyncio `Server`: `sockets=None` (kapalı), **`_active_count = 1`**,
+  `_waiters = [<Future pending>]`.
+
+Yani dinleyici kapanmış, uvicorn'un bildiği bağlantı kalmamış, ama asyncio
+sunucusunun etkin-bağlantı sayacı sıfıra inmemiş ve `Server.wait_closed()`
+sonsuza dek bekliyor. Sayaç, kapanış ANINDA kabul edilen bir bağlantıda takılı
+kalıyor (testte kapanışı yoklayan istemci tam o anda bağlanıyor). CPython
+3.12.1'den beri `wait_closed()` etkin bağlantılar bitene kadar GERÇEKTEN
+bekler (3.11'de hemen dönerdi); uvicorn 0.52.4 onu zaman aşımsız bekliyor.
+Ortam: Python 3.12.10, Windows Proactor döngüsü.
+
+**Dalga 3 ile ilgisi yok.** Yığında `web/guvenlik` yok; aynı düşüş kapı
+eklenmeden önce de kayıtlı (Dalga 1). Bugün sık görülmesinin olası sebebi:
+testler artık kapatmadan önce token için `GET /` atıyor ve kapanış
+yoklaması daha sıkı bir pencereye düşüyor.
+
+**Kullanıcıya etkisi.** Tarayıcı/headless modda "Kapat"a tam bir istek
+(kurulum yoklaması, SSE yeniden bağlanması) yoldayken basılırsa süreç
+görünmeden yaşamaya devam edebilir; kurucu "uygulama çalışıyor" der
+(2026-09-23'te yaşanan "kapalı görünüyor ama kurulamıyor" olayı bu sınıftan
+olabilir — o gün ölçülmedi). Nadir; geçici çözüm Görev Yöneticisi ya da
+`taskkill /IM fillercut-ui.exe /T /F`.
+
+**Neden bu dalgada düzeltilmedi.** Düzeltme `cli`nin kapanış davranışını
+değiştirir (scope: güvenlik). Adaylar, önce ölçülmeli:
+(a) `should_exit` sonrası sınırlı süre bekleyip `force_exit` + süreç çıkışı
+yapan bir bekçi (koşan iş varsa DOKUNMAMALI — iş yarıda kesilmez kuralı);
+(b) `uvicorn.Config(timeout_graceful_shutdown=…)` — bağlantı/görev beklemesini
+sınırlar ama `wait_closed`ı sınırlamadığı için tek başına YETMEYEBİLİR;
+(c) Python/uvicorn yükseltmesinde yeniden ölçmek.
+
+**Referans:** teşhis betikleri oturum scratch'inde kaldı (repoda değil);
+kilit `tests/test_ui_yasam_dongusu.py`. Bkz. KI-14.

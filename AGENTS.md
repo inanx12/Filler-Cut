@@ -172,6 +172,184 @@ kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
 ## Mevcut Durum (2026-10-09)
 
+**v1.4.0 DALGA 3 TAMAMLANDI (2026-10-09) — güvenlik: localhost sertleştirmesi
+→ varsayılan kökler `"*"`.** Sürüm bump YOK, push/tag/release YOK. SIRA
+korundu: önce sertleştirme (Host → Origin → oturum tokeni), ANCAK kilitleri
+yeşilken varsayılan genişletildi. Pipeline/plan/render/dışa aktarım koduna
+dokunulmadı; değişen `web/` (yeni `web/guvenlik.py`), `cli.py` (iki satır:
+açılış klasörü) ve dokümanlar.
+
+**TEHDİT MODELİ.** Sunucu yalnız `127.0.0.1`'e bağlıdır ama bu isteğin KİMDEN
+geldiğini söylemez. Kullanıcının tarayıcısındaki kötü niyetli bir web sayfası
+arka planda `localhost:8765`'e istek ATABİLİR — same-origin politikası
+cevabı OKUMAYI engeller, isteği GÖNDERMEYİ engellemez (durum değiştiren bir
+POST işlenir). **DNS rebinding** ile saldırganın alan adı 127.0.0.1'e
+çözülürse sayfa "aynı köken" olur ve okuma da açılır. Kapsam DIŞI: aynı
+Windows hesabı altında koşan yerel bir süreç (dosyalara zaten doğrudan
+erişir; HTML'i de okuyup token'ı alabilir — savunma tarayıcı saldırganına
+karşıdır). Katmanlar, sırasıyla ve hepsi `web/guvenlik.GuvenlikKapisi`nde
+(saf ASGI, route'tan ÖNCE; SSE ve Range'i sarmalamaz):
+
+1. **Host beyaz listesi** (her istek, statik dahil): `localhost` /
+   `127.0.0.1` / `[::1]` + isteğe bağlı port, TAM eşleşme; yok ya da
+   yinelenmişse 403. Rebinding'i öldürür (Host JS'ten değiştirilemez).
+2. **Origin kontrolü** (POST/PUT/PATCH/DELETE): Origin ya YOK ya isteğin
+   kendi kökeni (`http://` + Host). Başka porttaki yerel uygulama, şema/ad
+   farkı, `null`, yinelenen başlık → 403. GET kapıya girmez.
+3. **Oturum tokeni** (`/api/*`): `X-Fillercut-Oturum` başlığı.
+4. **CORS reddi:** `OPTIONS` allow'suz 403; kapı uygulamadan gelen
+   `Access-Control-*` başlıklarını da SÖKER.
+
+**DÖRT KİLİTLİ KARAR (İnan) + BİR SONRADAN VERİLEN:**
+
+* **Token taşıma = özel BAŞLIK.** Cookie YOK (çapraz-köken isteğe
+  kendiliğinden eklenir), URL YOK (log/geçmiş/referer sızıntısı). Özel
+  başlık çapraz-kökende preflight'ı ZORLAR, preflight reddedilir: bedava
+  ikinci katman (gerçek tarayıcıda kilitli: yerel saldırganın özel başlıklı
+  POST'undan sunucuya yalnız reddedilen `OPTIONS` varıyor).
+* **`/api/instance` MUAF + minimal.** İkinci başlatma dolu porttaki servisin
+  biz olup olmadığını token'sız sormak ZORUNDA (token öteki sürecin
+  belleğinde). Cevap yalnız kimlik: `{uygulama, surum, pid}` — `pid`
+  koşan pencereyi öne getirmek için gerekli (KI-13). Yol/veri/token YOK.
+  Muafiyet tam eşleşmedir (`/api/instance/` → 403) ve küme statik kilitte
+  SABİT; alan eklemek muafiyetin yüzeyini büyütür.
+* **Config mekanizması AYNEN, değişen yalnız varsayılan.**
+  `fs.VARSAYILAN_KOKLER = ("*",)` yalnız İKİ yerel config de kök vermediğinde
+  devreye girer (`etkin_kokler_coz`); `etkin_ham_kokler` (toml > config.json)
+  dokunulmadı. Tek bir açık kök varsayılanı kapatır. Boş liste (v1.3.2
+  şablonu her kurulumda `[]` yazar) "ayarlanmadı"dır — yoksa varsayılan
+  hiçbir kurulu kullanıcıya ulaşmazdı. Yalnız ev'e dönüş: köke ev'in kendisi.
+* **Tarayıcı modu çalışır.** Token `GET /`in HTML'ine gömülür
+  (`<meta name="fillercut-oturum">`, `Cache-Control: no-store`); URL başka
+  sekmeye/tarayıcıya yapıştırılınca aynı token gelir. Bayat sekme (süreç
+  yeniden başlamış) "Oturum doğrulanamadı — sayfayı yenileyin" alır.
+* **"Kökler yalnız yerel config'ten" invariantı DEĞİŞMEDİ:** API/CLI/env ile
+  kök değişimi yok; `"*"` kod-seviyesi varsayılandır.
+* **SONRADAN (2026-10-09) — `<video src>` ve `EventSource` özel başlık
+  GÖNDEREMEZ.** "Her `/api/*` token ister" kararı bu iki öğede uygulanamıyordu
+  (URL ve cookie yasak). Karar: o ÜÇ GET ucu (`/api/medya/video`,
+  `/api/jobs/{id}/video`, `/api/jobs/{id}/events` — `guvenlik.MEDYA_UCLARI`)
+  token YA DA `Sec-Fetch-Site: same-origin` ister. Başlığı tarayıcı yazar,
+  JS sahteleyemez; yoksa (curl/PowerShell) 403. Seçilmeyenler: URL'de tek
+  kullanımlık bilet (sır yine URL'de), service worker (kırılgan yaşam
+  döngüsü), SSE'yi fetch-akışına yeniden yazmak (yeniden bağlanma mantığı).
+
+**ÖLÇÜLDÜ, VARSAYILMADI — pywebview/WebView2 gerçek koşusu (2026-10-08).**
+Gerçek `create_app` + başlık kaydeden ASGI sarmalı + gerçek pywebview
+penceresi (`evaluate_js` ile fetch/POST/EventSource/`<video>` tetiklendi):
+
+| İstek | Origin | Sec-Fetch-Site | Not |
+|---|---|---|---|
+| `GET /` (gezinme) | yok | `none` | |
+| `GET /static/*` | yok | `same-origin` | no-cors |
+| `fetch` GET `/api/*` | **yok** | `same-origin` | |
+| `fetch` POST `/api/*` | **`http://127.0.0.1:PORT`** | `same-origin` | |
+| özel başlıklı fetch | (POST'ta var) | `same-origin` | preflight YOK |
+| `EventSource` | yok | `same-origin` | başlık taşıyamaz |
+| `<video src>` | yok | `same-origin` | başlık taşıyamaz (`no-cors`, dest `video`) |
+
+"Origin yok → kabul" dalı bu ölçüme dayanır ve tarayıcı DIŞI istemciler
+içindir (`cli.ui` yoklaması). Aynı davranış Chromium'da gerçek uvicorn'a
+karşı kilitli (`test_web_guvenlik_tarayici.py` — native regresyon kilidi).
+
+**İKİ SALDIRGAN TÜRÜ — ÖLÇÜLDÜ.** `http://evil.test` gibi GENEL bir kökenden
+loopback'e giden alt istekleri Chromium KENDİSİ kesiyor (genel → yerel ağ
+engeli): istek sunucuya hiç varmıyor; yalnız tam sayfa gezinme (form POST)
+varıyor ve kapıda ölüyor. Bu tarayıcı korumasına GÜVENİLMEZ. Kapının gerçekten
+sınandığı saldırgan YEREL olandır: aynı makinede başka portta koşan bir sayfa
+(`http://127.0.0.1:BAŞKA`) — tarayıcı engellemez, `Sec-Fetch-Site` orada
+`same-site`tır (site portu saymaz). Medya istisnasının TAM `same-origin`
+istemesinin sebebi budur. Tarayıcı testleri ikisiyle de koşar.
+
+**`"*"` TRADE-OFF'U.** Kazanç: kurulu kullanıcı D:/E:/USB'deki videosunu
+config düzenlemeden açar (v1.3.1–1.3.2'nin bütün derdi buydu). Bedel:
+arayüzün dosya sistemi yüzeyi "ev"den "tüm diskler"e büyüdü — token'ı ele
+geçiren biri (yani aynı hesaptaki yerel bir süreç) gezgini tüm disklerde
+kullanabilir; ama o süreç diski zaten doğrudan okur. Tarayıcı saldırganına
+karşı yüzey dört katmanın ARKASINDADIR (kilit:
+`test_web_varsayilan_kok.py::test_genis_varsayilan_kapinin_ARKASINDA`).
+README (EN+TR) ve CHANGELOG değişimi AÇIKÇA yazıyor. Native dosya diyaloğu
+varsayılanda yine EV'de açılır (`cli.ui`: açılış klasörünü yalnız kullanıcının
+kendi yazdığı kök değiştirir — varsayılanın ilk kökü `C:\` olurdu).
+
+**SUITE GÖÇÜ — TEK NOKTA: `tests/conftest.py`.** Üç autouse fixture:
+(1) `TestClient` varsayılan kökeni `http://127.0.0.1` (starlette'inki
+`testserver` → Host reddi); (2) token `app.state.oturum_tokeni`den OKUNUP
+varsayılan başlık yapılır — sabit test token'ı YOK (ikinci kanal açılmaz,
+gerçek üretim yolu koşar); (3) `fs.VARSAYILAN_KOKLER` boş kümeye çekilir —
+yüzlerce "ev dışı yol 403" kilidi hapis MEKANİZMASINI sınar ve `"*"` altında
+anlamsızlaşırdı; gerçek değer kaynak metninden ve `gercek_varsayilan`
+işaretli testlerde kilitli. Alt süreç testleri (`test_ui_yasam_dongusu`,
+`test_paketleme`) token'ı gerçek istemci gibi HTML'deki meta'dan okur
+(`tests/oturum.py`). İstemcide tek kapı `api()`; çıplak `fetch` statik kilitte.
+
+**CHANGELOG KİLİDİ ÇATIŞMASI VE ÇÖZÜMÜ (bilinçli karar).** `test_release.py`
+`## [Unreleased]`a hiç izin vermez ve en üst sürüm başlığını pyproject'e
+bağlar — bump'sız CHANGELOG bölümü eklenemiyordu. Çözüm: başlığı sürüm
+biçiminde OLMAYAN `## Yayımlanmamış — 1.4.0 hedefi` bölümü (release betiği
+yalnız `## [x.y.z]` görür) + YENİ kilit
+`test_yayimlanmamis_bolum_surum_kesilince_kalamaz`: pyproject sürümü hedefe
+ulaştığında başlık duruyorsa kırmızı. Mevcut kilit gevşetilmedi; bump
+commit'inde bölüm `## [1.4.0] — tarih`e çevrilir ve Dalga 1–2 notları eklenir.
+
+**Tuzaklar (bir sonraki agent için):**
+
+* **`<video src>` ve `EventSource` başlık taşıyamaz.** Yeni bir başlıksız
+  kanal (img src, iframe, sendBeacon) eklersen ya `MEDYA_UCLARI`na bilerek
+  girer ya 403 alır; statik kilit (`test_baslik_gonderemeyen_iki_oge_sabit`)
+  bunu sana söyler. İstisnayı genişletmeden önce düşün.
+* **FastAPI 0.141 `include_router`ı `_IncludedRouter` ile sarar:**
+  `app.routes` alt rotaları DÜZ vermez (`original_router.routes`). Rota
+  matrisi router'lardan kurulur ve canlı uygulamayla eşitliği test eder.
+* **uvicorn bağlı bir METODU ASGI2 sanar** (`interface="asgi3"` ver).
+* **Token'la vurulan rota matrisi YAN ETKİLİ uçlara da vurur:**
+  `POST /api/geri-bildirim` kullanıcının GERÇEK tarayıcısını açar,
+  `/api/kurulum/indir` gerçek indirme başlatır. Matris gövdeyi bilerek bozuk
+  yollar (422) ve `webbrowser.open`ı yamalar.
+* **Geliştiricinin repo kökündeki kişisel `filler-cut.toml`'u** (gitignore'lu)
+  kök veriyorsa `CliRunner` testleri onu okur — `--config` boş bir toml'a
+  sabitle ya da `chdir` et (`test_cli.py` tuzağının aynısı).
+* **Bash heredoc + Python kaçışı:** `'EOF'` tırnaklı heredoc içindeki Python
+  dizesinde `\\n`/`\\f` yazınca diske satır sonu / FORM FEED gider (bu
+  dalgada CHANGELOG'a `%APPDATA%<FF>illercut` yazıldı, bayt taramasıyla
+  yakalandı). Yama betiklerini Write ile dosyaya yaz ya da `chr(92)` kullan;
+  commit öncesi `grep -P '[\x00-\x08\x0b\x0c]'` ile tara.
+
+**KI-18 AÇILDI — "Kapat" sonrası süreç nadiren asılı kalıyor (flake'in kök
+nedeni; Dalga 3'ten BAĞIMSIZ).** `test_ac_kapat_uc_dongu_zombi_birakmaz`
+bu dalgada ÜÇ kez düştü (iki tam koşu + bir dosya koşusu); Dalga 1'in izleme
+notu "tekrarlarsa KI" diyordu. Yığın + asyncio dökümüyle yakalandı (yük
+altında 72 turda 2–3): `should_exit=True`, bağlantı 0, görev 0, ama asyncio
+`Server` `sockets=None active=1` ve `wait_closed()` bekliyor — kapanış
+anında kabul edilen bir bağlantı sayaçta takılı (CPython 3.12.1+
+`wait_closed` gerçekten bekler; uvicorn 0.52.4 onu sınırsız bekliyor). Kapı
+yığında YOK. Düzeltme `cli` kapanış davranışını değiştirir → bu dalgada
+yapılmadı; ayrıntı ve öneriler KNOWN_ISSUES KI-18.
+
+**TEST DÖKÜMÜ.** Koleksiyon 2099 → **2510** (+411). Tam koşu **2504 passed /
+6 skipped**, ruff + mypy temiz, parite 8/8 (yeni referansla).
+
+| Commit | Yeni | Red-first kanıtı |
+|---|---|---|
+| `2131d45` parite referansı | 0 | taban `8051008` de aynı yeni hash (worktree) |
+| `7173a50` host beyaz listesi | 60 | 22 kırmızı (kapı takılı değilken; 38 saf fonksiyon/izinli companion) |
+| `61ddd92` origin kontrolü | 56 | 38 kırmızı |
+| `045160a` oturum tokeni + göç | 277 (239 sunucu + 12 statik + 26 tarayıcı) | önceki commit'te token'sız **20/20** uç kabul ediyordu, preflight 405, HTML'de meta yok |
+| `677c104` varsayılan `"*"` | 18 | 9 kırmızı (önceki `fs.py`/`cli.py` ile) |
+
+**İNAN'IN KURULU EXE'DE ELLE DOĞRULAYACAKLARI:** (1) normal akış bozulmamış:
+video seç → analiz → review (canlı ilerleme SSE, önizleme videosu oynuyor) →
+render; (2) PowerShell'den token'sız
+`Invoke-WebRequest http://127.0.0.1:8765/api/fs/browse` → 403; (3) sahte Host:
+`Invoke-WebRequest http://127.0.0.1:8765/ -Headers @{Host='evil.example'}` →
+403; (4) `/api/instance` token'sız 200 ve yalnız `uygulama/surum/pid`;
+(5) uygulama açıkken kısayola ikinci kez bas → var olan pencere öne gelir;
+(6) `fillercut.exe ui --no-native` ile açıp URL'yi BAŞKA bir tarayıcıya
+yapıştır → çalışır; (7) config'siz (ya da `[]` şablonlu) kurulumda gezginin
+üstünde tüm sürücüler görünür, D:'den video açılır; `config.json`a tek kök
+yazınca yalnız o + ev kalır; (8) "Kapat"tan sonra Görev Yöneticisi'nde süreç
+kalıyor mu (KI-18 — nadir).
+
 **PARİTE REFERANSI GÜNCELLENDİ (2026-10-09) — ORTAM KAYMASI, KOD DEĞİL.**
 `tests/test_parite.py` Dalga 3'ün ilk dörtlüsünde kırmızıya döndü: Test1
 sıfır-düzenleme çıktısı `F5185E7E…D89004` yerine **`FAD99FEF…0F0826`**
@@ -189,7 +367,7 @@ sıfır-düzenleme çıktısı `F5185E7E…D89004` yerine **`FAD99FEF…0F0826`*
    2026-09-27'den (son yeşil) beri değişenler: **Vulkan Runtime 1.4.357**
    (`vulkan-1.dll`, 29.09) ve **AMD Install Manager 26.10** (02.10).
    DEĞİŞMEYENLER: ekran sürücüsü (32.0.31041.1004, 17.08), ffmpeg 9.0.1
-   (`C:fmpegin`; PATH'te ikinci sırada winget'in 9.0.2'si var ama
+   (`C:\ffmpeg\bin`; PATH'te ikinci sırada winget'in 9.0.2'si var ama
    çözülen 9.0.1), whisper-cli, GGML modeli, Test1.mp4.
 
 **Tuzak (bir sonraki agent için):** bayt-hash kilidi ORTAMA BAĞLI kalmaya
@@ -536,7 +714,8 @@ test_ac_kapat_uc_dongu_zombi_birakmaz` BİR KEZ düştü.** Tam koşu altında
 "süreç temiz çıkmadı" (30 sn beklemesi doldu); hemen ardından tek başına
 **3/3** yeşil ve tam koşu tekrarı da yeşil geçti. Bu tur bir kusur olarak
 ele alınmadı: statiklere dokunmuyor, klavye/çizelge kodundan bağımsız ve
-yük altında zaman aşımı gibi görünüyor. **TEKRARLARSA KI açılacak** (aday
+yük altında zaman aşımı gibi görünüyor. **TEKRARLARSA KI açılacak** — *tekrarladı
+(Dalga 3, 2026-10-09) ve kök nedeni bulundu: KI-18* (aday
 kök neden: `Popen` ile başlatılan sunucunun kapanışı paylaşılan 8765
 portunda yarışıyor — v1.2.3 tuzak kaydındaki yönlendirici/pid ailesi).
 
@@ -2580,7 +2759,18 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/static/` — snapshot tabanlı geri al / yinele (derinlik 100, bellek) + "Otomatik plana dön" (onaylı, tek geçmiş adımı) (34 yeni) | `0d6c84f` |
 | `web/static/app.js` — nudge (Alt+, / Alt+.): en yakın aktif kenar, eşitlikte sol, Dalga 1 kare kuralı, uç clamp, muaf (21 yeni) | `bad3ab0` |
 | `test_export_manuel.py` (XML kare kuralı + SRT remap + şema) + `test_parite.py` (Test1 SHA-256, cli + web yolu) (22 yeni) | `3178f91` |
-| AGENTS — Dalga 2 kaydı (ripple kararı, blade semantiği, undo kapsamı, nudge kuralı, XML asimetri bulgusu) | bu commit |
+| AGENTS — Dalga 2 kaydı (ripple kararı, blade semantiği, undo kapsamı, nudge kuralı, XML asimetri bulgusu) | `8051008` |
+
+**v1.4.0 Dalga 3 (güvenlik: localhost sertleştirmesi → varsayılan `"*"`)**
+
+| Modül | Commit |
+|---|---|
+| `tests/test_parite.py` — referans güncelleme (ortam kayması; üç kanıt + backlog notu) | `2131d45` |
+| `web/guvenlik.py` (yeni: saf ASGI `GuvenlikKapisi`) — Host beyaz listesi; conftest `TestClient` kökeni (60 yeni) | `7173a50` |
+| `web/guvenlik.py` — Origin kontrolü (durum değiştiren yöntemler; ölçülen native davranış) (56 yeni) | `61ddd92` |
+| `web/guvenlik.py` + `app.py` + `static/` — oturum tokeni (başlık, bellek-içi, HTML'e gömülü), `/api/instance` muafiyeti, medya uçlarında `Sec-Fetch-Site`, CORS reddi; istemcide tek kapı `api()`; suite token göçü + gerçek uvicorn/Chromium kilitleri (277 yeni) | `045160a` |
+| `web/fs.py` `VARSAYILAN_KOKLER = ("*",)` + `cli.py` açılış klasörü + README ×2 + CHANGELOG "Yayımlanmamış" bölümü ve kilidi (18 yeni) | `677c104` |
+| AGENTS — Dalga 3 kaydı + KNOWN_ISSUES KI-18 (kapanış asılması) | bu commit |
 
 **v1.3.2 (config.json şablonu + playhead akıcılığı)**
 
