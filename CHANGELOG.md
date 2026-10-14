@@ -67,6 +67,20 @@ Uygulama yeniden başladıktan sonra açık kalmış eski bir tarayıcı sekmesi
 **Korumadığı şey:** kendi Windows hesabınız altında çalışan diğer programlar.
 Onlar dosyalarınıza zaten doğrudan erişebilir.
 
+### Düzeltildi
+
+- **"Kapat"tan ya da pencerenin X'inden sonra uygulama artık arka planda
+  asılı kalmıyor (KI-18).** Nadiren pencere kapanıyor, port serbest kalıyor,
+  ama `fillercut-ui.exe` görünmeden yaşamaya devam ediyordu (~90 MB). Kurucu
+  çalışan bir exe'yi ezemediği için bir sonraki güncelleme `exit=5` ile
+  düşüyordu. Sebep Python 3.12 + uvicorn'un kapanış yarışıydı: kapanış
+  anında gelen bir bağlantı sayacı takılı bırakıyor ve sunucu onu sonsuza
+  dek bekliyordu. Kapanış beklemesine artık **3 saniyelik bir af süresi**
+  var. Normal kapanış bu süreyi hiç beklemez (hızı değişmedi); yalnız asılan
+  bekleme 3 saniyede kesilir ve kapanış olağan yolundan sürer. Süreç zorla
+  öldürülmez: arka planda koşan bir iş (ASR/render) varsa yine bitmesi
+  beklenir.
+
 ## [1.3.2] — 2026-09-06
 
 **Ek disk eklemek artık dosya oluşturmayı gerektirmiyor; oynatma başlığı akıcı.**

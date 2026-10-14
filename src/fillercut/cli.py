@@ -469,6 +469,13 @@ UI_HAZIRLIK_ARALIK_SN = 0.05
 #: KOŞAN iş yarıda kesilmez, kullanıcıya tek satır bildirilir.
 UI_KAPANIS_TIMEOUT_SN = 15.0
 
+#: uvicorn kapanışının bağlantı/görev/dinleyici BEKLEMESİNE af süresi (KI-18).
+#: Normal kapanış bu süreyi HİÇ görmez (`wait_for` iş bitince hemen döner);
+#: yalnız asılı kalan bekleme bu sürede kesilir ve kapanış NORMAL yolundan
+#: (lifespan shutdown → `JobKayit.kapat()`) devam eder. Koşan iş executor
+#: thread'indedir, uvicorn görevi değildir — bu süre onu kesmez.
+UI_KAPANIS_AF_SN = 3
+
 
 def _dinleyici_ac(port: int) -> socket.socket | None:
     """127.0.0.1:port'a BAĞLI (henüz dinlemeyen) soket; port doluysa ``None``.
@@ -550,7 +557,11 @@ def _sunucu_kur(web_app: "FastAPI") -> "uvicorn.Server":
     """
     import uvicorn
 
-    return uvicorn.Server(uvicorn.Config(web_app, log_level="warning"))
+    return uvicorn.Server(
+        uvicorn.Config(
+            web_app, log_level="warning", timeout_graceful_shutdown=UI_KAPANIS_AF_SN
+        )
+    )
 
 
 def _sunucuyu_kos(server: "uvicorn.Server", sock: socket.socket) -> None:
