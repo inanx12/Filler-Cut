@@ -549,7 +549,7 @@ async function yoluSec(yol) {
  * Yazma ucu dardır: yalnız `kisayollar` ve `son_videolar_temizle`. Uç yoksa
  * ya da hata verirse arayüz varsayılanlarla devam eder (tercih bir
  * kolaylıktır, açılışı durdurmaz). */
-const tercih = { sonVideolar: [] };
+const tercih = { sonVideolar: [], kisayollar: {} };
 
 async function tercihleriYukle() {
   let cevap;
@@ -565,6 +565,10 @@ async function tercihleriYukle() {
 function tercihleriUygula(veri) {
   tercih.sonVideolar = Array.isArray(veri.son_videolar) ? veri.son_videolar : [];
   sonVideolariCiz();
+  const fark = veri.kisayollar;
+  tercih.kisayollar = fark && typeof fark === "object" && !Array.isArray(fark) ? fark : {};
+  kisayollariUygula(tercih.kisayollar);
+  if (el("dlg-yardim").open && yakala.eylem === null) yardimCiz();
 }
 
 async function tercihGonder(govde) {
@@ -2710,6 +2714,10 @@ function kenarItele(yon) {
  *      Sınıflandırma kayıttadır: durum çeviren tuş tek-atımlık, adım/hız
  *      tuşu repeat'li (bkz. `keymap.js`). */
 document.addEventListener("keydown", (ev) => {
+  if (yakala.eylem !== null) {
+    yakalaTusu(ev); // yakala-modu: tuş TÜKETİLİR, başka hiçbir kısayol çalışmaz
+    return;
+  }
   if (el("dlg-yardim").open) {
     yardimTusu(ev); // yardım katmanının KENDİ tuşu (?); gerisi ölü
     return;
@@ -2745,7 +2753,7 @@ function yardimCiz() {
   const kap = el("yardim-liste");
   kap.textContent = "";
   const gruplar = new Map();
-  for (const k of KISAYOLLAR) {
+  for (const k of ETKIN_KISAYOLLAR) {
     if (!gruplar.has(k.grup)) gruplar.set(k.grup, []);
     gruplar.get(k.grup).push(k);
   }
@@ -2759,10 +2767,17 @@ function yardimCiz() {
       const satir = document.createElement("div");
       satir.className = "yardim-satir";
       satir.dataset.eylem = k.eylem;
+      if (k.degisti) satir.classList.add("degisti");
+      if (k.tuslar.length === 0) satir.classList.add("atanmamis");
       const tus = document.createElement("dt");
       const kbd = document.createElement("kbd");
       kbd.textContent = k.etiket;
-      tus.appendChild(kbd);
+      const ata = document.createElement("button");
+      ata.type = "button";
+      ata.className = "baglanti-dugme yardim-ata";
+      ata.textContent = "Yeniden ata";
+      ata.addEventListener("click", () => yakalaBasla(k.eylem));
+      tus.append(kbd, ata);
       const aciklama = document.createElement("dd");
       aciklama.textContent = k.aciklama;
       satir.append(tus, aciklama);
@@ -2771,12 +2786,107 @@ function yardimCiz() {
     bolum.append(baslik, liste);
     kap.appendChild(bolum);
   }
+  const yardim = ETKIN_KISAYOLLAR.find((k) => k.eylem === "yardim");
+  el("yardim-kapanis").textContent = yardim.tuslar.length
+    ? "Esc ya da " + yardim.etiket + " ile kapanır."
+    : "Esc ile kapanır.";
+  el("btn-kisayol-varsayilan").disabled = Object.keys(tercih.kisayollar).length === 0;
+}
+
+/* ── yeniden atama: yakala-modu (v1.4.0 Dalga 5) ─────────────────────────
+ *
+ * "Yeniden ata" → satır "bir tuşa basın" der; SONRAKİ tuş basımı TÜKETİLİR
+ * (tek keydown dinleyicisinin en başında, modal ve yardım dalından ÖNCE):
+ * yakala-modundayken başka HİÇBİR kısayol çalışmaz, varsayılanı da engellenir.
+ *
+ *   · Esc yakalamayı iptal eder, katmanı KAPATMAZ (diyaloğun `cancel`ı da
+ *     yakalama sürerken engellenir);
+ *   · Enter ve atanamayan tuşlar reddedilir, yakalama sürer;
+ *   · tek başına değiştirici (Shift/Ctrl/Alt) ve tekrar olayları beklenir.
+ *
+ * Atama sunucuya yazılır (`POST /api/tercihler`, dar uç); kalıcılık ve
+ * doğrulama oradadır. Tercihler review geri al yığınına GİRMEZ. */
+const yakala = { eylem: null };
+
+function yardimNotu(metin, sinif) {
+  const not = el("yardim-not");
+  not.textContent = metin || "";
+  not.className = "yardim-not" + (metin && sinif ? " " + sinif : "");
+}
+
+function yakalaBasla(eylem) {
+  yardimCiz(); // başka bir satır yakalıyorduysa o satır eski hâline döner
+  yakala.eylem = eylem;
+  for (const satir of document.querySelectorAll("#yardim-liste .yardim-satir")) {
+    const bu = satir.dataset.eylem === eylem;
+    satir.classList.toggle("yakaliyor", bu);
+    if (bu) satir.querySelector("kbd").textContent = "Bir tuşa basın…";
+  }
+  yardimNotu("Yeni tuşa basın — Esc: vazgeç.", "");
+}
+
+function yakalaBitir(not, sinif) {
+  yakala.eylem = null;
+  yardimCiz();
+  yardimNotu(not, sinif);
+}
+
+function yakalaTusu(ev) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const karar = yakalamaKarari(ev); // tuş yorumu kayıtta (keymap.js)
+  if (karar.tur === "bekle") return;
+  if (karar.tur === "iptal") {
+    /* Sıfırlama BİR SONRAKİ göreve ertelenir: diyaloğun `cancel` olayı bu
+       tuşun hemen ardından gelir ve yakalamanın hâlâ sürdüğünü görüp
+       katmanın kapanmasını engellemelidir. */
+    window.setTimeout(() => yakalaBitir("", ""), 0);
+    return;
+  }
+  if (karar.tur === "sabit") {
+    yardimNotu("Enter sabittir, yeniden atanamaz — başka bir tuş deneyin (Esc: vazgeç).",
+               "hata");
+    return;
+  }
+  if (karar.tur === "atanamaz") {
+    yardimNotu("Bu tuş atanamaz — başka bir tuş deneyin (Esc: vazgeç).", "hata");
+    return;
+  }
+  kisayolAta(yakala.eylem, karar.tus);
+}
+
+async function kisayolAta(eylem, tus) {
+  const onceki = new Map(ETKIN_KISAYOLLAR.map((g) => [g.eylem, g.tuslar.length]));
+  const yeni = atamaHesapla(tercih.kisayollar, eylem, tus);
+  yakala.eylem = null;
+  const hata = await tercihGonder({ kisayollar: yeni });
+  if (hata) {
+    yakalaBitir(hata, "hata");
+    return;
+  }
+  const dusen = ETKIN_KISAYOLLAR.filter(
+    (g) => g.eylem !== eylem && g.tuslar.length === 0 && onceki.get(g.eylem) > 0
+  );
+  let not = tusEtiketi(tus) + " atandı.";
+  if (dusen.length) {
+    not += " Bu tuş önceden “" + dusen.map((g) => g.aciklama).join("”, “") +
+      "” eylemindeydi; o eylem artık atanmamış.";
+  }
+  yakalaBitir(not, "");
+}
+
+async function kisayollariVarsayilanaDondur() {
+  const hata = await tercihGonder({ kisayollar: {} });
+  yardimCiz();
+  yardimNotu(hata || "Tüm kısayollar varsayılana döndü.", hata ? "hata" : "");
 }
 
 function yardimAc() {
   const dlg = el("dlg-yardim");
   if (dlg.open) return;
+  yakala.eylem = null;
   yardimCiz();
+  yardimNotu("", "");
   dlg.showModal();
 }
 
@@ -2821,6 +2931,12 @@ function modalKontroluMu(hedef) {
 
 el("btn-yardim").addEventListener("click", yardimAc);
 el("btn-yardim-kapat").addEventListener("click", () => el("dlg-yardim").close());
+el("btn-kisayol-varsayilan").addEventListener("click", kisayollariVarsayilanaDondur);
+el("dlg-yardim").addEventListener("cancel", (ev) => {
+  /* Yakala-modunda Esc katmanı KAPATMAZ (yakalamayı `yakalaTusu` bırakır). */
+  if (yakala.eylem !== null) ev.preventDefault();
+});
+el("dlg-yardim").addEventListener("close", () => { yakala.eylem = null; });
 el("dlg-yardim").addEventListener("click", (ev) => {
   /* Perdeye (diyalog kutusunun DIŞINA) tıklamak kapatır: olayın hedefi
      diyaloğun kendisidir, içeriği değil. */

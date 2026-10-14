@@ -1371,4 +1371,31 @@ h2.ust-bosluk { margin-top: 20px; }
   text-align: center;
   color: var(--metin);
 }
-.yardim-alt { color: var(--soluk); font-size: 12px; margin: 14px 0 0; }
+.yardim-alt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  color: var(--soluk);
+  font-size: 12px;
+  margin: 14px 0 0;
+}
+
+.yardim-alt .baglanti-dugme { margin-left: auto; font-size: 12px; }
+
+/* Yeniden atama (v1.4.0 Dalga 5). Düğme `dt`nin içindedir (`dd` metni
+   kayıttaki açıklamayla birebir kalsın — drift kilidi), satırın sağına
+   yaslanır. */
+.yardim-satir { position: relative; padding-right: 96px; }
+.yardim-ata {
+  position: absolute;
+  right: 0;
+  top: 2px;
+  font-size: 12px;
+}
+.yardim-satir.degisti kbd { border-color: var(--vurgu); }
+.yardim-satir.atanmamis kbd { color: var(--soluk); }
+.yardim-satir.yakaliyor kbd { border-color: var(--sari, #d29922); color: var(--metin); }
+.yardim-not { font-size: 13px; margin: 10px 0 0; color: var(--soluk); }
+.yardim-not:empty { display: none; }
+.yardim-not.hata { color: var(--kirmizi); }

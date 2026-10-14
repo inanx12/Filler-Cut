@@ -6,8 +6,14 @@
  * katmanı (?) da bu diziden ÜRETİLİR — elle yazılmış ikinci bir liste
  * zamanla kayıttan ayrışırdı (kilit: `tests/test_web_klavye_statik.py`).
  *
- * Kullanıcıya açık yeniden atama YOK (bilinçli): kayıt bir kod sabitidir,
- * config'e ya da depolamaya yazılmaz.
+ * YENİDEN ATAMA (v1.4.0 Dalga 5): `KISAYOLLAR` VARSAYILAN kayıttır ve kod
+ * sabiti olarak kalır. Kullanıcının değiştirdikleri sunucuda
+ * (`config.json` → `ui.kisayollar = {eylem: tuş | null}`) yalnız FARK olarak
+ * durur; yükleme anında `kisayolBirlestir` ikisini `ETKIN_KISAYOLLAR`da
+ * birleştirir. `kisayolBul` ve yardım katmanı etkin kaydı okur — tuş
+ * değişse de disiplin (odak, modal, tekrar sınıfı) EYLEMİ izler, tuşu
+ * değil: `tekrar` alanı eylemin girdisinde kalır. Esc ve Enter kayıtta
+ * eylem DEĞİLDİR (diyalog kapatma/onay) ve atanamaz.
  *
  * GİRDİ ALANLARI (sıra sabit — statik test kaydı bu sırayla okur):
  *   eylem     `app.js` `EYLEMLER`deki kimlik
@@ -129,6 +135,141 @@ const KISAYOLLAR = [
     grup: "Düzenleme", tekrar: true },
 ];
 
+/* Etkin kayıt = varsayılan + kullanıcı override'ı (`kisayollariUygula`). */
+let ETKIN_KISAYOLLAR = KISAYOLLAR;
+
+function tusAnahtari(t) {
+  /* Dalga 1'in nitelikli anahtarı ("ctrl+kod:KeyK", "tus:,") — çakışma bununla
+     aranır. Sunucu aynı biçimi kullanır (`web/tercihler.tus_anahtari`). */
+  const on = ["ctrl", "alt", "shift"].filter((d) => t[d]).map((d) => d + "+").join("");
+  return t.kod !== undefined ? on + "kod:" + t.kod : on + "tus:" + t.tus;
+}
+
+const KOD_ETIKETI = {
+  Space: "Boşluk", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓",
+  PageUp: "PgUp", PageDown: "PgDn",
+};
+
+function tusEtiketi(t) {
+  /* Yardımda gösterilen ad — varsayılan kaydın etiket diliyle aynı. */
+  let ad = t.tus;
+  if (t.kod !== undefined) {
+    if (/^Key[A-Z]$/.test(t.kod)) ad = t.kod.slice(3);
+    else if (/^Digit[0-9]$/.test(t.kod)) ad = t.kod.slice(5);
+    else if (/^Numpad[0-9]$/.test(t.kod)) ad = "Num " + t.kod.slice(6);
+    else ad = KOD_ETIKETI[t.kod] || t.kod;
+  }
+  return (t.ctrl ? "Ctrl+" : "") + (t.alt ? "Alt+" : "") + (t.shift ? "Shift+" : "") + ad;
+}
+
+const ATANMAMIS = "—";
+
+function kisayolBirlestir(varsayilan, override) {
+  /* Varsayılan kayıt + override → etkin kayıt (saf fonksiyon).
+
+     · override'daki eylem tuşlarını TAMAMEN alır (`null` → atanmamış);
+     · override'da alınmış bir tuş, başka bir eylemin VARSAYILAN tuşlarından
+       düşer — iki eylem aynı tuşu paylaşamaz (çakışmada önceki bağ düşer).
+     Girdiler kopyalanır; `tekrar`, `grup`, `aciklama`, `herAsamada` eylemin
+     kendisinde kalır (disiplin eylemi izler). */
+  const fark = override || {};
+  const alinan = new Set();
+  for (const t of Object.values(fark)) if (t) alinan.add(tusAnahtari(t));
+  return varsayilan.map((g) => {
+    if (Object.prototype.hasOwnProperty.call(fark, g.eylem)) {
+      const t = fark[g.eylem];
+      return { ...g, tuslar: t ? [t] : [], etiket: t ? tusEtiketi(t) : ATANMAMIS,
+               degisti: true };
+    }
+    const kalan = g.tuslar.filter((t) => !alinan.has(tusAnahtari(t)));
+    if (kalan.length === g.tuslar.length) return g;
+    return { ...g, tuslar: kalan, etiket: kalan.length ? tusEtiketi(kalan[0]) : ATANMAMIS,
+             degisti: true };
+  });
+}
+
+function kisayollariUygula(override) {
+  ETKIN_KISAYOLLAR = kisayolBirlestir(KISAYOLLAR, override);
+}
+
+function atamaHesapla(override, eylem, tus) {
+  /* `eylem` ← `tus` atamasından sonraki override haritası.
+
+     ÇAKIŞMA KURALI (kilitli karar): tuş başka bir eylemdeyse O BAĞ DÜŞER —
+     takas YOK. Önceki sahip, tuştan başka tuşu kalmadıysa atanmamış (`null`)
+     olur; birden çok tuşu varsa kalanla devam eder (ör. `+`/`=`). Düşen
+     bağ AÇIKÇA yazılır: tuş sonradan yeniden boşalsa da kendiliğinden geri
+     dönmez. Tuş eylemin kendi varsayılanıysa fark saklanmaz. */
+  const yeni = { ...(override || {}) };
+  const anahtar = tusAnahtari(tus);
+  for (const g of kisayolBirlestir(KISAYOLLAR, override)) {
+    if (g.eylem === eylem) continue;
+    const kalan = g.tuslar.filter((t) => tusAnahtari(t) !== anahtar);
+    if (kalan.length === g.tuslar.length) continue;
+    yeni[g.eylem] = kalan.length ? kalan[0] : null;
+  }
+  const varsayilan = KISAYOLLAR.find((g) => g.eylem === eylem);
+  if (varsayilan.tuslar.length === 1 && tusAnahtari(varsayilan.tuslar[0]) === anahtar) {
+    delete yeni[eylem];
+  } else {
+    yeni[eylem] = tus;
+  }
+  return yeni;
+}
+
+/* Yakalama: fiziksel tuş olarak atanabilenler. Sunucu aynı listeyi doğrular
+   (`web/tercihler._KOD`); Esc ve Enter listede YOK. */
+const KOD_DESENI = /^Key[A-Z]$|^Digit[0-9]$|^Numpad[0-9]$|^F[1-9]$|^F1[0-2]$/;
+const KOD_OZEL = [
+  "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "Delete",
+  "Backspace", "Insert", "Home", "End", "PageUp", "PageDown",
+];
+
+function kodAtanabilir(kod) {
+  return KOD_DESENI.test(kod) || KOD_OZEL.includes(kod);
+}
+
+function olaydanTus(ev) {
+  /* Yakalanan tuş olayı → kayıt tanımı; atanamazsa `null`. Dalga 1 kuralı:
+     harf ve özel tuş FİZİKSEL (`kod`), noktalama ÜRETİLEN karakter (`tus`).
+     Değiştiriciler `kisayolBul`daki gibi okunur (AltGr ≠ Ctrl+Alt). */
+  if (ev.metaKey) return null;
+  const altgr = typeof ev.getModifierState === "function" &&
+    ev.getModifierState("AltGraph");
+  const ctrl = !altgr && ev.ctrlKey;
+  const alt = !altgr && ev.altKey;
+  let t;
+  if (!altgr && kodAtanabilir(ev.code)) {
+    t = { kod: ev.code };
+  } else if (typeof ev.key === "string" && ev.key.length === 1 &&
+             ev.key.trim() !== "" && !/^[A-Za-z0-9]$/.test(ev.key)) {
+    t = { tus: ev.key };
+  } else {
+    return null;
+  }
+  if (ctrl) t.ctrl = true;
+  if (alt) t.alt = true;
+  if ((ctrl || alt) && ev.shiftKey) t.shift = true;
+  return t;
+}
+
+const DEGISTIRICI_TUSLAR = ["Shift", "Control", "Alt", "AltGraph", "Meta"];
+
+function yakalamaKarari(ev) {
+  /* Yakala-modundaki tuş olayının ANLAMI — tuş yorumu kayıt dosyasında kalır
+     (`app.js` tuş karşılaştırmaz). Dönen `tur`:
+       bekle     tek başına değiştirici ya da tekrar olayı: yok sayılır
+       iptal     Esc — yakalama biter, atama yok
+       sabit     Enter — sabit kabuk tuşu, atanamaz
+       atanamaz  kayıt diline çevrilemeyen tuş (Tab, CapsLock, Meta…)
+       tus       atanacak tanım (`tus` alanında) */
+  if (ev.repeat || DEGISTIRICI_TUSLAR.includes(ev.key)) return { tur: "bekle" };
+  if (ev.key === "Escape") return { tur: "iptal" };
+  if (ev.key === "Enter") return { tur: "sabit" };
+  const tus = olaydanTus(ev);
+  return tus === null ? { tur: "atanamaz" } : { tur: "tus", tus };
+}
+
 function kisayolBul(ev) {
   /* Olayın sahiplenilen bir kısayol olup olmadığını söyler; değilse `null`
      — tarayıcı varsayılanı AYNEN çalışır.
@@ -147,7 +288,7 @@ function kisayolBul(ev) {
   if (ev.metaKey) return null;
   const ctrl = !altgr && ev.ctrlKey;
   const alt = !altgr && ev.altKey;
-  for (const girdi of KISAYOLLAR) {
+  for (const girdi of ETKIN_KISAYOLLAR) {
     for (const t of girdi.tuslar) {
       if (!!t.ctrl !== ctrl || !!t.alt !== alt) continue;
       if ((t.ctrl || t.alt) && !!t.shift !== ev.shiftKey) continue;

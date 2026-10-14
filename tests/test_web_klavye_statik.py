@@ -514,7 +514,13 @@ class TestYardimDriftKilidi:
         js = _oku("app.js")
         bas = js.index("function yardimCiz")
         govde = js[bas : js.index("\n}", bas)]
-        assert "of KISAYOLLAR" in govde
+        # v1.4.0 Dalga 5: katman ETKİN kaydı döker (varsayılan + kullanıcı
+        # override'ı). Etkin kayıt yalnız `KISAYOLLAR`dan birleştirilerek
+        # üretilir — elle yazılmış ikinci bir liste hâlâ yok.
+        assert "of ETKIN_KISAYOLLAR" in govde
+        km = _oku("keymap.js")
+        atamalar = re.findall(r"ETKIN_KISAYOLLAR = ([^;]+);", km)
+        assert atamalar == ["KISAYOLLAR", "kisayolBirlestir(KISAYOLLAR, override)"], atamalar
         for alan in ("k.etiket", "k.aciklama", "k.grup", "k.eylem"):
             assert alan in govde, alan
 
