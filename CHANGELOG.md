@@ -67,6 +67,33 @@ Uygulama yeniden başladıktan sonra açık kalmış eski bir tarayıcı sekmesi
 **Korumadığı şey:** kendi Windows hesabınız altında çalışan diğer programlar.
 Onlar dosyalarınıza zaten doğrudan erişebilir.
 
+### Eklendi — arayüz cilası
+
+- **Son videolar.** Başlangıç ekranında, bırakma alanının hemen altında son
+  açtığınız 5 video durur; tıklayınca o dosyayla yeni bir iş başlar. Aynı
+  video tekrar açılınca listenin başına geçer (kopya olmaz). Dosya artık
+  yoksa hata gösterilir ve kayıt listeden kalkar. "Listeyi temizle" hepsini
+  siler.
+- **Klavye kısayolları yeniden atanabilir.** `?` yardım katmanında her
+  satırın yanında "Yeniden ata" var: tıklayın, yeni tuşa basın. Tuş başka
+  bir eylemdeyse oradan düşer (o eylem atanmamış kalır — takas yapılmaz).
+  Esc yakalamayı iptal eder; Esc ve Enter sabittir, atanamaz. "Varsayılana
+  dön" tüm değişiklikleri geri alır. Yeni tuşlar eski tuşlarla aynı
+  kurallara uyar (metin kutusunda, açık bir pencerede çalışmaz; durum
+  çeviren tuş basılı tutulunca tekrar etmez).
+- **Kesim kenarları daha belirgin.** Zaman çizelgesinde her kesimin kenarında
+  koyu bir çubuk, üstüne gelince kenara oturan bir tutamaç var. Yalnız
+  görünüm değişti: sürükleme alanı ve davranışı aynı.
+- **Kendi penceresinde tarayıcıya özgü ipuçları gizli.** Örneğin kapanış
+  ekranındaki "Bu sekmeyi kapatabilirsiniz" yalnız tarayıcı modunda görünür.
+
+**Ayar dosyası:** son videolar ve yeniden atanan kısayollar
+`%APPDATA%\fillercut\config.json` içindeki `"ui"` bölümüne
+(`son_videolar`, `kisayollar`) yazılır. Dosyadaki öteki ayarlara (izinli
+kökler, kurulum yolları) dokunulmaz; yazım atomiktir (yarıda kesilen bir
+yazım dosyayı bozamaz). Dosya bozuksa tercih kaydedilmez, üzerine de
+yazılmaz.
+
 ### Düzeltildi
 
 - **"Kapat"tan ya da pencerenin X'inden sonra uygulama artık arka planda

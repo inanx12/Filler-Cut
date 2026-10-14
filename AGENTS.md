@@ -172,6 +172,132 @@ kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
 ## Mevcut Durum (2026-10-14)
 
+**v1.4.0 DALGA 5 TAMAMLANDI (2026-10-14) — polish (son dalga).** Sürüm bump
+YOK (CHANGELOG başlığı "Yayımlanmamış" KALDI), push/tag/release YOK.
+Frameless özel çerçeve bu dalgada YOK (v1.5'e park edildi, koduna
+dokunulmadı). Pipeline/plan/render/dışa aktarım koduna dokunulmadı; parite
+her commit'te 8/8.
+
+**1. Kesim kenarı affordance — SALT GÖRSEL.** `.tutamac::before` kenarda 3 px
+koyu çubuk (her zaman), `.tutamac::after` blok hover'ında kenar çizgisinin
+ÜSTÜNE oturan 7 px tutamaç (dışa 3 px taşar). İkisi de `pointer-events:
+none`, z-index YOK: isabet alanı `.tutamac`ın kendi 9 px kutusu — DEĞİŞMEDİ;
+taşan 3 px tıklamayı alttaki katmana bırakır. Playhead (`--tl-kat-playhead`)
+ve bıçak çizgileri (DOM'da bloklardan sonra) üstte. Yalnız `style.css`;
+`kenarItele`/quantize/min_keep'e dokunulmadı. Sürükleme kilitleri 11+6
+aynen yeşil; yeni kilit isabet haritasını ±14 px PİKSEL PİKSEL tarar ve
+z-sırasını gerçek ekran pikselinden okur (PNG elle çözülür — repo PIL'e
+bağımlı değil).
+
+**2. Tercih ucu (`web/tercihler.py`).** `GET /api/tercihler` →
+`{kisayollar, son_videolar}`; `POST` YALNIZ `kisayollar` (sözlük) ve
+`son_videolar_temizle` (true) — başka her anahtar, boş ya da JSON olmayan
+gövde **400** (gövde elle ayrıştırılır: pydantic `extra="forbid"` 422
+verirdi). İki uç `/api/*` altında: kapı token'ı uygular, MUAFİYET LİSTESİ
+BÜYÜMEDİ; `test_web_guvenlik` rota keşfi kilidi yeni ucu YAKALADI ve router
+matrise eklendi (token/Host/Origin matrisleri artık bu iki ucu da sınar).
+`izinli_kokler` bu uçtan yazılamaz (400) — "kökler yalnız yerel config"
+invariant'ı aynen.
+
+**Config yazımı tek yol: `yollar.ayar_guncelle`.** Tek kilit, oku →
+değiştir → ATOMİK yaz (aynı dizinde geçici dosya + fsync + `os.replace`;
+hata yolunda geçici silinir). `kurulum_yaz` da buradan geçer (kopya yok) —
+sihirbaz yazımı da artık atomik. Bozuk dosya: sihirbaz EZER (v1.2 davranışı,
+`bozugu_ez=True`), tercih yazımı EZMEZ (409 — kullanıcının elle yazdığı
+içerik). `_ayar_ham_oku` → `ayar_ham_oku` (modül dışı kullanım).
+
+**3. Son videolar.** `ui.son_videolar = [{ad, yol, son}]` (son = epoch sn).
+Kayıt İŞ OLUŞURKEN sunucuda düşer (`jobs.job_baslat`; seçim/önizleme
+kaydetmez), en fazla 5, yeni başa, aynı yol tekil (normcase). Yazılamazsa
+sessiz geçer (iş düşmez). Dosyası kaybolan kayıt: tık seçim kapısına
+(`POST /api/fs/sec`) gider; kapı "dosya YOK" diye reddederse kaydı listeden
+düşürür (var olup reddedilen — hapis dışı, uzantı — kalır), istemci listeyi
+tazeler. Arayüz: bırakma alanının altında satır + "Listeyi temizle".
+
+**4. Yeniden atanabilir tuşlar.** `KISAYOLLAR` VARSAYILAN kayıt (kod sabiti);
+`ui.kisayollar = {eylem: tuş | null}` yalnız fark. Tuş tanımı Dalga 1'in
+nesnesi (`{kod}` | `{tus}` + ctrl/alt/shift) — YENİ ayrıştırıcı yok, çakışma
+Dalga 1 nitelikli anahtarıyla (`"ctrl+kod:KeyK"`). `ETKIN_KISAYOLLAR =
+kisayolBirlestir(KISAYOLLAR, override)`; `kisayolBul` ve `?` katmanı etkin
+kaydı okur. Disiplin EYLEMİ izler (`tekrar`/`herAsamada` eylem girdisinde).
+Çakışma: önceki bağ DÜŞER, takas yok, düşen bağ AÇIKÇA `null` yazılır (tuş
+sonra boşalsa da kendiliğinden geri dönmez). Yakala-modu tek keydown
+dinleyicisinin EN BAŞINDA; tuş yorumu (`yakalamaKarari`) `keymap.js`te —
+`app.js` tuş karşılaştırmaz kilidi aynen. Esc/Enter: sunucu 400 + istemci
+reddeder + katmanda satırları YOK.
+
+**5. Native sadeleştirme.** `<html class="native">` — `window.pywebview`
+VARLIĞIYLA (köprü API'si gelmemiş olsa da), `pywebviewready`de yeniden
+bakılır. `.native .yalniz-tarayici { display: none }`. Sunucu değişikliği
+YOK. ENVANTER (kilitli, `test_web_native_sade.py::ENVANTER`):
+
+| Öğe | Gizlendi mi | Gerekçe |
+|---|---|---|
+| Kapanış perdesi "Bu sekmeyi kapatabilirsiniz." | EVET (`.yalniz-tarayici`) | Native pencerede sekme yok; "Kapat" pencereyi kendisi kapatır |
+| Bırakma reddi "(ya da Filler-Cut'ı kendi penceresinde açın)" | Değişiklik yok | Zaten JS'te yalnız tarayıcı dalında (`nativeMi()`); native'de hiç üretilmez |
+| "Tarayıcı modunda dosya seçici aşağıdaki klasör listesidir." | Değişiklik yok | Aynı: yalnız tarayıcı dalında |
+| "Oturum doğrulanamadı — sayfayı yenileyin" | Değişiklik yok | Sunucu mesajı (sunucu değişikliği YOK); native'de pencere ve sunucu aynı ömürde, durum oluşmaz |
+| "Kapat", dosya seç, gezgin, yardım… | HAYIR | İşlevsel — kilit: native'de görünür |
+
+Arayüzde tarayıcıya özgü STATİK ipucu bu kadar az; geri kalanı zaten
+`nativeMi()` dallarında.
+
+**KARAR — XML sol kenarı: KURAL A (İnan, 2026-10-14).** *Çerçeveyi kesen
+dilimde kare KORUNUR; kaçış = nudge.* Dalga 2'nin açık bulgusu kapandı:
+blade/Delete sol kenarında kare başı tam ms değilse XML o kareyi tutar
+(v1.2.1 "konuşmadan tek kare eksilmez" kuralı) — davranış AYNEN, kilitler
+(`test_export_manuel.py::TestXmlKareKesin`) aynen. Kareyi kesinlikle
+silmek isteyen kenarı Alt+, / Alt+. ile bir kare iter.
+
+**BACKLOG (1.4.0 SONRASI):**
+- **Yavaş açılış — ÖLÇÜMLE girilecek, tahminle kod değişikliği YOK.** Üç zaman
+  damgası (süreç başı → sunucu dinliyor → pencere göründü) + `python -X
+  importtime` profili; düzeltme ancak ölçüm neyin pahalı olduğunu
+  gösterdikten sonra.
+- **Frameless özel çerçeve → v1.5 adayı.** Bu dalgada park edildi.
+
+**BİLİNÇLİ SAPMALAR / YORUMLAR (İnan onayına açık):** (1) "diğer bölümler
+byte-byte korunur" = DEĞERLER ve kanonik serileştirme birebir; elle farklı
+biçimlendirilmiş (girinti/sıra) bir `config.json` yeniden biçimlenir —
+`kurulum_yaz` v1.2'den beri aynısını yapıyordu. (2) Kayıp dosya kaydı ayrı
+bir POST anahtarıyla değil seçim kapısında düşer (dar uç iki anahtarda
+kaldı). (3) Çok tuşlu eylemde (`zoom-yakin`: `+`/`=`) tuşlardan biri
+başkasına verilirse eylem atanmamış OLMAZ, kalan tuşla devam eder. (4)
+`test_js_kayittan_uretir` uyarlandı (etkin kaydı arar + etkin kaydın yalnız
+`KISAYOLLAR`dan üretildiğini doğrular). (5) `test_web_guvenlik` rota
+matrisine `tercihler` eklendi — kilidin istediği tam olarak buydu.
+
+**Tuzak — dialog `cancel` ve Esc.** Yakala-modunda Esc'nin sıfırlaması bir
+SONRAKİ göreve ertelenir: diyaloğun `cancel`ı keydown'dan hemen sonra gelir
+ve yakalamanın sürdüğünü görüp kapanmayı engellemelidir; sıfırlama aynı
+görevde yapılırsa katman kapanır.
+
+**Tuzak — ölü çağrı kilidi regex içini okur.** `TestOluCagriYok` JS'te
+`Ad(` desenini çağrı sayar: regex literal'indeki `Arrow(Left|…)` grubu
+"tanımsız fonksiyon" diye düştü. Gruplu regex yerine düz liste kullanıldı.
+
+**TEST DÖKÜMÜ.** Koleksiyon 2520 → **2670** (+150 = 132 yeni test + tercih
+uçlarının güvenlik matrisine giren 18 vakası). Son tam koşu **2664 passed /
+6 skipped**, ruff + mypy temiz, parite 8/8. Red-first (eski koda karşı):
+affordance 7, tercih ucu 59 (modül yokken import hatası), son videolar 6,
+kısayollar 34/34, native 6 kırmızı; yeşil kalanlar regresyon kilitleri
+(isabet haritası, token 403, işlevsel öğe görünür vb.).
+
+**İNAN'IN KURULU EXE'DE ELLE DOĞRULAYACAKLARI:** (1) kesim kenarında koyu
+çubuk, üstüne gelince kenara oturan tutamaç; kenar sürükleme hissi aynı;
+playhead ve bıçak tutamacın üstünde. (2) Bir video analiz et → "Yeni video"
+→ bırakma alanının altında satırda görünür; 6 farklı video sonrası 5 kalır;
+aynı videoyu tekrar açınca başa geçer, kopya olmaz; dosyayı Explorer'dan
+sil → satıra tıkla → hata + kayıt kalkar; "Listeyi temizle". (3) `?` →
+"Yeniden ata" (Mıknatıs) → Q → M artık bir şey yapmaz, Q mıknatısı çevirir;
+uygulamayı kapat-aç → Q kalıcı. (4) Yakalama sırasında Esc → katman AÇIK
+kalır; ikinci Esc kapatır. (5) Yakalama sırasında Enter → "Enter sabittir"
+uyarısı. (6) Yasla'ya M ata → Mıknatıs satırı "—", not "atanmamış" der.
+(7) "Varsayılana dön" → hepsi geri. (8) Q'yu basılı tut → mıknatıs bir kez
+çevrilir; zoom'u W'ye ata, basılı tut → sürekli yakınlaşır. (9) Native
+pencerede "Kapat" → perdede "sekme" cümlesi yok; `--no-native` tarayıcıda
+var.
+
 **v1.4.0 DALGA 4 TAMAMLANDI (2026-10-14) — KI-18 kapanış yarışı.** Tek konu:
 "Kapat"/X sonrası süreç ÖLMELİ. Sürüm bump YOK, push/tag/release YOK.
 Değişen: `cli._sunucu_kur` (uvicorn ayarına tek parametre) + yeni sabit
@@ -572,6 +698,8 @@ tek kare eksilmez", v1.2.1) ve Dalga 2'de AYNEN geçerlidir; iki durum da
 kilitli (`test_export_manuel.py::TestXmlKareKesin`). Alternatif: blade'in
 sol kenar rolünde `floor(n·T)` kullanmak XML'de de kare-kesin olurdu ama
 playhead o ms'de bir ÖNCEKİ kareyi gösterir. Karar verilmedi, kayda geçti.
+*Karar (2026-10-14, Dalga 5): KURAL A — çerçeveyi kesen dilimde kare
+korunur, kaçış = nudge (üstteki Dalga 5 kaydı).*
 
 **"OTOMATİK PLANA DÖN" + YENİDEN ANALİZ UYARISI.** Düğme sağ panelin
 analiz_tamam özetinde; düzenleme yokken pasif. Onay diyaloğunun İLK düğmesi
@@ -2856,7 +2984,18 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 |---|---|
 | `cli.py` — `_sunucu_kur`: `timeout_graceful_shutdown=UI_KAPANIS_AF_SN` (3 sn); aday değerlendirmesi commit mesajında + CHANGELOG "Yayımlanmamış" Düzeltildi | `1157200` |
 | `tests/test_ui_kapanis_yarisi.py` — deterministik takılı-sayaç kilidi + sözleşme (normal yol, 2,1 sn bandı, sert çıkış yok) + stres 16×12 (10 yeni) | `d9627e1` |
-| AGENTS — Dalga 4 kaydı (saha kanıtı, aday seçimi, stres sınırı) + KNOWN_ISSUES KI-18 Çözüldü + Dalga 1 izleme notu kapanışı | bu commit |
+| AGENTS — Dalga 4 kaydı (saha kanıtı, aday seçimi, stres sınırı) + KNOWN_ISSUES KI-18 Çözüldü + Dalga 1 izleme notu kapanışı | `d904acd` |
+
+**v1.4.0 Dalga 5 (polish)**
+
+| Modül | Commit |
+|---|---|
+| `style.css` — kesim kenarı affordance (koyu çubuk + hover tutamaç, salt görsel); `test_web_kenar_affordance.py` (14) | `b8b1b0e` |
+| `web/tercihler.py` (yeni) + `kurulum/yollar.ayar_guncelle` (atomik, ortak yol) + `jobs`/`fs` kancaları; `test_web_tercihler.py` (63) + güvenlik matrisi | `c9141b6` |
+| `static/` — son videolar satırı; `test_web_son_videolar.py` (7) | `794f056` |
+| `static/keymap.js` + `app.js` — yeniden atanabilir tuşlar, yakala-modu; `test_web_kisayol_atama.py` (35) + drift kilidi uyarlaması | `b649964` |
+| `static/` — native modda tarayıcı sadeleştirme; `test_web_native_sade.py` (13) | `f3932c5` |
+| AGENTS — Dalga 5 kaydı + XML kural A + backlog (yavaş açılış, frameless v1.5) + CHANGELOG | bu commit |
 
 **v1.3.2 (config.json şablonu + playhead akıcılığı)**
 
