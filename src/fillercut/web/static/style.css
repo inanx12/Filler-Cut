@@ -337,6 +337,12 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   font-size: 14px;
 }
 
+/* Native modda (pywebview penceresi) tarayıcıya özgü ipuçları gizlenir —
+   `<html class="native">` app.js'te `window.pywebview` varlığıyla basılır.
+   YALNIZ ipucu metinleri bu sınıfı taşır; işlevsel hiçbir öğe değil
+   (envanter: AGENTS Dalga 5, kilit `tests/test_web_native_sade.py`). */
+.native .yalniz-tarayici { display: none; }
+
 /* ── sürükle-bırak alanı ──────────────────────────────────────────────── */
 
 .dropzone {

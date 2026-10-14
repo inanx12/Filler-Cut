@@ -472,6 +472,18 @@ function nativeMi() {
     typeof window.pywebview.api === "object" && window.pywebview.api !== null;
 }
 
+/* Native modda tarayıcı sadeleştirme (v1.4.0 Dalga 5). `<html>`e `native`
+   sınıfı basılır; `.yalniz-tarayici` öğeleri CSS ile gizlenir. Tespit
+   `window.pywebview`in VARLIĞIDIR (köprü API'si henüz bağlanmamış olsa da
+   pencere native'dir); köprü sonradan gelirse `pywebviewready` yeniden
+   bakar. Sunucu tarafında değişiklik YOK. */
+function nativeSinifiUygula() {
+  const native = typeof window.pywebview === "object" && window.pywebview !== null;
+  document.documentElement.classList.toggle("native", native);
+}
+nativeSinifiUygula();
+window.addEventListener("pywebviewready", nativeSinifiUygula);
+
 function dropNotu(metin, sinif) {
   const not = el("dropzone-not");
   not.textContent = metin || "";
@@ -3368,9 +3380,11 @@ async function kapat() {
     /* Bağlantı kopması BAŞARIDIR: sunucu cevabı gönderdikten sonra kapanır,
      * bazı tarayıcılar bunu ağ hatası olarak raporlar. */
   }
+  /* "Bu sekmeyi kapatabilirsiniz" perdede AYRI bir `.yalniz-tarayici`
+     satırıdır — native pencerede sekme yoktur. */
   el("kapandi-not").textContent = kosuyor
-    ? "Koşan iş bitince süreç tamamen kapanacak. Bu sekmeyi kapatabilirsiniz."
-    : "Bu sekmeyi kapatabilirsiniz.";
+    ? "Koşan iş bitince süreç tamamen kapanacak."
+    : "";
   el("kapandi-perde").classList.remove("gizli");
 }
 
