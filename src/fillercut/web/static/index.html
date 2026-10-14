@@ -137,6 +137,13 @@
           </p>
           <p id="dropzone-not" class="dropzone-not" role="status"></p>
         </div>
+        <!-- Son videolar (v1.4.0 Dalga 5): kayıt SUNUCUDA, iş oluşurken düşer
+             (`config.json` → `ui.son_videolar`, en fazla 5). Boşken gizli. -->
+        <div id="son-videolar" class="son-videolar gizli">
+          <span class="son-videolar-baslik">Son videolar</span>
+          <ul id="son-videolar-liste" class="son-videolar-liste" aria-label="Son videolar"></ul>
+          <button id="btn-son-temizle" class="baglanti-dugme son-temizle" type="button">Listeyi temizle</button>
+        </div>
         <p class="karsilama">
           Bir video seçin; Filler-Cut konuşmadaki tamamlayıcı sözcükleri
           (ııı, eee…) ve gereksiz sessizlikleri bulup kesim planı çıkarsın.

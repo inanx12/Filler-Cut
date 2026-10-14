@@ -519,7 +519,8 @@ function klasorMu(aktarim) {
 }
 
 async function yoluSec(yol) {
-  /* Tek kapı: sürükle-bırak da native diyalog da buradan geçer. */
+  /* Tek kapı: sürükle-bırak, native diyalog ve son videolar buradan geçer.
+     Seçim kabul edildiyse `true` döner. */
   let cevap;
   try {
     cevap = await api("/api/fs/sec", {
@@ -529,15 +530,93 @@ async function yoluSec(yol) {
     });
   } catch (_) {
     dropNotu("Sunucuya ulaşılamıyor — dosya doğrulanamadı.", "hata");
-    return;
+    return false;
   }
   if (!cevap.ok) {
     dropNotu(await apiHatasi(cevap), "hata");
-    return;
+    return false;
   }
   const girdi = await cevap.json();
   dropNotu("Seçildi: " + girdi.ad, "bilgi");
   medyaYukle(girdi);
+  return true;
+}
+
+/* ── tercihler: son videolar (+ kısayollar) — v1.4.0 Dalga 5 ─────────────
+ *
+ * Kayıt SUNUCUDADIR (`config.json` → `ui`): son videolar İŞ OLUŞURKEN
+ * düşer; istemci yalnız okur (`GET /api/tercihler`) ve listeyi temizler.
+ * Yazma ucu dardır: yalnız `kisayollar` ve `son_videolar_temizle`. Uç yoksa
+ * ya da hata verirse arayüz varsayılanlarla devam eder (tercih bir
+ * kolaylıktır, açılışı durdurmaz). */
+const tercih = { sonVideolar: [] };
+
+async function tercihleriYukle() {
+  let cevap;
+  try {
+    cevap = await api("/api/tercihler");
+  } catch (_) {
+    return;
+  }
+  if (!cevap.ok) return;
+  tercihleriUygula(await cevap.json());
+}
+
+function tercihleriUygula(veri) {
+  tercih.sonVideolar = Array.isArray(veri.son_videolar) ? veri.son_videolar : [];
+  sonVideolariCiz();
+}
+
+async function tercihGonder(govde) {
+  /* Dar yazma ucu; başarıda sunucunun döndürdüğü GÜNCEL hâl uygulanır.
+     Hata metni (Türkçe `detail`) çağırana döner, başarıda `null`. */
+  let cevap;
+  try {
+    cevap = await api("/api/tercihler", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(govde),
+    });
+  } catch (_) {
+    return "Sunucuya ulaşılamıyor — tercih kaydedilemedi.";
+  }
+  if (!cevap.ok) return await apiHatasi(cevap);
+  tercihleriUygula(await cevap.json());
+  return null;
+}
+
+function sonVideolariCiz() {
+  const liste = el("son-videolar-liste");
+  liste.textContent = "";
+  for (const g of tercih.sonVideolar) {
+    const li = document.createElement("li");
+    const dugme = document.createElement("button");
+    dugme.type = "button";
+    dugme.className = "son-video";
+    dugme.textContent = g.ad;
+    dugme.title = g.yol;
+    dugme.dataset.yol = g.yol;
+    dugme.addEventListener("click", () => sonVideoAc(g));
+    li.appendChild(dugme);
+    liste.appendChild(li);
+  }
+  el("son-videolar").classList.toggle("gizli", tercih.sonVideolar.length === 0);
+}
+
+async function sonVideoAc(g) {
+  /* Tık = o dosyayla YENİ iş: seçim kapısından geçer, medya yüklenir. Dosya
+     artık yoksa kapı reddeder (hata `dropzone-not`ta görünür) ve kaydı
+     sunucuda listeden düşürür — liste tazelenir. */
+  if (!birakmaKabulEdilirMi()) {
+    birakmaReddet();
+    return;
+  }
+  if (!(await yoluSec(g.yol))) await tercihleriYukle();
+}
+
+async function sonVideolariTemizle() {
+  const hata = await tercihGonder({ son_videolar_temizle: true });
+  if (hata) dropNotu(hata, "hata");
 }
 
 /* pywebview (Python) bırakılan dosyanın TAM YOLUNU buraya teslim eder. */
@@ -2939,6 +3018,7 @@ function yeniIs() {
   dropNotu("", "");
   zcSifirla();
   listeyiCiz();
+  tercihleriYukle(); // biten işin videosu artık listenin başında
   asamaAyarla("bos");
   gezginYukle(durum.yol); // listeyi tazele (yeni _temiz.mp4 görünsün)
 }
@@ -3192,6 +3272,7 @@ el("btn-geri-bildirim-hata").addEventListener(
   "click", () => geriBildirim("geri-bildirim-not-hata")
 );
 
+el("btn-son-temizle").addEventListener("click", sonVideolariTemizle);
 el("btn-kurulum-basla").addEventListener("click", kurulumBasla);
 el("btn-kurulum-iptal").addEventListener("click", kurulumIptal);
 el("kurulum-model").addEventListener("change", () => {
@@ -3202,5 +3283,6 @@ el("kurulum-model").addEventListener("change", () => {
 for (const tanim of AYIRICILAR) ayiriciKur(tanim); // panel ayırıcıları (kalıcı)
 dropzoneKur();     // sürükle-bırak + dosya seçici (native/tarayıcı)
 gezginYukle(null); // kök: sunucudaki ev dizini
+tercihleriYukle(); // son videolar (+ yeniden atanmış kısayollar)
 kurulumBaslat();   // kurulum eksikse sihirbaz ekranı; değilse hiç görünmez
 asamaAyarla("bos");
