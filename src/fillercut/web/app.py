@@ -32,7 +32,7 @@ from starlette.background import BackgroundTask
 from fillercut import __version__
 from fillercut.config import Config
 from fillercut.pipeline import run as pipeline_run
-from fillercut.web import fs, geri_bildirim, guvenlik, jobs
+from fillercut.web import fs, geri_bildirim, guvenlik, jobs, tercihler
 from fillercut.web import kurulum as kurulum_mod
 from fillercut.web import medya as medya_mod
 from fillercut.web.jobs import Job, JobKayit, JobOzet, Kosucu
@@ -233,6 +233,7 @@ def create_app(
     app.include_router(medya_mod.router)
     app.include_router(kurulum_mod.router)
     app.include_router(geri_bildirim.router)
+    app.include_router(tercihler.router)
 
     yer_tutucu = f'<meta name="{guvenlik.OTURUM_META}" content="">'
 

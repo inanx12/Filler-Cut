@@ -28,10 +28,14 @@ v0.3'ten beri ``whisper-cli`` PATH'ten gelebiliyordu, o kurulum bozulmamalı.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
 import sys
+import tempfile
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -117,7 +121,7 @@ class KurulumAyari:
     model: str = ""
 
 
-def _ayar_ham_oku() -> dict[str, object] | None:
+def ayar_ham_oku() -> dict[str, object] | None:
     """``config.json``'u ham dict olarak okur; yok/bozuk/dict değilse ``None``.
 
     Tek okuma noktası: hem sihirbaz anahtarları hem kullanıcı tercihleri aynı
@@ -141,7 +145,7 @@ def kurulum_oku() -> KurulumAyari | None:
     yazılmadığı için "düzelt" demenin anlamı yok — sihirbaz yeniden koşup
     üstüne yazabilsin diye yok sayılır.
     """
-    ham = _ayar_ham_oku()
+    ham = ayar_ham_oku()
     if ham is None:
         return None
     return KurulumAyari(
@@ -180,7 +184,7 @@ def ui_izinli_kokler_oku(*, dogrula: bool = True) -> list[str]:
         ConfigError: ``dogrula`` iken dosya bozuk ya da şekil yanlış.
     """
     yol = ayar_dosyasi()
-    ham = _ayar_ham_oku()
+    ham = ayar_ham_oku()
     if ham is None:
         if dogrula and yol.exists():
             raise ConfigError(
@@ -227,21 +231,83 @@ def kurulum_yaz(*, binary: str | None = None, model: str | None = None) -> None:
     # Bilinmeyen anahtarlar KORUNUR: v1.3.1'den beri aynı dosyada kullanıcının
     # kendi yazdığı `"ui"` bölümü de yaşıyor — sıfırdan sözlük yazmak sihirbazın
     # bir sonraki indirmesinde kullanıcının köklerini SESSİZCE uçururdu (kilit:
-    # `TestUiKokleri::test_sihirbaz_yazmasi_ui_bolumunu_KORUR`).
-    ham = _ayar_ham_oku() or {}
-    mevcut = kurulum_oku() or KurulumAyari()
-    yeni = KurulumAyari(
-        binary=mevcut.binary if binary is None else binary,
-        model=mevcut.model if model is None else model,
-    )
-    ayar_dizini().mkdir(parents=True, exist_ok=True)
-    ham.update(
-        {"config_version": AYAR_VERSION, "binary": yeni.binary, "model": yeni.model}
-    )
-    ayar_dosyasi().write_text(
-        json.dumps(ham, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    # `TestUiKokleri::test_sihirbaz_yazmasi_ui_bolumunu_KORUR`). Yazım
+    # `ayar_guncelle`den geçer — arayüz tercihleriyle (v1.4.0 Dalga 5) AYNI yol.
+    def _uygula(ham: dict[str, object]) -> bool:
+        yeni = KurulumAyari(
+            binary=str(ham.get("binary", "")) if binary is None else binary,
+            model=str(ham.get("model", "")) if model is None else model,
+        )
+        ham.update(
+            {"config_version": AYAR_VERSION, "binary": yeni.binary, "model": yeni.model}
+        )
+        return True
+
+    # Bozuk dosya EZİLİR (v1.2'den beri): sihirbaz ayarı kullanıcı yazımı
+    # değildir, sihirbazın yeniden koşup üstüne yazabilmesi gerekir.
+    ayar_guncelle(_uygula, bozugu_ez=True)
+
+
+#: `config.json` yazımları tek kilit altında sıralanır: iş başlatma (son
+#: videolar) ile tercih kaydı aynı anda gelirse biri ötekinin değişikliğini
+#: ezmesin (oku → değiştir → yaz bütün olarak atomiktir).
+_YAZIM_KILIDI = threading.Lock()
+
+
+def _ayar_ham_yaz(ham: dict[str, object]) -> None:
+    """``config.json``u ATOMİK yazar: aynı dizinde geçici dosya + ``os.replace``.
+
+    Yarıda kesilen bir yazım (çökme, disk dolu) eski dosyayı bozamaz: hedefe
+    yalnız TAMAMLANMIŞ dosya taşınır; hata yolunda geçici dosya silinir.
+    Geçici dosya hedefle AYNI dizinde açılır — ``os.replace`` ancak aynı
+    birimde atomiktir (bkz. ``kurulum/indir.py`` notu).
+    """
+    hedef = ayar_dosyasi()
+    hedef.parent.mkdir(parents=True, exist_ok=True)
+    fd, gecici = tempfile.mkstemp(prefix=".config-", suffix=".tmp", dir=hedef.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as dosya:
+            dosya.write(json.dumps(ham, ensure_ascii=False, indent=2) + "\n")
+            dosya.flush()
+            os.fsync(dosya.fileno())
+        os.replace(gecici, hedef)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(gecici)
+        raise
+
+
+def ayar_guncelle(
+    degistir: Callable[[dict[str, object]], bool], *, bozugu_ez: bool = False
+) -> None:
+    """``config.json``u oku → ``degistir`` → atomik yaz; TEK yazım yolu.
+
+    ``degistir`` sözlüğü yerinde değiştirir ve yazılması gerekip
+    gerekmediğini döner (``False`` → dosyaya hiç dokunulmaz). Dosyadaki
+    bilinmeyen/öteki bölümler aynen kalır.
+
+    Args:
+        bozugu_ez: Dosya VAR ama okunamıyor/JSON değilse — ``True`` (sihirbaz)
+            boş sözlükten başlar; ``False`` (kullanıcı tercihleri)
+            ``ConfigError`` verir: kullanıcının ELLE yazdığı, bozulmuş bir
+            dosyayı sessizce ezmek içeriğini yok ederdi.
+
+    Raises:
+        ConfigError: ``bozugu_ez`` değilken dosya bozuk.
+        OSError: yazım başarısız (eski dosya sağlamdır).
+    """
+    with _YAZIM_KILIDI:
+        ham = ayar_ham_oku()
+        if ham is None:
+            yol = ayar_dosyasi()
+            if yol.exists() and not bozugu_ez:
+                raise ConfigError(
+                    f"kullanıcı ayar dosyası okunamadı ya da geçerli JSON değil: {yol} "
+                    "(dosyayı düzeltin ya da silin)"
+                )
+            ham = {}
+        if degistir(ham):
+            _ayar_ham_yaz(ham)
 
 
 def ui_sablonu_olustur() -> bool:

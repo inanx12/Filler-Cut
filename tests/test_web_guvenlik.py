@@ -197,10 +197,10 @@ def _api_rotalari() -> list[tuple[str, str]]:
     ya matrise girer ya o testi kırar."""
     from fastapi.routing import APIRoute
 
-    from fillercut.web import fs, geri_bildirim, jobs, kurulum, medya
+    from fillercut.web import fs, geri_bildirim, jobs, kurulum, medya, tercihler
 
     sonuc = list(_UYGULAMA_UCLARI)
-    for modul in (fs, geri_bildirim, jobs, kurulum, medya):
+    for modul in (fs, geri_bildirim, jobs, kurulum, medya, tercihler):
         for rota in modul.router.routes:
             assert isinstance(rota, APIRoute)
             yol = rota.path.replace("{job_id}", "yok")

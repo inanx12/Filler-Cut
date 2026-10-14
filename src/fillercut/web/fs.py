@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict
 from fillercut import surec
 from fillercut.config import ConfigError, paketlenmis_mi
 from fillercut.kurulum import yollar as kurulum_yollari
+from fillercut.web import tercihler
 
 _log = logging.getLogger(__name__)
 
@@ -539,9 +540,18 @@ def sec(istek: SecimIstek, request: Request) -> VideoGirdisi:
     Ayrı uç olmasının sebebi budur: kullanıcı dosyayı seçtiğinde henüz
     mod/dışa aktarım tercihlerini yapmamıştır.
     """
-    return secimi_dogrula(
-        istek.path, ev_dizini(request), izinli_kokler=izinli_kokler_state(request)
-    )
+    try:
+        return secimi_dogrula(
+            istek.path, ev_dizini(request), izinli_kokler=izinli_kokler_state(request)
+        )
+    except HTTPException:
+        # v1.4.0 Dalga 5: "son videolar" satırından tıklanan dosya artık
+        # YOKSA kayıt listeden düşer (hata yine kullanıcıya gider). Yalnız
+        # "dosya yok" düşürür — var olup reddedilen (hapis dışı, uzantı)
+        # kayıt kalır.
+        if istek.path.strip() and not os.path.exists(istek.path):
+            tercihler.son_video_dus(istek.path)
+        raise
 
 
 def reveal_komutu(hedef: Path, *, platform: str) -> list[str] | None:

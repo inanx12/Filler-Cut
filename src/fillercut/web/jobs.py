@@ -56,7 +56,7 @@ from fillercut.report.json_report import (
     TierCounts,
     filler_dagilimi,
 )
-from fillercut.web import fs
+from fillercut.web import fs, tercihler
 from fillercut.web.review import (
     SNAP_ESIK_MS,
     EditsIstek,
@@ -547,6 +547,9 @@ def job_baslat(istek: JobBaslatIstek, request: Request) -> dict[str, object]:
     job = _kayit(request).baslat(
         hedef, istek.aggressive, cikti=istek.cikti, srt=istek.srt
     )
+    # v1.4.0 Dalga 5: "son videolar" kaydı İŞ OLUŞURKEN düşer (seçimde
+    # değil). Kolaylıktır — yazılamazsa sessizce geçer, işi düşürmez.
+    tercihler.son_video_ekle(hedef)
     return job.snapshot()
 
 
