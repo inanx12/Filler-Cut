@@ -885,6 +885,54 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 
 .kesim-blok.pasif .tutamac { display: none; } /* geri alınan kesim sürüklenmez */
 
+/* Kenar affordance'ı (v1.4.0 Dalga 5) — SALT GÖRSEL.
+   Koyu kenar çubuğu (`::before`) dilimin sınırını her zaman gösterir;
+   tutamaç (`::after`) blok üzerine gelinince kenar çizgisinin TAM ÜSTÜNE
+   oturur. İkisi de `pointer-events: none`: isabet alanı `.tutamac`ın kendi
+   9 px'lik kutusudur ve DEĞİŞMEDİ — tutamacın kutu dışına taşan kısmı
+   tıklamayı alttaki katmana bırakır. z-index YOK: ikisi kesim katmanının
+   (`--tl-kat-kesim`) içinde kalır, playhead (`--tl-kat-playhead`) üstte;
+   bıçak çizgileri DOM'da bloklardan sonra geldiği için onlar da üstte.
+   Kilit: `tests/test_web_kenar_affordance.py`. */
+.tutamac::before,
+.tutamac::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.tutamac::before {
+  top: 0; bottom: 0;
+  width: 3px;
+  background: rgba(0, 0, 0, .6);
+}
+
+.tutamac.sol::before { left: 0; }
+.tutamac.sag::before { right: 0; }
+
+.tutamac::after {
+  top: 50%;
+  width: 7px;
+  height: 20px;
+  margin-top: -10px;
+  box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, .7);
+  border-radius: 3px;
+  background:
+    linear-gradient(to right, transparent 1px, rgba(0, 0, 0, .55) 1px,
+                    rgba(0, 0, 0, .55) 2px, transparent 2px, transparent 3px,
+                    rgba(0, 0, 0, .55) 3px, rgba(0, 0, 0, .55) 4px, transparent 4px)
+      center / 5px 10px no-repeat,
+    #c9d1d9;
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.tutamac.sol::after { left: -3px; }
+.tutamac.sag::after { right: -3px; }
+
+.kesim-blok:hover .tutamac::after { opacity: 1; }
+
 /* Blade (Ctrl+K — v1.4.0 Dalga 2): kesim DEĞİL işaret. Kesim katmanının
    ÇOCUĞUDUR — yeni bir `--tl-kat-*` AÇILMADI, z-index'i yoktur (kendi yığın
    bağlamı da yok), dört katmanlı sıra invariantı aynen durur. İsabet
