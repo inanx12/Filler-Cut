@@ -170,7 +170,83 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 "Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
 kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
-## Mevcut Durum (2026-10-09)
+## Mevcut Durum (2026-10-14)
+
+**v1.4.0 DALGA 4 TAMAMLANDI (2026-10-14) — KI-18 kapanış yarışı.** Tek konu:
+"Kapat"/X sonrası süreç ÖLMELİ. Sürüm bump YOK, push/tag/release YOK.
+Değişen: `cli._sunucu_kur` (uvicorn ayarına tek parametre) + yeni sabit
+`UI_KAPANIS_AF_SN = 3`, testler, dokümanlar. Başka cli/sunucu davranışına
+dokunulmadı.
+
+**SAHA KANITI (2026-10-09, İnan).** Kurulu exe'de hem X hem "Kapat" ile
+kapanmadı: süreç başlıksız arka planda kaldı (~90 MB), port SERBESTTİ.
+Açılışı bloklamıyor; KURULUMU bloklıyor (kurucu çalışan exe'yi ezemez,
+`exit=5`) ve RAM'de ceset biriktiriyordu. 23 Eylül "kapalı görünüyor ama
+kurulamıyor" olayı bu sınıf.
+
+**KÖK NEDEN (uvicorn 0.52.4 kaynağından).** `Server.shutdown` →
+`wait_for(_wait_tasks_to_complete(), timeout=config.timeout_graceful_shutdown)`;
+`wait_closed()` o gövdenin SON adımı. Varsayılan `None` → sınırsız. Dalga 3
+kaydındaki "(b) `wait_closed`ı sınırlamaz" varsayımı YANLIŞTI (kaynak
+okunmadan yazılmıştı) — tuzak: KI adaylarını kaynağa bakmadan eleme.
+
+**ADAY SEÇİMİ — (b) `timeout_graceful_shutdown=3` (BİLİNÇLİ SAPMA, İnan
+onayı bekliyor).** İnan'ın önerisi "wait_closed'a wait_for + zaman aşımında
+sert çıkış" idi. (b) aynı `wait_for`u sağlar (uvicorn'un kendisi), FARK
+zaman aşımı kolunda: sert çıkış yerine lifespan shutdown'a devam eder
+(`JobKayit.kapat()` → review'da bekleyen iş serbest, medya önbelleği
+kapanır) ve süreç normal çıkar. Sert çıkış reddedildi çünkü "uvicorn görevi
+0" "kaybedilecek iş yok" DEMEK DEĞİL: işler executor thread'indedir, uvicorn
+görevi değildir; `os._exit` koşan bir ASR/render'ı öldürürdü. (b)'nin
+bedeli: af süresi bağlantı/görev beklemesini de sınırlar — kapanışta 3
+sn'den uzun süren istek (açık SSE, video aktarımı) iptal edilir. (c)
+yükseltme: kapsam dışı ve 3.13'te de `wait_closed` bağlantıları bekler.
+Değerlendirmenin tamamı KNOWN_ISSUES KI-18.
+
+**SÖZLEŞME.** Normal yol af süresini HİÇ görmez (`wait_for` iş bitince
+döner): ölçüm, eski kod medyan 1,11 sn / yeni kod medyan 1,11 sn (16×12
+stres, `/api/kapat` cevabından süreç çıkışına). Zaman aşımı kolu yalnız
+asılmada çalışır: asılan turlar ~3,3 sn'de 0 koduyla çıkar.
+`UI_KAPANIS_AF_SN + 2 < UI_KAPANIS_TIMEOUT_SN` (15): native modda takılı
+sayaç "koşan iş bekliyor" notunu tetikleyemez.
+
+**RED-FIRST.** Yeni testler, `cli.py`de YALNIZ uvicorn bağlantısı geri
+alınmış (sabit duruyor) koda karşı: 4 kırmızı — deterministik kilit
+("sunucu thread'i bitmedi — wait_closed() sınırsız bekliyor"), lifespan
+kilidi (shutdown hiç koşmadı), stres kilidi (`{'ASILI': 5, 'TEMIZ': 187}`),
+ayar kilidi (`None == 3`). Normal yol kilitleri eski kodda da yeşil —
+beklenen: onlar "düzeltme normal yolu bozmadı" sözleşmesidir.
+
+**STRES ÖLÇÜMÜ (OLASILIKSAL — kilidin sınırı).** Repro: N paralel işçi,
+her tur `fillercut ui --no-native --no-browser` → `GET /` (token) →
+`POST /api/kapat` → kapanış boyunca `/api/instance` yoklaması (yarışın
+tetikleyicisi) → süreç sınır içinde 0 ile çıkmalı. 8×9 = 72 turda eski kod
+0 asılma (bu makinede yük yetmedi); 16×12 = 192 turda eski kod 4, 1 ve 5
+asılma (≈%1,3/tur). Yeni kod 3×192 = 576 turda 0 asılma + suite koşuları.
+Kilit 16×12, tur sınırı 10 sn: eski kodda en az bir asılmayı yakalama
+olasılığı ≈%92 (Poisson, λ≈2,5). Deterministik DEĞİL — asıl kanıt
+deterministik kilittir (ölçülen durum birebir kurulur); stres kilidi onun
+gerçek süreçteki karşılığıdır. Süre: ~37 sn.
+
+**TEST DÖKÜMÜ.** Koleksiyon 2510 → **2520** (+10, mevcutların hepsi aynen;
+güvenlik kilitlerine dokunulmadı). Tam koşu **2514 passed / 6 skipped**,
+ruff + mypy temiz, parite 8/8.
+
+**DALGA 1 İZLEME NOTU KAPANDI.** `test_ac_kapat_uc_dongu_zombi_birakmaz`ın
+aralıklı düşüşü KI-18'di; kök neden giderildi. Kilit testi AYNEN duruyor.
+
+**Tuzak (bir sonraki agent için) — uvicorn iç sırası.** Düzeltme uvicorn'un
+`wait_closed`ı `wait_for` İÇİNDE çağırmasına dayanır. uvicorn yükseltilirse
+`TestTakiliSayac` ilk bakılacak testtir; kırmızıysa sıra değişmiştir.
+Deterministik kilit asyncio'nun özel `Server._attach`ını çağırır (3.11/3.12
+argümansız, 3.13+ `transport` alır — test imzaya bakar).
+
+**İNAN'IN KURULU EXE'DE ELLE DOĞRULAYACAKLARI:** (1) 5–10 kez aç → "Kapat"
+(ve birkaç turda X) → her turdan sonra
+`Get-Process fillercut-ui -ErrorAction SilentlyContinue` BOŞ; (2) bir video
+analiz + render ettikten sonra kapat → süreç kalmıyor; (3) kapanış hızı
+hissi değişmedi (pencere hemen gidiyor); (4) bir sonraki kurulum üstüne
+kurma `exit=5` vermiyor.
 
 **v1.4.0 DALGA 3 TAMAMLANDI (2026-10-09) — güvenlik: localhost sertleştirmesi
 → varsayılan kökler `"*"`.** Sürüm bump YOK, push/tag/release YOK. SIRA
@@ -324,7 +400,8 @@ altında 72 turda 2–3): `should_exit=True`, bağlantı 0, görev 0, ama asynci
 anında kabul edilen bir bağlantı sayaçta takılı (CPython 3.12.1+
 `wait_closed` gerçekten bekler; uvicorn 0.52.4 onu sınırsız bekliyor). Kapı
 yığında YOK. Düzeltme `cli` kapanış davranışını değiştirir → bu dalgada
-yapılmadı; ayrıntı ve öneriler KNOWN_ISSUES KI-18.
+yapılmadı; ayrıntı ve öneriler KNOWN_ISSUES KI-18. *Dalga 4'te (2026-10-14)
+düzeltildi — üstteki Dalga 4 kaydı.*
 
 **TEST DÖKÜMÜ.** Koleksiyon 2099 → **2510** (+411). Tam koşu **2504 passed /
 6 skipped**, ruff + mypy temiz, parite 8/8 (yeni referansla).
@@ -715,7 +792,8 @@ test_ac_kapat_uc_dongu_zombi_birakmaz` BİR KEZ düştü.** Tam koşu altında
 **3/3** yeşil ve tam koşu tekrarı da yeşil geçti. Bu tur bir kusur olarak
 ele alınmadı: statiklere dokunmuyor, klavye/çizelge kodundan bağımsız ve
 yük altında zaman aşımı gibi görünüyor. **TEKRARLARSA KI açılacak** — *tekrarladı
-(Dalga 3, 2026-10-09) ve kök nedeni bulundu: KI-18* (aday
+(Dalga 3, 2026-10-09) ve kök nedeni bulundu: KI-18; Dalga 4'te (2026-10-14)
+düzeltildi, izleme notu KAPANDI* (aday
 kök neden: `Popen` ile başlatılan sunucunun kapanışı paylaşılan 8765
 portunda yarışıyor — v1.2.3 tuzak kaydındaki yönlendirici/pid ailesi).
 
@@ -2770,7 +2848,15 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/guvenlik.py` — Origin kontrolü (durum değiştiren yöntemler; ölçülen native davranış) (56 yeni) | `61ddd92` |
 | `web/guvenlik.py` + `app.py` + `static/` — oturum tokeni (başlık, bellek-içi, HTML'e gömülü), `/api/instance` muafiyeti, medya uçlarında `Sec-Fetch-Site`, CORS reddi; istemcide tek kapı `api()`; suite token göçü + gerçek uvicorn/Chromium kilitleri (277 yeni) | `045160a` |
 | `web/fs.py` `VARSAYILAN_KOKLER = ("*",)` + `cli.py` açılış klasörü + README ×2 + CHANGELOG "Yayımlanmamış" bölümü ve kilidi (18 yeni) | `677c104` |
-| AGENTS — Dalga 3 kaydı + KNOWN_ISSUES KI-18 (kapanış asılması) | bu commit |
+| AGENTS — Dalga 3 kaydı + KNOWN_ISSUES KI-18 (kapanış asılması) | `2f5ad66` |
+
+**v1.4.0 Dalga 4 (KI-18 kapanış yarışı)**
+
+| Modül | Commit |
+|---|---|
+| `cli.py` — `_sunucu_kur`: `timeout_graceful_shutdown=UI_KAPANIS_AF_SN` (3 sn); aday değerlendirmesi commit mesajında + CHANGELOG "Yayımlanmamış" Düzeltildi | `1157200` |
+| `tests/test_ui_kapanis_yarisi.py` — deterministik takılı-sayaç kilidi + sözleşme (normal yol, 2,1 sn bandı, sert çıkış yok) + stres 16×12 (10 yeni) | `d9627e1` |
+| AGENTS — Dalga 4 kaydı (saha kanıtı, aday seçimi, stres sınırı) + KNOWN_ISSUES KI-18 Çözüldü + Dalga 1 izleme notu kapanışı | bu commit |
 
 **v1.3.2 (config.json şablonu + playhead akıcılığı)**
 
