@@ -38,19 +38,36 @@ def _rapor() -> Report:
     return build_report(plan, TOPLAM_MS)
 
 
-def _get(port: int, path: str) -> tuple[int, str]:
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("GET", path)
+#: Fixture HTML'i: token yer tutucusunu taşır (sunucu `GET /`te doldurur).
+YER_TUTUCU = '<meta name="fillercut-oturum" content="">'
+HTML = f"<html>{YER_TUTUCU}review</html>"
+
+
+def _basliklar(server: ReviewServer) -> dict[str, str]:
+    """Dalga 6 göçü: `/api/*` oturum tokeni ister — gerçek istemcinin (rapor
+    JS'i) yaptığı gibi başlıkta gönderilir. Kapının kendisi
+    `test_review_server_guvenlik.py`de kilitli."""
+    return {"X-Fillercut-Oturum": server.oturum_tokeni}
+
+
+def _get(server: ReviewServer, path: str) -> tuple[int, str]:
+    conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
+    conn.request("GET", path, headers=_basliklar(server))
     resp = conn.getresponse()
     govde = resp.read().decode("utf-8")
     conn.close()
     return resp.status, govde
 
 
-def _post(port: int, path: str, payload: dict[str, object] | None = None) -> tuple[int, str]:
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+def _post(
+    server: ReviewServer, path: str, payload: dict[str, object] | None = None
+) -> tuple[int, str]:
+    conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
     govde = json.dumps(payload).encode("utf-8") if payload is not None else b""
-    conn.request("POST", path, body=govde, headers={"Content-Type": "application/json"})
+    conn.request(
+        "POST", path, body=govde,
+        headers={"Content-Type": "application/json", **_basliklar(server)},
+    )
     resp = conn.getresponse()
     veri = resp.read().decode("utf-8")
     conn.close()
@@ -60,7 +77,7 @@ def _post(port: int, path: str, payload: dict[str, object] | None = None) -> tup
 @pytest.fixture()
 def server() -> Iterator[ReviewServer]:
     """Başlatılmış sunucu; test bitince kapatılır."""
-    srv = ReviewServer(_rapor(), "<html>review</html>")
+    srv = ReviewServer(_rapor(), HTML)
     srv.start()
     yield srv
     srv.shutdown()
@@ -68,12 +85,14 @@ def server() -> Iterator[ReviewServer]:
 
 class TestEndpointler:
     def test_kok_html_doner(self, server: ReviewServer) -> None:
-        status, govde = _get(server.port, "/")
+        status, govde = _get(server, "/")
         assert status == 200
-        assert govde == "<html>review</html>"
+        assert govde == HTML.replace(
+            YER_TUTUCU, f'<meta name="fillercut-oturum" content="{server.oturum_tokeni}">'
+        )
 
     def test_plan_kesimleri_ve_approved_doner(self, server: ReviewServer) -> None:
-        status, govde = _get(server.port, "/api/plan")
+        status, govde = _get(server, "/api/plan")
         assert status == 200
         veri = json.loads(govde)
         assert veri["total_ms"] == TOPLAM_MS
@@ -83,37 +102,37 @@ class TestEndpointler:
         assert veri["cuts"][1]["reason"] == "sessizlik 1000ms"
 
     def test_toggle_approved_degistirir(self, server: ReviewServer) -> None:
-        _post(server.port, "/api/toggle", {"index": 0, "approved": False})
-        _, govde = _get(server.port, "/api/plan")
+        _post(server, "/api/toggle", {"index": 0, "approved": False})
+        _, govde = _get(server, "/api/plan")
         assert json.loads(govde)["cuts"][0]["approved"] is False
 
     def test_toggle_gecersiz_index_400(self, server: ReviewServer) -> None:
-        status, _ = _post(server.port, "/api/toggle", {"index": "sifir", "approved": True})
+        status, _ = _post(server, "/api/toggle", {"index": "sifir", "approved": True})
         assert status == 400
 
     def test_bilinmeyen_get_yolu_404(self, server: ReviewServer) -> None:
-        status, _ = _get(server.port, "/yok")
+        status, _ = _get(server, "/yok")
         assert status == 404
 
     def test_bilinmeyen_post_yolu_404(self, server: ReviewServer) -> None:
-        status, _ = _post(server.port, "/yok")
+        status, _ = _post(server, "/yok")
         assert status == 404
 
 
 class TestKararAkisi:
     def test_confirm_karari_ve_approved(self, server: ReviewServer) -> None:
-        _post(server.port, "/api/toggle", {"index": 1, "approved": False})
-        _post(server.port, "/api/confirm")
+        _post(server, "/api/toggle", {"index": 1, "approved": False})
+        _post(server, "/api/confirm")
         karar = server.wait()
         assert karar == ReviewDecision(approved=[True, False], cancelled=False)
 
     def test_cancel_karari(self, server: ReviewServer) -> None:
-        _post(server.port, "/api/cancel")
+        _post(server, "/api/cancel")
         karar = server.wait()
         assert karar.cancelled is True
 
     def test_confirm_response_json(self, server: ReviewServer) -> None:
-        status, govde = _post(server.port, "/api/confirm")
+        status, govde = _post(server, "/api/confirm")
         assert status == 200
         assert json.loads(govde)["karar"] == "confirm"
 

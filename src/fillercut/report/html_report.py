@@ -255,7 +255,11 @@ tr.row-rejected td { text-decoration: line-through; }
 """
 
 #: İnteraktif JS — kullanıcı verisi içermez (reason HTML tarafında escape'li).
+#: Her ``fetch`` oturum tokenini ``X-Fillercut-Oturum`` başlığında gönderir
+#: (v1.4.0 Dalga 6 — review sunucusu token'sız ``/api/*`` çağrısını reddeder);
+#: token sunucunun ``<meta>``ya bastığı değerdir, URL'e girmez.
 _JS = """\
+var OTURUM = (document.querySelector('meta[name="fillercut-oturum"]') || {}).content || '';
 function setRow(i, approved) {
   var row = document.getElementById('row-' + i);
   if (!row) return;
@@ -268,7 +272,7 @@ function setRow(i, approved) {
 function postToggle(i, approved) {
   fetch('/api/toggle', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: {'Content-Type': 'application/json', 'X-Fillercut-Oturum': OTURUM},
     body: JSON.stringify({index: i, approved: approved})
   });
 }
@@ -293,7 +297,7 @@ document.querySelectorAll('.seg-cut').forEach(function (seg) {
 function bitir(yol) {
   document.getElementById('btn-confirm').disabled = true;
   document.getElementById('btn-cancel').disabled = true;
-  fetch(yol, {method: 'POST'}).finally(function () {
+  fetch(yol, {method: 'POST', headers: {'X-Fillercut-Oturum': OTURUM}}).finally(function () {
     document.getElementById('durum').textContent =
       'Karar gönderildi — bu pencereyi kapatabilirsiniz.';
   });
@@ -403,6 +407,9 @@ def build_interactive_html(report: Report) -> str:
         "<!DOCTYPE html>\n"
         '<html lang="tr">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        # Oturum tokeni yer tutucusu (v1.4.0 Dalga 6): review sunucusu
+        # `GET /` anında doldurur; üretilen bu dizede token YOKTUR.
+        '<meta name="fillercut-oturum" content="">\n'
         "<title>Filler-Cut — İnteraktif İnceleme</title>\n"
         f"<style>\n{_INTERAKTIF_CSS}</style>\n</head>\n<body>\n{govde}\n"
         f"<script>\n{_JS}</script>\n</body>\n</html>\n"

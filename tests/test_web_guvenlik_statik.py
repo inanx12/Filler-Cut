@@ -107,11 +107,16 @@ class TestKapiBagli:
         """Sıra önemlidir: yabancı Host HİÇBİR şey öğrenemez (token reddi bile
         değil); preflight token'dan önce düşer."""
         py = _oku(KOK / "web" / "guvenlik.py")
-        bas = py.index("async def __call__")
-        govde = py[bas:]
+        # v1.4.0 Dalga 6: sıra TEK karar fonksiyonunda (`istek_karari`); ASGI
+        # kapısı ve review sunucusu onu çağırır — iki kopya yok.
+        bas = py.index("def istek_karari(")
+        govde = py[bas : py.index("class GuvenlikKapisi", bas)]
         sira = [govde.index(x) for x in ("HOST_REDDI", "ORIGIN_REDDI", "PREFLIGHT_REDDI",
                                          "TOKEN_REDDI")]
         assert sira == sorted(sira)
+        cagri = py[py.index("async def __call__") :]
+        assert "istek_karari(" in cagri
+        assert "HOST_REDDI" not in cagri and "TOKEN_REDDI" not in cagri
 
     def test_sunucu_yalniz_loopbacke_baglanir(self) -> None:
         """Kapı ikinci katmandır; birincisi bağlamanın kendisidir."""

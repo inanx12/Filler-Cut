@@ -162,45 +162,100 @@ async def _reddet(send: Send, mesaj: str) -> None:
     await send({"type": "http.response.body", "body": govde})
 
 
-class GuvenlikKapisi:
-    """Route'tan ÖNCE koşan istek kapısı — reddederse uygulamaya hiç varılmaz."""
+#: Başlık okuyucu: küçük harfli ad → o başlığın TÜM değerleri.
+BaslikOkuyucu = Callable[[bytes], list[str]]
 
-    def __init__(self, app: ASGIApp, *, token: str) -> None:
+
+def _api_izinli(
+    yontem: str,
+    yol: str,
+    basliklar: BaslikOkuyucu,
+    *,
+    token: str,
+    muaf: frozenset[str],
+    medya: re.Pattern[str] | None,
+) -> bool:
+    """``/api/*`` isteği token kapısından geçer mi?"""
+    if yol in muaf:
+        return True
+    if token_gecerli(basliklar(OTURUM_BASLIGI.lower().encode("ascii")), token):
+        return True
+    return (
+        yontem == "GET"
+        and medya is not None
+        and medya.fullmatch(yol) is not None
+        and basliklar(b"sec-fetch-site") == ["same-origin"]
+    )
+
+
+def istek_karari(
+    yontem: str,
+    yol: str,
+    basliklar: BaslikOkuyucu,
+    *,
+    token: str,
+    muaf: frozenset[str] = MUAF_UCLAR,
+    medya: re.Pattern[str] | None = MEDYA_UCLARI,
+) -> str | None:
+    """Kapının TEK karar noktası: ``None`` = geçer, metin = 403 gerekçesi.
+
+    İki sunucu bunu çağırır, kapının iki kopyası YOKTUR (v1.4.0 Dalga 6):
+    ana sunucunun ASGI kapısı (``GuvenlikKapisi``) ve stdlib ``http.server``
+    üstündeki ``--interactive`` review sunucusu (``report/review_server.py``).
+    Yüzeye özgü fark yalnız parametredir: ``muaf`` (token istemeyen tam
+    yollar) ve ``medya`` (özel başlık gönderemeyen GET uçları — token YA DA
+    ``Sec-Fetch-Site: same-origin``; ``None`` = bu yüzeyde böyle uç yok).
+
+    ``yol`` sorgu dizesi OLMADAN, çözülmüş yoldur (ASGI ``scope["path"]``).
+    """
+    hostlar = basliklar(b"host")
+    if len(hostlar) != 1 or not host_izinli(hostlar[0]):
+        return HOST_REDDI
+    if yontem in DURUM_DEGISTIREN and not origin_izinli(basliklar(b"origin"), hostlar[0]):
+        return ORIGIN_REDDI
+    if yontem == "OPTIONS":
+        return PREFLIGHT_REDDI  # allow başlığı YOK: preflight düşer
+    if yol.startswith("/api/") and not _api_izinli(
+        yontem, yol, basliklar, token=token, muaf=muaf, medya=medya
+    ):
+        return TOKEN_REDDI
+    return None
+
+
+class GuvenlikKapisi:
+    """Route'tan ÖNCE koşan istek kapısı — reddederse uygulamaya hiç varılmaz.
+
+    Karar ``istek_karari``dadır; bu sınıf onun ASGI bağdaştırıcısıdır (+ cevap
+    başlıklarından CORS izinlerini söker)."""
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        token: str,
+        muaf: frozenset[str] = MUAF_UCLAR,
+        medya: re.Pattern[str] | None = MEDYA_UCLARI,
+    ) -> None:
         self.app = app
         self._token = token
-
-    def _api_izinli(self, scope: Scope) -> bool:
-        """``/api/*`` isteği token kapısından geçer mi?"""
-        yol = scope["path"]
-        if yol in MUAF_UCLAR:
-            return True
-        if token_gecerli(_basliklar(scope, OTURUM_BASLIGI.lower().encode("ascii")), self._token):
-            return True
-        return (
-            scope["method"] == "GET"
-            and MEDYA_UCLARI.fullmatch(yol) is not None
-            and _basliklar(scope, b"sec-fetch-site") == ["same-origin"]
-        )
+        self._muaf = muaf
+        self._medya = medya
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             # lifespan aynen geçer; websocket yüzeyi YOK (route tanımlı değil).
             await self.app(scope, receive, send)
             return
-        hostlar = _basliklar(scope, b"host")
-        if len(hostlar) != 1 or not host_izinli(hostlar[0]):
-            await _reddet(send, HOST_REDDI)
-            return
-        if scope["method"] in DURUM_DEGISTIREN and not origin_izinli(
-            _basliklar(scope, b"origin"), hostlar[0]
-        ):
-            await _reddet(send, ORIGIN_REDDI)
-            return
-        if scope["method"] == "OPTIONS":
-            await _reddet(send, PREFLIGHT_REDDI)  # allow başlığı YOK: preflight düşer
-            return
-        if scope["path"].startswith("/api/") and not self._api_izinli(scope):
-            await _reddet(send, TOKEN_REDDI)
+        red = istek_karari(
+            scope["method"],
+            scope["path"],
+            lambda ad: _basliklar(scope, ad),
+            token=self._token,
+            muaf=self._muaf,
+            medya=self._medya,
+        )
+        if red is not None:
+            await _reddet(send, red)
             return
 
         async def cors_suz(mesaj: Message) -> None:
