@@ -94,6 +94,17 @@ kökler, kurulum yolları) dokunulmaz; yazım atomiktir (yarıda kesilen bir
 yazım dosyayı bozamaz). Dosya bozuksa tercih kaydedilmez, üzerine de
 yazılmaz.
 
+### Güvenlik — `--interactive` review sunucusu da sertleştirildi
+
+- Komut satırının `--interactive` modunda açılan inceleme sayfası (yerel
+  review sunucusu) artık arayüzle **aynı kapıdan** geçer: Host beyaz
+  listesi, durum değiştiren isteklerde Origin kontrolü, sayfaya gömülü
+  oturum tokeni (`X-Fillercut-Oturum`) ve CORS reddi. Önceden tarayıcınızda
+  açık yabancı bir sayfa arka planda bu sunucuya "onayla" isteği gönderip
+  render'ı başlatabilirdi. Sayfanın görünümü ve kullanımı değişmedi.
+  **Sizi etkileyen:** bu sunucuya betikle istek atıyorsanız `/api/*`
+  uçları artık token ister.
+
 ### Düzeltildi
 
 - **"Kapat"tan ya da pencerenin X'inden sonra uygulama artık arka planda

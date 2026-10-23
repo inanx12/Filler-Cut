@@ -170,7 +170,96 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 "Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
 kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
-## Mevcut Durum (2026-10-14)
+## Mevcut Durum (2026-10-23)
+
+**v1.4.0 MİNİ DALGA 6 TAMAMLANDI (2026-10-23) — review_server güvenlik
+eşitlemesi.** `report/review_server.py` (`--interactive`, stdlib
+`http.server`) iki exe'ye de girer (`pipeline.py:105` doğrudan import —
+DOKUNULMADI, spec'e satır eklenmedi) ama Dalga 3 kapısının DIŞINDAYDI:
+tarayıcıdaki yabancı bir sayfa `POST /api/confirm` ile review'u onaylatıp
+render'ı tetikleyebilir, DNS rebinding ile planı okuyabilirdi. İşlev, port
+(127.0.0.1 + rastgele), `--interactive` akışı aynı; sürüm bump YOK,
+push/tag/release YOK.
+
+**ROTA ENVANTERİ** (`review_server.ROTALAR` — yönlendirmenin TEK kaynağı):
+
+| Rota | Tür | Medya/SSE | Muafiyet |
+|---|---|---|---|
+| `GET /` | rapor HTML'i (token meta'ya burada basılır, `no-store`) | — | yok (token istemez; Host kapısı uygulanır) |
+| `GET /api/plan` | okuma (plan + onaylar) | hayır | yok → token |
+| `POST /api/toggle` | mutasyon | hayır | yok → token + Origin |
+| `POST /api/confirm` | mutasyon (render'a geçer) | hayır | yok → token + Origin |
+| `POST /api/cancel` | mutasyon | hayır | yok → token + Origin |
+
+Instance-benzeri bilgi ucu YOK; `<video>`/EventSource YOK → `Sec-Fetch-Site`
+deseni bu yüzeyde KAPALI (`medya=None`), muafiyet kümesi BOŞ.
+
+**KARAR (İnan, 2026-10-23) — kapı ORTAK KARAR FONKSİYONU.** review_server
+ASGI değildir; `GuvenlikKapisi` önüne olduğu gibi takılamazdı. Seçenekler:
+(1) karar mantığını tek saf fonksiyona çıkar — SEÇİLDİ; (2) review_server'ı
+Starlette/uvicorn'a taşı — sunucu altyapısı değişir (KI-18 sınıfı kapanış
+riskleri `--interactive`e girerdi); (3) her istekte `asyncio.run` ile ASGI
+adaptörü — kırılgan. Sonuç: `guvenlik.istek_karari(yöntem, yol, başlıklar,
+*, token, muaf, medya)` Host → Origin → OPTIONS → token sırasıyla karar
+verir; `GuvenlikKapisi` onun ASGI bağdaştırıcısıdır (+ CORS başlığı
+söküm), review_server'ın `_kapi`sı stdlib bağdaştırıcısıdır. Ana sunucunun
+davranışı BİREBİR aynı (Dalga 3 kilitleri değişmeden yeşil);
+`GuvenlikKapisi`ne yalnız `muaf`/`medya` parametreleri eklendi
+(varsayılanlar eski sabitler). Kapı sırası statik kilidi
+(`test_kapi_sirasi_host_origin_preflight_token`) karar fonksiyonuna taşındı
+ve ASGI kapısının karara DEVRETTİĞİNİ de doğrular.
+
+**KARAR (İnan) — html_report'ta asgari değişiklik.** İnteraktif HTML'e boş
+`<meta name="fillercut-oturum" content="">` yer tutucusu + rapor JS'inin iki
+`fetch` noktasında `X-Fillercut-Oturum` başlığı. Token yalnız `GET /`
+anında basılır; `build_interactive_html`ın ürettiği dizede ve statik
+raporda (`write_html_report`) token YOK. Yer tutucu yoksa `GET /` 500 —
+token'sız sayfa sessizce verilmez (ana sunucuyla aynı ilke).
+
+**Yan değişiklikler.** HEAD/PUT/PATCH/DELETE/OPTIONS önce kapıdan geçer,
+sonra stdlib'in eski 501'i (OPTIONS kapıda her zaman 403). Yönlendirme
+`if self.path == …` zincirinden tabloya geçti (kilit: handler'da elle yol
+kıyası YOK). Mevcut `test_review_server.py` token'lı istemciye göçtü
+(Dalga 3 suite göçünün aynısı).
+
+**RED-FIRST.** `tests/test_review_server_guvenlik.py` eski koda karşı:
+**129 kırmızı / 30 yeşil** — Host 52, token 37, Origin 22, preflight 8,
+token sızıntısı 5, envanter 4, rapor JS'i 1. Yeşil kalan 30: izinli
+Host / kendi Origin'i / Origin'siz / GET'in Origin'e girmemesi, CORS
+başlığı yokluğu (eski kod da üretmiyordu), uçların canlılığı — regresyon
+kilitleri. Ölçülen kusurlar: token'sız `POST /api/confirm` review'u
+BİTİRİYORDU, `Origin: http://evil.example` kabul ediliyordu, `Host:
+evil.example` plan veriyordu, OPTIONS 501'di (403 değil).
+
+**TEST DÖKÜMÜ.** Koleksiyon 2670 → **2831** (+161: review matrisi 159 +
+gerçek tarayıcı akışı 2). Son tam koşu **2825 passed / 6 skipped**, ruff +
+mypy temiz, parite 8/8 (her commit'te).
+
+**İZLEME NOTU — flake.** Commit 3'ün (yalnız `webview2.json`) ilk
+dörtlüsünde `test_web_kurulum.py::TestRoutelar::test_indir_ucu_model_secimini_gecirir`
+5 sn'lik `_bekle` sınırını aştı ("koşul zamanında sağlanmadı"); tam koşu
+o turda 310 sn sürdü (yük). Kod değişmemişti; test tek başına 5/5, dosya
+3/3, tam dörtlü tekrarı yeşil. Commit tekrar yeşilken atıldı. TEKRARLARSA
+KI açılacak (aday: Dalga 5'in atomik yazımındaki `fsync` yük altında
+yavaş — ölçülmedi).
+
+**ROTA KEŞFİ İKİ SUNUCUYU SAYAR.** `test_rota_kesfi_canli_uygulamayla_ayni`
+artık review sunucusunu da gerçek sokette yoklar: `ROTALAR` == envanter,
+her `/api/*` ucu review matrisinde, tablo dışı yol 404.
+
+**İNAN'IN KURULU EXE'DE ELLE DOĞRULAYACAKLARI:** (1) `fillercut.exe <video>
+--interactive` → tarayıcıda rapor açılır, kutu kaldırma / kırmızı bölgeye
+tıklama / "Onayla" / "İptal" çalışır, render kararı izler; (2) review
+açıkken PowerShell'den token'sız `Invoke-WebRequest -Method POST
+http://127.0.0.1:<port>/api/confirm` → 403 ve review BEKLEMEYE devam eder;
+(3) `-Headers @{Origin='http://evil.example'}` ile POST → 403; (4) karar
+verildikten / süreç bittikten sonra port dinlemiyor (`netstat -ano |
+findstr <port>` boş).
+
+**BACKLOG.** *Resolve XML import testi v1.4.x'e ERTELENDİ (İnan kararı).*
+1.4.0 release notes'a ertelenme notu düşülecek; Resolve uyumluluğu İDDİA
+EDİLMEYECEK (Premiere/FCP7 XML dışa aktarımı kilitli, Resolve'da elle
+içe aktarma doğrulanmadı).
 
 **v1.4.0 DALGA 5 TAMAMLANDI (2026-10-14) — polish (son dalga).** Sürüm bump
 YOK (CHANGELOG başlığı "Yayımlanmamış" KALDI), push/tag/release YOK.
@@ -2995,7 +3084,16 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `static/` — son videolar satırı; `test_web_son_videolar.py` (7) | `794f056` |
 | `static/keymap.js` + `app.js` — yeniden atanabilir tuşlar, yakala-modu; `test_web_kisayol_atama.py` (35) + drift kilidi uyarlaması | `b649964` |
 | `static/` — native modda tarayıcı sadeleştirme; `test_web_native_sade.py` (13) | `f3932c5` |
-| AGENTS — Dalga 5 kaydı + XML kural A + backlog (yavaş açılış, frameless v1.5) + CHANGELOG | bu commit |
+| AGENTS — Dalga 5 kaydı + XML kural A + backlog (yavaş açılış, frameless v1.5) + CHANGELOG | `98d7476` |
+
+**v1.4.0 mini Dalga 6 (review_server güvenlik eşitlemesi)**
+
+| Modül | Commit |
+|---|---|
+| `web/guvenlik.istek_karari` (ortak karar) + `report/review_server.py` kapı + yönlendirme tablosu + `html_report` meta/fetch başlığı; `test_review_server.py` token göçü, kapı sırası kilidi uyarlaması | `66128b4` |
+| `test_review_server_guvenlik.py` (161: token/Host/Origin/CORS matrisi + gerçek tarayıcı akışı) + rota keşfi review sunucusunu da sayar | `e5df0bc` |
+| `packaging/webview2.json` depoya (stub 1.3.287.9, imza doğrulandı 2026-10-14) | `5404485` |
+| AGENTS — Dalga 6 kaydı + Resolve erteleme backlog'u + CHANGELOG | bu commit |
 
 **v1.3.2 (config.json şablonu + playhead akıcılığı)**
 
