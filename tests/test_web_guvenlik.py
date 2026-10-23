@@ -260,6 +260,33 @@ class TestOturumTokeni:
         assert canli == API_ROTALARI
         assert len(TOKENLI) >= 14 and len(MEDYA) == 3
 
+        # v1.4.0 Dalga 6: İKİNCİ sunucu — `--interactive` review sunucusu
+        # (stdlib, aynı karar fonksiyonu). Yönlendirme tablosu (`ROTALAR`)
+        # canlı sunucuyla aynı olmalı ve her `/api/*` ucu o yüzeyin
+        # matrisinde (`test_review_server_guvenlik.API`) bulunmalı.
+        import http.client
+
+        from fillercut.report import review_server
+        from fillercut.report.html_report import build_interactive_html
+        from tests import test_review_server_guvenlik as rs
+
+        assert set(review_server.ROTALAR) == rs.ENVANTER
+        assert {r for r in review_server.ROTALAR if r[1].startswith("/api/")} == set(rs.API)
+        rapor = rs._rapor()
+        srv = review_server.ReviewServer(rapor, build_interactive_html(rapor))
+        srv.start()
+        try:
+            for yontem, yol in sorted(review_server.ROTALAR) + [("GET", "/api/yok")]:
+                conn = http.client.HTTPConnection("127.0.0.1", srv.port, timeout=5)
+                govde = b'{"index": 0, "approved": true}' if yol == "/api/toggle" else b""
+                conn.request(yontem, yol, body=govde, headers={OTURUM_BASLIGI: srv.oturum_tokeni})
+                kod = conn.getresponse().status
+                conn.close()
+                beklenen = 404 if (yontem, yol) not in review_server.ROTALAR else 200
+                assert kod == beklenen, (yontem, yol, kod)
+        finally:
+            srv.shutdown()
+
     def test_muaf_ve_medya_kumeleri_sabit(self) -> None:
         """Muafiyet SESSİZCE büyüyemez."""
         assert MUAF_UCLAR == frozenset({"/api/instance"})
