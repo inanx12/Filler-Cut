@@ -7,14 +7,7 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
-## Yayımlanmamış — 1.4.0 hedefi
-
-> Bu bölüm henüz bir sürüm DEĞİLDİR (başlığı bilerek `## [x.y.z]` biçiminde
-> değil: release notları ve sürüm tutarlılık kilidi onu görmez). 1.4.0 kesilirken
-> `## [1.4.0] — tarih` başlığına çevrilir; `tests/test_release.py` sürüm 1.4.0'a
-> yükseldiği anda bu başlık duruyorsa kırmızıya döner. v1.4.0'ın öteki
-> değişiklikleri (review kısayolları, manuel düzenlemeler) sürüm kesilirken
-> buraya eklenecek.
+## [1.4.0] — 2026-11-01
 
 **Güven modeli değişti: arayüz artık varsayılan olarak tüm diskleri görür — ve lokal sunucu bunun için sertleştirildi.**
 
@@ -781,6 +774,7 @@ sınırlar: `experiments/pywebview_spike/README.md`.
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
 
+[1.4.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.4.0
 [1.3.2]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.2
 [1.3.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.1
 [1.3.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.0
