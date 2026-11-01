@@ -170,7 +170,17 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 "Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
 kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
-## Mevcut Durum (2026-10-23)
+## Mevcut Durum (2026-11-02)
+
+**v1.4.0 SÜRÜM KESİLDİ, TAG BEKLİYOR (2026-11-02).** Bump yapıldı
+(`ec9f92c`: `pyproject.toml` 1.4.0, CHANGELOG `## [1.4.0] — 2026-11-01`).
+Dalga 2-6 elle doğrulamaları kullanıcıdan (İnan) YEŞİL; kurulum + tütsü
+YEŞİL. CHANGELOG'a Dalga 1-2 maddeleri eklendi. Tag, push ve PyPI İnan'da.
+
+**BACKLOG.** *webview2 stub hash kilidi Microsoft rotasyonuna karşı kırılgan
+(13 Ekim'den beri 4 yenileme) — imza-ağırlıklı modele geç, v1.4.x.* Şu an
+`packaging/webview2.json` hash'i tutmazsa hem yerel kurucu hem `release.yml`
+durur; kayıt tag'e en yakın commit'te tazelenmelidir.
 
 **v1.4.0 MİNİ DALGA 6 TAMAMLANDI (2026-10-23) — review_server güvenlik
 eşitlemesi.** `report/review_server.py` (`--interactive`, stdlib
@@ -3093,7 +3103,14 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | `web/guvenlik.istek_karari` (ortak karar) + `report/review_server.py` kapı + yönlendirme tablosu + `html_report` meta/fetch başlığı; `test_review_server.py` token göçü, kapı sırası kilidi uyarlaması | `66128b4` |
 | `test_review_server_guvenlik.py` (161: token/Host/Origin/CORS matrisi + gerçek tarayıcı akışı) + rota keşfi review sunucusunu da sayar | `e5df0bc` |
 | `packaging/webview2.json` depoya (stub 1.3.287.9, imza doğrulandı 2026-10-14) | `5404485` |
-| AGENTS — Dalga 6 kaydı + Resolve erteleme backlog'u + CHANGELOG | bu commit |
+| AGENTS — Dalga 6 kaydı + Resolve erteleme backlog'u + CHANGELOG | `876724e` |
+
+**v1.4.0 sürüm kesimi**
+
+| Modül | Commit |
+|---|---|
+| `pyproject.toml` 1.4.0 + CHANGELOG başlığı + link referansı | `ec9f92c` |
+| CHANGELOG Dalga 1-2 maddeleri + AGENTS Mevcut Durum + webview2 backlog'u | bu commit |
 
 **v1.3.2 (config.json şablonu + playhead akıcılığı)**
 

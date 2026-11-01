@@ -62,6 +62,32 @@ Onlar dosyalarınıza zaten doğrudan erişebilir.
 
 ### Eklendi — arayüz cilası
 
+- **Planı elle düzenleme.** Review ekranında artık otomatik planın üstüne
+  kendi kesimlerinizi yapabilirsiniz. **Ctrl+K** oynatma başlığının durduğu
+  kareye bir bıçak işareti koyar (aynı karede tekrar basmak kaldırır); işaret
+  tek başına çıktıyı değiştirmez, iki yanı dışa aktarımda tek parça kalır.
+  **Delete** başlığın üzerindeki tutulan parçayı kesime çevirir; kalan
+  parçalar art arda eklenir. Son tutulan parça silinemez. **Alt+, / Alt+.**
+  başlığa en yakın kesim kenarını bir kare iter. XML dışa aktarımında bir
+  kareyi kesen dilimde o kare korunur (konuşmadan kare eksilmesin diye); o
+  kareyi kesinlikle silmek için kenarı Alt+, / Alt+. ile itin. **"Otomatik
+  plana dön"** onay sorarak tüm düzenlemeleri bırakır.
+- **Geri al / yinele.** **Ctrl+Z** ve **Ctrl+Shift+Z** review'daki tüm
+  düzenlemeleri kapsar: kenar sürükleme, elle ekleme, kesimi geri alma,
+  yaslama, bıçak, Delete, kenar itme ve "Otomatik plana dön". 100 adıma kadar
+  geri gidilir. Bıçak işaretleri ve geçmiş yalnız bellekte tutulur; diske
+  yazılmaz, uygulama kapanınca kalmaz.
+- **Yeni gezinme kısayolları.** **↑ / ↓** önceki/sonraki kesim noktasına
+  atlar; **, / .** bir kare adımlar (XML ile aynı kare kuralıyla, önizleme ile
+  dışa aktarım bir kare ayrışmaz). **I / O** A-B döngüsünün başını ve sonunu
+  koyar, **X** döngüyü temizler. **+ / - / \\** zaman çizelgesine yakınlaşır,
+  uzaklaşır, sığdırır. **?** tüm kısayolları gösteren yardım katmanını açar.
+- **Kısayollar tek kurala bağlandı.** Metin kutusundayken ya da bir pencere
+  açıkken kısayollar çalışmaz; yardım katmanı açıkken arkadaki ekrana hiçbir
+  tuş gitmez. Durum çeviren tuşlar (Boşluk, Y, M…) basılı tutulunca tekrar
+  etmez, adım tuşları eder. Uygulamanın kullanmadığı tuşlar (F5, Ctrl+R, F12)
+  tarayıcıya aynen gider. Noktalama kısayolları Türkçe Q klavyede de ürettiği
+  karakterle çalışır.
 - **Son videolar.** Başlangıç ekranında, bırakma alanının hemen altında son
   açtığınız 5 video durur; tıklayınca o dosyayla yeni bir iş başlar. Aynı
   video tekrar açılınca listenin başına geçer (kopya olmaz). Dosya artık
