@@ -7,7 +7,9 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
-## [1.4.0] — 2026-11-01
+## [1.4.0] — 2026-11-02
+
+**Elle plan düzenleme, kısayol disiplini ve sertleştirilmiş lokal sunucu**
 
 **Güven modeli değişti: arayüz artık varsayılan olarak tüm diskleri görür — ve lokal sunucu bunun için sertleştirildi.**
 
@@ -60,7 +62,7 @@ Uygulama yeniden başladıktan sonra açık kalmış eski bir tarayıcı sekmesi
 **Korumadığı şey:** kendi Windows hesabınız altında çalışan diğer programlar.
 Onlar dosyalarınıza zaten doğrudan erişebilir.
 
-### Eklendi — arayüz cilası
+### Eklendi — review düzenleme ve kısayollar
 
 - **Planı elle düzenleme.** Review ekranında artık otomatik planın üstüne
   kendi kesimlerinizi yapabilirsiniz. **Ctrl+K** oynatma başlığının durduğu
@@ -88,6 +90,9 @@ Onlar dosyalarınıza zaten doğrudan erişebilir.
   etmez, adım tuşları eder. Uygulamanın kullanmadığı tuşlar (F5, Ctrl+R, F12)
   tarayıcıya aynen gider. Noktalama kısayolları Türkçe Q klavyede de ürettiği
   karakterle çalışır.
+
+### Eklendi — arayüz cilası
+
 - **Son videolar.** Başlangıç ekranında, bırakma alanının hemen altında son
   açtığınız 5 video durur; tıklayınca o dosyayla yeni bir iş başlar. Aynı
   video tekrar açılınca listenin başına geçer (kopya olmaz). Dosya artık

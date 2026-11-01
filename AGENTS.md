@@ -3110,7 +3110,8 @@ NVENC/QSV orada skip'tir (`nvcuda.dll` yok, `MFX session: -9`).
 | Modül | Commit |
 |---|---|
 | `pyproject.toml` 1.4.0 + CHANGELOG başlığı + link referansı | `ec9f92c` |
-| CHANGELOG Dalga 1-2 maddeleri + AGENTS Mevcut Durum + webview2 backlog'u | bu commit |
+| CHANGELOG Dalga 1-2 maddeleri + AGENTS Mevcut Durum + webview2 backlog'u | `a4b7fdb` |
+| `packaging/webview2.json` stub 1.3.311.5 (imza doğrulandı 2026-11-01) | `06793d6` |
 
 **v1.3.2 (config.json şablonu + playhead akıcılığı)**
 
