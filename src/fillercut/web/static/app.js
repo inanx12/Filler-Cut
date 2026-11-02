@@ -1887,7 +1887,17 @@ function manuelEkle(bas, bit) {
 
 /* ── sürükleme: sınır taşıma + elle kesim ekleme ──────────────────────── */
 
-const ASGARI_KESIM_MS = 40; // altına inen sürükleme "tıklama" sayılır
+const ASGARI_KESIM_MS = 40; // kenar sürüklemede kesimin inebileceği en kısa boy
+
+/* v1.4.1: "tıklama mı sürükleme mi" kararı ms'e değil EKRAN PİKSELİNE
+   bağlıdır. Eski 40 ms eşiği uzun videoda, zoom'suz çizelgede bir pikselin
+   çok altında kalıyordu: geri sarmak için tıklarken eldeki en küçük kayma
+   istenmeyen bir kesim üretiyordu. Bu kadar pikselden az hareket tıklamadır. */
+const SURUKLEME_ESIK_PX = 5;
+
+function esikAsildiMi(s, ev) {
+  return Math.abs(ev.clientX - s.x0) >= SURUKLEME_ESIK_PX;
+}
 
 function yerelSnap(ms) {
   /* Sunucudaki snap'in aynadaki hâli — sürüklerken hissedilsin diye.
@@ -1931,9 +1941,13 @@ el("tl-track").addEventListener("pointerdown", (ev) => {
     reviewCiz();
     return;
   }
-  // boş alan: yeni kesim çizimi
+  /* Boş alan (v1.4.1): düz basış GEZİNMEDİR — tıklama oynatma başlığını
+     taşır, sürükleme onu imleçle birlikte kaydırır (scrub). Yeni kesim
+     çizmek yıkıcı bir eylem olduğu için Shift ister. */
   const baslangic = olayMs(ev);
-  review.surukleme = { tip: "yeni", baslangic, bitis: baslangic };
+  review.surukleme = { tip: ev.shiftKey ? "yeni" : "gezin", baslangic,
+                       bitis: baslangic, x0: ev.clientX };
+  if (!ev.shiftKey) el("oynatici").currentTime = baslangic / 1000;
 });
 
 el("tl-track").addEventListener("pointermove", (ev) => {
@@ -1948,8 +1962,12 @@ el("tl-track").addEventListener("pointermove", (ev) => {
       blok.style.left = yuzde(s.bas) + "%";
       blok.style.width = Math.max(0.05, yuzde(s.bit - s.bas)) + "%";
     }
+  } else if (s.tip === "gezin") {
+    s.bitis = ms;
+    el("oynatici").currentTime = ms / 1000;
   } else {
     s.bitis = ms;
+    if (!esikAsildiMi(s, ev)) return; // titreme önizleme bloğu çizmesin
     let onizlemeBlok = el("yeni-secim");
     if (!onizlemeBlok) {
       onizlemeBlok = document.createElement("div");
@@ -1974,11 +1992,17 @@ function surukleBitir(ev) {
     sinirGonder(s.id, s.bas, s.bit);
     return;
   }
+  if (s.tip === "yeni" && ev.type === "pointercancel") return; // iptal kesim eklemez
+  if (s.tip === "gezin") {
+    // tıklama ya da scrub: başlık son imleç konumunda kalır
+    el("oynatici").currentTime = s.bitis / 1000;
+    return;
+  }
   const bas = yerelSnap(Math.min(s.baslangic, s.bitis));
   const bit = yerelSnap(Math.max(s.baslangic, s.bitis));
-  if (bit - bas < ASGARI_KESIM_MS) {
-    // sürükleme değil tıklama: oynatma konumunu taşı
-    el("oynatici").currentTime = Math.min(s.baslangic, s.bitis) / 1000;
+  if (!esikAsildiMi(s, ev) || bit - bas < ASGARI_KESIM_MS) {
+    // Shift'le de olsa sürükleme değil tıklama: oynatma konumunu taşı
+    el("oynatici").currentTime = s.baslangic / 1000;
     return;
   }
   manuelEkle(bas, bit);
