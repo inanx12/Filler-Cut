@@ -172,8 +172,10 @@ kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
 ## Mevcut Durum (2026-11-02)
 
-**v1.4.1 ADAYI — zaman çizelgesi tıklama düzeltmesi (branch
-`fix/1.4.1-zaman-cizelgesi-tiklama`, main'e dokunulmadı).** Kullanıcı
+**v1.4.1 SÜRÜM KESİLDİ (2026-11-03) — zaman çizelgesi tıklama düzeltmesi.**
+PR #4 merge edildi (`62258db`); İnan Windows'ta tam suite (2821 passed) +
+ruff + mypy + elle doğrulamayı YEŞİL verdi. Bump: `pyproject.toml` 1.4.1,
+CHANGELOG `## [1.4.1] — 2026-11-03`. Tag, build ve release İnan'da. Kullanıcı
 bildirimi: geri sarmak için tıklarken istenmeyen kesim. Kök neden
 `ASGARI_KESIM_MS = 40` eşiğinin boş alan dalında tıklama/sürükleme ayrımı
 için kullanılmasıydı (uzun videoda <1 px). Yeni: `SURUKLEME_ESIK_PX = 5`
