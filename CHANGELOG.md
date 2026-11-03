@@ -7,7 +7,9 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
-## [Yayımlanmamış] — 1.4.1 adayı
+## [1.4.1] — 2026-11-03
+
+**Zaman çizelgesinde gezinme düzeltmesi**
 
 ### Düzeltildi
 
@@ -823,6 +825,7 @@ sınırlar: `experiments/pywebview_spike/README.md`.
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
 
+[1.4.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.4.1
 [1.4.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.4.0
 [1.3.2]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.2
 [1.3.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.1
