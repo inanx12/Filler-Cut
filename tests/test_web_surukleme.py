@@ -327,15 +327,18 @@ class TestMiknatis:
 
 
 class TestBosAlanSurukleme:
-    """Boş alanda sürükleyerek yeni kesim — bu dal kırmızıyken de çalışıyordu
-    (olay hep 'boş alan' sanılıyordu), ama sözleşmenin parçası: kilitli kalır."""
+    """Boş alanda Shift+sürükleyerek yeni kesim — bu dal kırmızıyken de
+    çalışıyordu (olay hep 'boş alan' sanılıyordu), ama sözleşmenin parçası:
+    kilitli kalır. v1.4.1'den beri Shift ister (düz sürükleme = gezinme)."""
 
     def test_bos_alanda_yeni_kesim_eklenir(self, sayfa: Any) -> None:
         track = sayfa.locator("#tl-track").bounding_box()
         assert track is not None
         y = track["y"] + track["height"] * 0.7
         x0 = track["x"] + track["width"] * 0.10
+        sayfa.keyboard.down("Shift")
         _surukle(sayfa, (x0, y), track["width"] * 0.08)
+        sayfa.keyboard.up("Shift")
         istekler = sayfa.evaluate("() => window.__istekler")
         assert istekler, "boş alan sürüklemesi istek üretmedi"
         eklemeler = istekler[-1]["govde"]["eklemeler"]
@@ -351,3 +354,61 @@ class TestBosAlanSurukleme:
         assert sayfa.evaluate("() => window.__istekler.length") == 0, (
             "tıklama yeni kesim ekledi"
         )
+
+
+#: `currentTime`ı medyasız oynatıcıda okunabilir kılar (playhead testleriyle
+#: aynı desen): atama `window.__t`ye düşer.
+SAHTE_ZAMAN = """
+() => {
+  window.__t = 0;
+  Object.defineProperty(document.getElementById("oynatici"), "currentTime", {
+    get: () => window.__t,
+    set: (v) => { window.__t = v; },
+    configurable: true,
+  });
+}
+"""
+
+
+class TestGezinmeKesimUretmez:
+    """v1.4.1 — kullanıcı bildirimi: "geri gitmek isterken istemediğim yerleri
+    işaretliyorum". Eski eşik 40 MS idi; uzun videoda zoom'suz çizelgede bu
+    bir pikselin altında kalır, tıklarken elin en küçük kayması kesim
+    üretiyordu. Artık karar PİKSELLE verilir ve düz sürükleme yalnız gezinir.
+    """
+
+    def _bos_nokta(self, sayfa: Any, oran: float) -> tuple[float, float, float]:
+        track = sayfa.locator("#tl-track").bounding_box()
+        assert track is not None
+        x = track["x"] + track["width"] * oran
+        return x, track["y"] + track["height"] * 0.7, track["width"]
+
+    def test_titrek_tiklama_kesim_eklemez(self, sayfa: Any) -> None:
+        """3 px kayma (bu çizelgede ~60 ms > eski 40 ms eşiği): kesim YOK."""
+        x, y, _ = self._bos_nokta(sayfa, 0.30)
+        _surukle(sayfa, (x, y), 3.0)
+        assert sayfa.evaluate("() => window.__istekler.length") == 0, (
+            "titrek tıklama yeni kesim ekledi"
+        )
+
+    def test_duz_surukleme_gezinir_kesim_eklemez(self, sayfa: Any) -> None:
+        sayfa.evaluate(SAHTE_ZAMAN)
+        x, y, genislik = self._bos_nokta(sayfa, 0.10)
+        _surukle(sayfa, (x, y), genislik * 0.08)
+        assert sayfa.evaluate("() => window.__istekler.length") == 0, (
+            "Shift'siz sürükleme kesim ekledi"
+        )
+        beklenen_ms = (x + genislik * 0.08 - (x - genislik * 0.10)) * _px_basina_ms(sayfa)
+        t_ms = sayfa.evaluate("() => window.__t") * 1000
+        assert abs(t_ms - beklenen_ms) < 3 * _px_basina_ms(sayfa), (
+            f"playhead imleci izlemedi: {t_ms:.0f} ms, beklenen ~{beklenen_ms:.0f} ms"
+        )
+        assert sayfa.evaluate("() => document.getElementById('yeni-secim')") is None
+
+    def test_shift_ile_esik_alti_kesim_eklemez(self, sayfa: Any) -> None:
+        """Shift basılıyken bile eşiğin altındaki hareket tıklamadır."""
+        x, y, _ = self._bos_nokta(sayfa, 0.30)
+        sayfa.keyboard.down("Shift")
+        _surukle(sayfa, (x, y), 3.0)
+        sayfa.keyboard.up("Shift")
+        assert sayfa.evaluate("() => window.__istekler.length") == 0

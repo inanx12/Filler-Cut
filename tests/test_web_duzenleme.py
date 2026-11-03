@@ -623,11 +623,14 @@ def _bos_alanda_ciz(sayfa: Any, bas_ms: int, bit_ms: int) -> None:
     y = kutu["y"] + kutu["height"] / 2
     x0 = kutu["x"] + kutu["width"] * bas_ms / TOPLAM
     x1 = kutu["x"] + kutu["width"] * bit_ms / TOPLAM
+    # v1.4.1: boş alanda yeni kesim Shift+sürükle ister (düz sürükleme gezinir).
+    sayfa.keyboard.down("Shift")
     sayfa.mouse.move(x0, y)
     sayfa.mouse.down()
     for i in range(1, 6):
         sayfa.mouse.move(x0 + (x1 - x0) * i / 5, y)
     sayfa.mouse.up()
+    sayfa.keyboard.up("Shift")
     sayfa.wait_for_function("() => !review.gonderiliyor")
     _bekle(sayfa)
 

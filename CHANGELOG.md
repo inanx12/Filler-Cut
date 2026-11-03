@@ -7,6 +7,24 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## [Yayımlanmamış] — 1.4.1 adayı
+
+### Düzeltildi
+
+- **Zaman çizelgesinde geri sarmaya çalışırken istenmeyen kesim oluşmuyor.**
+  Boş alana tıklarken elin en küçük kayması yeni bir kesim üretebiliyordu
+  (kullanıcı bildirimi). Sebep: "tıklama mı sürükleme mi" eşiği 40 ms idi;
+  uzun bir videoda, yakınlaştırılmamış çizelgede bu bir pikselin çok altında
+  kalır. Karar artık **ekran pikseliyle** verilir (5 px'ten az hareket
+  tıklamadır).
+
+### Değişti
+
+- **Boş alanda sürüklemek artık videoda gezinir (scrub); yeni kesim çizmek
+  için Shift basılı tutun.** Oynatma başlığı imleci izler. Elle kesim
+  eklemenin kendisi değişmedi: **Shift+sürükle** aynı kesimi ekler, geri al /
+  yinele aynen kapsar. Çizelgenin altındaki ipucu ve README güncellendi.
+
 ## [1.4.0] — 2026-11-02
 
 **Elle plan düzenleme, kısayol disiplini ve sertleştirilmiş lokal sunucu**

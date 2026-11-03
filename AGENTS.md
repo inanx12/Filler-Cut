@@ -172,6 +172,21 @@ kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
 ## Mevcut Durum (2026-11-02)
 
+**v1.4.1 ADAYI — zaman çizelgesi tıklama düzeltmesi (branch
+`fix/1.4.1-zaman-cizelgesi-tiklama`, main'e dokunulmadı).** Kullanıcı
+bildirimi: geri sarmak için tıklarken istenmeyen kesim. Kök neden
+`ASGARI_KESIM_MS = 40` eşiğinin boş alan dalında tıklama/sürükleme ayrımı
+için kullanılmasıydı (uzun videoda <1 px). Yeni: `SURUKLEME_ESIK_PX = 5`
+(piksel kararı); boş alanda düz basış = gezinme (`tip: "gezin"`, scrub),
+**Shift** = yeni kesim (`tip: "yeni"`); `pointercancel` kesim eklemez.
+`ASGARI_KESIM_MS` yalnız kenar sürüklemenin asgari boyu olarak kaldı.
+Yalnız `app.js` + ipucu metni + README'ler; sunucu/plan/render/dışa aktarım
+koduna dokunulmadı. Testler: `TestGezinmeKesimUretmez` (3 yeni, eski koda
+karşı 3/3 KIRMIZI), boş alan + undo yardımcıları Shift'e uyarlandı. Sürüm
+bump YOK — tag/release İnan'da. **İNAN'IN ELLE DOĞRULAYACAKLARI:** uzun
+(15+ dk) videoda zoom'suz çizelgede tıkla/geri sar → kesim yok; Shift+sürükle
+→ kesim eklenir, Ctrl+Z geri alır; düz sürüklemede başlık imleci izler.
+
 **v1.4.0 SÜRÜM KESİLDİ, TAG BEKLİYOR (2026-11-02).** Bump yapıldı
 (`ec9f92c`: `pyproject.toml` 1.4.0, CHANGELOG `## [1.4.0] — 2026-11-01`).
 Dalga 2-6 elle doğrulamaları kullanıcıdan (İnan) YEŞİL; kurulum + tütsü
