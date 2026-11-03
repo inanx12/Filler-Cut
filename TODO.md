@@ -1,6 +1,6 @@
 # Filler-Cut — Yapılacaklar
 
-> Son gözden geçirme: 2026-11-02  
+> Son gözden geçirme: 2026-11-04  
 > Taban sürüm: **v1.4.1**  
 > Bu dosya ürün ve mühendislik backlog'unu tutar. Bilinen davranış sınırları
 > `KNOWN_ISSUES.md`'de, tamamlanan sürüm ayrıntıları `CHANGELOG.md`'de kalır;
@@ -8,11 +8,14 @@
 
 ## Kapsam kararı
 
+- **v1.4.2:** Zaman çizelgesi hotfix'i ve release'i tehdit eden WebView2 kilidi.
 - **v1.4.x:** Güvenilirlik, ölçüm, işlem görünürlüğü ve kullanıcı kontrolü.
-- **v1.5.0:** Çoklu dil ve kaydedilebilir kesim profilleri.
-- **v1.5.0 dışında:** Transkript editörü, serbest yapay zekâ komutları, bulut
-  API entegrasyonu ve içerik-anlayan otomatik kurgu. Bunlar ayrı tasarım ve
-  doğrulama gerektirir; bir sonraki minör sürüme yığılmaz.
+- **v1.5.0:** Çoklu dil, kullanıcı tanımlı filler'lar ve kaydedilebilir kesim
+  profilleri. `initial_prompt` ancak deney başarılı olursa ürünleşir.
+- **v1.6+:** Ayrı tasarım gerektiren kalıcılık, transkript editörü, LLM,
+  otomasyon ve geliştirici arayüzleri.
+- İçeriği anlayıp olaylara göre otomatik kurgu yapmak şimdilik ürün kapsamı
+  dışındadır; Filler-Cut konuşma temizleme aracı olarak odaklı kalır.
 
 ## Zaten var — yeniden backlog'a girme
 
@@ -21,7 +24,6 @@ kusur bulunursa ayrı hata kaydı açılmalı:
 
 - Dalga formlu review, kesim listesi ve kesim nedenleri.
 - Atlamalı önizleme; kesimi geri alma; sınır sürükleme ve sessizliğe yaslama.
-- Boş alanda tıkla/sürükle ile gezinme (scrub); elle kesim Shift+sürükle (v1.4.1).
 - Elle kesim ekleme, blade/Delete, Ctrl+Z / Ctrl+Shift+Z ve otomatik plana dön.
 - Gezinme/düzenleme kısayolları ve yeniden tuş atama.
 - Altı aşamalı ilerleme ve aşama süreleri.
@@ -31,9 +33,47 @@ kusur bulunursa ayrı hata kaydı açılmalı:
 - MP4 / FCP7 XML / SRT çıktıları.
 - Ortam bilgisiyle GitHub geri bildirim köprüsü; telemetri yok.
 
+**v1.4.1 notu:** 5 px tıklama/sürükleme eşiği korunur. Shift+sürükle çözümü
+kullanıcı testinde kabul edilmedi; elle kesim etkileşimi v1.4.2'de tuş
+gerektirmeyecek şekilde yeniden tasarlanır.
+
+## v1.4.2 — Hotfix
+
+### P0 — Release'den önce
+
+- [ ] **Shift+sürüklemeyi kaldır; gezinme ve kesim alanlarını fiziksel olarak ayır.**
+  - **Önerilen etkileşim:** Üstteki zaman cetveli tıklama/sürükleme ile seek ve
+    scrub yapar. Dalga formundaki boş alanda sürükleme, hiçbir değiştirici tuş
+    olmadan yeni kesim çizer. Mevcut kesim blokları ve kenar tutamaçlarının
+    davranışı değişmez.
+  - Cetvel şu an olay almayan 18 px'lik bir şerittir (`#cetvel`,
+    `pointer-events: none`). Yeterli isabet alanı için yüksekliği ve imleç
+    affordance'ı gözden geçir; cetvelde gezinme imleci, kesim alanında crosshair
+    kullan. Yeni bir mod veya basılı tuş şartı ekleme.
+  - Dalga formunda 5 px altındaki hareket tıklama kalır ve seek yapar; yanlışlıkla
+    kesim üretmez. 5 px üstündeki bilinçli sürükleme kesim önizlemesi açar.
+  - `shiftKey` dalı, Shift'e bağlı testler, ipuçları, README'ler ve CHANGELOG
+    yeni sözleşmeye göre güncellenir; eski ve yeni iki etkileşim birlikte
+    bırakılmaz.
+  - **Kabul ölçütleri:** 15+ dakikalık videoda normal tıklama kesim üretmez;
+    cetvel sürüklemesi yalnız gezinir; dalga formunda düz sürükleme kesim ekler;
+    Ctrl+Z / Ctrl+Shift+Z çalışır; pointercancel kesim eklemez; kenar düzenleme,
+    mıknatıs ve A-B döngüsü gerilemez.
+  - Gerçek fare olaylı tarayıcı testlerine ek olarak Windows'taki kurulu exe'de
+    touchpad ve %100/%125/%150 ekran ölçekleriyle elle doğrula. Linux konteyner
+    testi Windows onayı yerine geçmez.
+
+- [ ] **WebView2 stub hash kilidini imza tabanlı doğrulamaya geçir.**
+  - Microsoft stub rotasyonu 13 Ekim'den beri kilidi dört kez kırdı; her release'i
+    etkileyebileceği için genel UX işlerinden önce ele alınır.
+  - Windows Authenticode/imza doğrulaması ve sağlayıcı kimliği kontrolünü
+    değerlendir; yalnız dosya adına veya değişen bayt hash'ine güvenme.
+  - Geçerli güncel stub, sağlanamayan imza, bozuk dosya ve yanlış imza senaryoları
+    test edilmeli. Windows doğrulaması yapılmadan release kapanmaz.
+
 ## v1.4.x — Güvenilirlik ve kullanıcı deneyimi
 
-### P0 — Önce bunlar
+### P0 — Kullanıcıyı çıkmazda bırakan durumlar
 
 - [ ] **“Video kesilmedi” geri bildirimini sınıflandır ve yeniden üret.**
   - Aynı belirti üç farklı durum olabilir: gerçekten 0 kesim bulunması,
@@ -43,8 +83,8 @@ kusur bulunursa ayrı hata kaydı açılmalı:
     yeniden üretim notu çıkar. Açık issue #3 ile aynı kök neden olduğu kanıt
     olmadan varsayılmaz.
   - Kabul ölçütü: Kullanıcı **“kesinti yok”**, **“analiz başarısız”** ve
-    **“render başarısız”** durumlarını birbirinden açıkça görebilir; sessiz
-    başarı veya belirsiz bekleme yoktur.
+    **“render başarısız”** durumlarını açıkça ayırt edebilir; sessiz başarı veya
+    belirsiz bekleme yoktur.
 
 - [ ] **0 kesim durumunu eyleme dökülebilir yap.**
   - Kullanılan dil, mod ve sessizlik eşiğini özetle; “Normal modda aday
@@ -54,147 +94,163 @@ kusur bulunursa ayrı hata kaydı açılmalı:
   - Kabul ölçütü: 0 kesim bir çıkmaz sokak değildir ve kullanıcı nedenini
     uygulamadan ayrılmadan anlayabilir.
 
-### P1 — Yüksek kullanıcı faydası
+### P1 — Ölçülebilir kalite ve görünürlük
 
-- [ ] **Analiz ve render için dürüst kalan süre / ilerleme göster.**
-  - Kurulum indirmesindeki ETA'dan farklı olarak pipeline'ın EXTRACT,
-    TRANSCRIBE ve RENDER aşamalarını kapsar.
-  - Gerçek işlenen medya süresi veya ölçülebilir alt ilerleme yoksa yüzde
-    uydurma; “Hesaplanıyor…” / belirsiz ilerleme göster.
-  - Tahmin son ölçümlerle yumuşatılmalı, geriye sıçramamalı ve review'da
-    kullanıcının düşünme süresini işlem süresine katmamalı.
-  - Kabul ölçütü: Uzun TRANSCRIBE ve RENDER aşamalarında ekran donmuş gibi
-    kalmaz; süre verisi yoksa kesinlik iddiası da yoktur.
+- [ ] **KI-1 için `initial_prompt` deneyini ölçüm harness'inde çalıştır.**
+  - Mevcut `experiments/filler_leak/` korpusu ve baseline'ı kullan; üretim koduna
+    dokunma. Backend'in gerçekten desteklediği prompt bayrağını kurulu sürümün
+    yardımıyla doğrula.
+  - Prompt'suz baseline ile aynı klip/model/backend/donanımda A/B koş. Kesin
+    filler yakalama, gerekçeli yakalama, yanlış pozitif ve transkript sürüklenmesi
+    ayrı raporlanır. Varsayılan moddaki mevcut kesin-filler yakalama tabanı 1/8'dir;
+    hedef yalnız ham sayıyı değil, gerekçeli yakalamayı yükseltmek olmalı.
+  - Tek korpustaki iyileşmeyi genel başarı diye sunma. Yeni cümleleri prompt'a
+    ezberleterek görünür kazanç üretme; negatif kontrol ve görülmemiş klip ekle.
+  - Sonuç ölçülmüş iyileştirme göstermezse deneyi kapat; ürünleştirme maddesi
+    otomatik açılmaz.
+
+- [ ] **Analiz ve render için dürüst tahmin ve kalan süre göster.**
+  - Backend/model/donanım için ölçülen gerçek zaman oranını kullan; analizden önce
+    kaba bir aralık, işlem sırasında ölçülen ilerlemeyle güncellenen ETA göster.
+  - Kurulum indirmesindeki ETA'dan farklı olarak EXTRACT, TRANSCRIBE ve RENDER'ı
+    kapsar. Review'da kullanıcının düşünme süresi işlem süresine katılmaz.
+  - Gerçek alt ilerleme yoksa yüzde uydurma; “Hesaplanıyor…” veya belirsiz
+    ilerleme göster. Tahmin geriye sıçramamalı ve kesin süre iddiası taşımamalı.
 
 - [ ] **Koşan analizi ve render'ı iptal edebilme.**
   - Mevcut iptal yalnız review kapısını ve kurulum indirmesini kapsar; koşan
     ASR/ffmpeg alt süreçleri için ayrı yaşam döngüsü gerekir.
-  - İptalde alt süreç, geçici dosya ve kısmi çıktı davranışını tanımla.
-    Bozuk MP4 “tamamlandı” diye sunulmamalı.
-  - Kabul ölçütü: İptal sonrası yeni iş başlatılabilir, arka planda yetim
-    süreç kalmaz ve iptal hata gibi raporlanmaz.
+  - İptalde alt süreç, geçici dosya ve kısmi çıktı davranışını tanımla. Bozuk MP4
+    “tamamlandı” diye sunulmamalı; iptal sonrası yeni iş başlatılabilmeli ve
+    yetim süreç kalmamalı.
 
 - [ ] **Geri bildirime isteğe bağlı ve temizlenmiş hata özeti ekle.**
-  - Mevcut ortam bloğunu koru; telemetri ekleme ve otomatik gönderim yapma.
-  - Kullanıcının açık onayı olmadan log, video adı, dosya yolu veya tam
-    transkript alma. Eklenecek teknik özette kullanıcı adı/yol/API anahtarı
-    gibi verileri temizle ve gönderimden önce göster.
-  - Kabul ölçütü: “Transcribe başarısız” gibi boş raporlar yerine yeniden
-    üretime yetecek teknik bağlam, mahremiyet ihlali olmadan alınabilir.
+  - Mevcut ortam bloğunu koru; telemetri ve otomatik gönderim ekleme.
+  - Açık onay olmadan log, video adı, dosya yolu veya tam transkript alma.
+    Gönderimden önce teknik özeti göster; kullanıcı adı/yol/API anahtarı temizle.
 
-### P1 — Daha önce ertelenen teknik işler
+### P1 — Ertelenen doğrulama işleri
 
 - [ ] **Yavaş açılışı ölçümle ele al.**
   - Süreç başı → sunucu dinliyor → pencere göründü damgalarını ve
-    `python -X importtime` profilini çıkar.
-  - Ölçüm hangi bileşeni pahalı gösteriyorsa onu değiştir; tahminle optimizasyon
-    yapma. Önce/sonra aynı makinede soğuk ve ılık açılışları kaydet.
-
-- [ ] **WebView2 stub hash kilidini Microsoft rotasyonuna dayanıklı hâle getir.**
-  - `AGENTS.md`'deki v1.4.x backlog kararıdır; imza-ağırlıklı doğrulamayı
-    değerlendir. Sağlayıcı değişikliğinde yanlış-pozitif ve yanlış-negatif
-    davranışlarını test et.
-
-- [ ] **DaVinci Resolve'a gerçek FCP7 XML içe aktarma testini tamamla.**
-  - Yapısal XML testlerini gerçek uygulama doğrulamasıyla tamamla; zaman
-    çizelgesi süresi, A/V senkronu, kare sınırları ve elle düzenlenmiş planı
-    kontrol et.
-  - Sonucu sürüm notlarına işle; doğrulanmamış uyumluluk iddiası yazma.
+    `python -X importtime` profilini çıkar. Önce/sonra aynı makinede soğuk ve
+    ılık açılışları kaydet; tahminle optimizasyon yapma.
 
 - [ ] **Konserve ASR çıktısıyla PLAN → kare listesi regresyon kilidini ekle.**
-  - GPU, sürücü ve encoder baytlarından bağımsız olarak “aynı tespit → aynı
-    kareler” invariant'ını sabit transkript ve sessizlik haritasıyla kilitle.
-  - Ortam değişince kırılan bayt-hash testinin yerine değil, yanına daha kararlı
-    davranış kilidi olarak eklenir.
+  - GPU, sürücü ve encoder baytlarından bağımsız “aynı tespit → aynı kareler”
+    invariant'ını sabit transkript ve sessizlik haritasıyla kilitle. Ortama bağlı
+    bayt-hash testinin yerine değil, yanına kararlı davranış kilidi olarak eklenir.
+
+- [ ] **DaVinci Resolve'a gerçek FCP7 XML içe aktarma testini tamamla.**
+  - Zaman çizelgesi süresi, A/V senkronu, kare sınırları ve elle düzenlenmiş planı
+    gerçek uygulamada kontrol et. Geçerse README/sürüm notunda Resolve desteği
+    açıkça yazılabilir; doğrulanmadan uyumluluk iddia edilmez.
 
 ### P2 — Ölçüm veya kullanıcı kanıtı geldikçe
 
 - [ ] **KI-9: whisper-cli iş parçacığı üst sınırını ölç.**
-  - 64+ mantıksal çekirdekli sistemlerde üst sınır davranışını ölçmeden varsayılan
-    thread politikasını değiştirme.
+  - 64+ mantıksal çekirdekli sistemlerde davranışı ölçmeden varsayılan thread
+    politikasını değiştirme.
 
-## v1.5.0 — Çoklu dil ve kesim profilleri
+## v1.5.0 — Dil ve kontrol
 
 ### Ana kapsam
 
 - [ ] **ASR dil seçimini kullanıcıya aç.**
-  - İlk hedef: Türkçe, Almanca ve İngilizce için elle seçim. Otomatik algılama
-    ayrı doğrulama isterse zorunlu başlangıç kapsamı değildir.
-  - Varsayılan Türkçe davranışı ve mevcut config önceliği korunur; seçim job'a
-    ve rapora işlenir, iki backend'de de aynı şekilde uygulanır.
-  - Arayüz dili ile konuşma dili birbirine karıştırılmaz.
+  - İlk hedef Türkçe, Almanca ve İngilizce için elle seçimdir. Otomatik algılama
+    ayrı doğrulama gerektiriyorsa başlangıç kapsamı değildir.
+  - Varsayılan Türkçe davranışı ve config önceliği korunur; seçim job'a ve rapora
+    işlenir, iki backend'de de aynı şekilde uygulanır. Arayüz diliyle konuşma dili
+    birbirine karıştırılmaz.
 
-- [ ] **Dil bazlı filler kuralları ekle.**
-  - Yalnız ASR'a `de`/`en` geçirmek çoklu dil desteği sayılmaz; filler sözlüğü,
+- [ ] **Dil paketleri ve dil bazlı filler kuralları ekle.**
+  - Yalnız ASR'a `de`/`en` geçirmek yeterli değildir; filler sözlüğü,
     normalizasyon ve iki kademeli kesim politikası da dile göre çalışmalı.
-  - Türkçe listeyi ve normalizasyonu değiştirmeden dil eklenebilir bir sözlük
-    yapısı kur. Almanca/İngilizce aday filler'ları gerçek örneklerle doğrula;
-    anlamlı kelimeleri toplu kesen kaba liste kullanma.
-  - Her dil için false-positive ve false-negative örnekleri test verisine ekle.
+  - Türkçeye özel `ı→i` katlaması gibi normalizasyonlar genel kurala dönüştürülmez;
+    dil eklenebilir bir yapı kurulur ve mevcut Türkçe davranış korunur.
+  - Almanca/İngilizce kesin ve aday filler'lar gerçek örneklerle doğrulanır;
+    anlamlı kelimeleri toplu kesen kaba liste kullanılmaz. Her dil için
+    false-positive/false-negative örnekleri eklenir.
 
-- [ ] **Kullanıcı tanımlı filler sözcükleri ve kesim profilleri.**
-  - Kullanıcı kendi kesin/aday filler sözcüklerini, sessizlik eşiğini ve ilgili
-    padding/min_keep ayarlarını profil olarak kaydedebilsin.
-  - Örnek: “Türkçe konuşma”, “Almanca oyun”, “Hızlı Shorts”.
-  - Profil silme/değiştirme mevcut varsayılanları bozmasın; boş profil, bilinmeyen
-    dil ve geçersiz ms değerleri açık doğrulama hatası versin.
-  - Profil seçimi rapora yazılsın; aynı video + aynı profil + aynı ASR çıktısı
-    aynı planı üretsin.
+- [ ] **Kullanıcı tanımlı filler listeleri.**
+  - Kullanıcı kesin ve aday filler sözcüklerini ayrı ayrı düzenleyebilsin; config
+    ve arayüz aynı doğrulama/modeli kullansın.
+  - Boş liste, geçersiz kademe ve bilinmeyen dil açık hata versin; varsayılan dil
+    paketleri kullanıcı düzenlemesiyle sessizce bozulmasın.
+
+- [ ] **Kaydedilebilir kesim profilleri.**
+  - Konuşma / Oyun / Eğitim gibi profiller dil, filler listeleri, sessizlik eşiği,
+    padding ve min_keep ayarlarını taşısın.
+  - Profil seçimi rapora yazılsın; aynı video + aynı profil + aynı ASR çıktısı aynı
+    planı üretsin. Varsayılan profilsiz koşu mevcut davranışı korusun.
+
+### Koşullu kapsam
+
+- [ ] **`initial_prompt` ürünleştirme — yalnız v1.4.x deneyi geçerse.**
+  - Dil başına prompt config'i ve raporlanabilir davranış ekle; deneyde ölçülen
+    doğruluk/yanlış-pozitif sonuçları korunmalı.
+  - Deney başarısızsa veya yalnız prompt'taki örnekleri ezberliyorsa bu madde
+    açılmaz ve release kapsamına girmez.
 
 ### Doğrulama ve sürüm kapısı
 
 - [ ] **Türkçe geriye uyumluluk paritesi.**
-  - Profil seçilmediğinde mevcut Türkçe CLI ve UI koşusu aynı planı ve rapor
-    anlamlarını korumalı. Mevcut parite kilitleri daraltılmamalı.
+  - Profil seçilmediğinde mevcut Türkçe CLI/UI koşusu aynı planı ve rapor anlamlarını
+    korumalı; mevcut parite kilitleri daraltılmamalı.
 
 - [ ] **Gerçek kullanıcı klipleriyle dil doğrulaması.**
   - En az bir Türkçe ve bir Almanca oyun/konuşma klibinde yanlış kesimleri elle
-    incele. Yalnız sentetik “temiz cümle” örnekleriyle çoklu dil başarısı ilan
-    etme.
+    incele. Yalnız sentetik temiz cümlelerle çoklu dil başarısı ilan etme.
 
 - [ ] **Kalite kapıları.**
-  - Tam pytest, `ruff check .` ve `mypy .` yeşil olmadan sürüm çıkma.
-  - Yeni UI durumları için mevcut localhost güvenlik modeli ve mahremiyet
-    kilitleri korunmalı.
+  - Tam pytest, `ruff check .` ve `mypy .` yeşil olmadan sürüm çıkma. Yeni UI
+    durumlarında localhost güvenlik modeli ve mahremiyet kilitleri korunmalı.
 
-### v1.5.0 için isteğe bağlı, release engelleyici değil
+### İsteğe bağlı, release engelleyici değil
 
 - [ ] **Frameless özel pencere çerçevesi.**
-  - Daha önce park edilen görsel adaydır; ana dil/profil kapsamını geciktirirse
-    tekrar ertelenir. Erişilebilirlik, pencere taşıma/boyutlandırma ve sistem
-    kısayolları gerilememeli.
+  - Ana dil/profil kapsamını geciktirirse tekrar ertelenir. Pencere taşıma,
+    boyutlandırma, erişilebilirlik ve sistem kısayolları gerilememeli.
 
-## Sonraki sürümler / araştırma otoparkı
+## v1.6+ — Ayrı tasarım gerektirenler
 
-Bunlar reddedilmiş fikirler değil; henüz sürüm taahhüdü olmayan ayrı işlerdir:
-
-- **Proje kaydetme, otomatik kurtarma ve analiz önbelleği.** Job/plan bugün
-  bellekte; kalıcı şema, sürüm geçişi, kaynak video kimliği ve gizlilik kararı
-  gerekir. Aynı video için ASR önbelleği bu çalışmayla birlikte düşünülmeli.
+- **Proje kaydetme, otomatik kurtarma ve analiz önbelleği.** Kalıcı şema, sürüm
+  geçişi, kaynak video kimliği ve gizlilik kararı gerekir. Aynı video için ASR
+  önbelleği bu çalışmayla birlikte düşünülmeli.
 - **Transkript üzerinden düzenleme.** Kelimeye tıklayarak seek, metin seçerek
-  kesme ve ASR yazım düzeltme; mevcut CutPlan/Overlay sözleşmesini koruyacak
-  ayrı tasarım ister.
-- **Korumalı bölgeler.** Otomatik veya AI önerili kesimlerin kullanıcı
-  tarafından kilitlenen aralıklara dokunmaması.
-- **Sınırlı doğal dil komutları.** Önce beyaz listeli eylemler ve önizleme:
-  “10 saniyeden uzun sessizlikleri öner”, “bu aralığı koru”. Model doğrudan
-  planı uygulamamalı; kullanıcı onayı ve geri alma zorunlu.
-- **İsteğe bağlı bulut API.** Yerel/ücretsiz yol varsayılan kalmalı. BYOK,
-  anahtarın güvenli saklanması, maliyet önizlemesi, veri minimizasyonu ve ağ
-  hatası davranışı tasarlanmadan başlanmamalı. Video yerine önce transkript +
-  zaman damgası gönderme seçeneği değerlendirilmeli.
-- **İçerik-anlayan otomatik kurgu.** Transkript, zaman damgası ve gerekirse
-  seçili video kareleriyle ayrı bir deneysel hat; v1.5.0 bağımlılığı değil.
-- **Dışa aktarma ön ayarları ve batch işleme.** Temel tek-video akışı ve proje
-  kalıcılığı oturmadan öncelik değil.
+  kesme ve ASR yazım düzeltme; CutPlan/Overlay sözleşmesini koruyan ayrı tasarım
+  ister.
+- **Korumalı bölgeler.** Otomatik veya LLM önerili kesimler kullanıcı tarafından
+  kilitlenen aralıklara dokunmamalı.
+- **Opt-in LLM ile aday filler sınıflandırma.** Amaç “şey/yani” gibi bağlama bağlı
+  kelimelerin isabetini artırmaktır. Whisper'ın hiç yazmadığı filler'ı LLM geri
+  getiremez. Ses/video yerine yalnız gerekli kelime ve sınırlı bağlam gönderilir;
+  anahtar keyring'de tutulur, maliyet ve veri gönderimi önceden gösterilir.
+- **Sınırlı doğal dil komutları.** Beyaz listeli eylemler, önizleme, kullanıcı
+  onayı ve geri alma olmadan plana doğrudan uygulanmaz.
+- **Ajan dostu CLI.** `--plan-only`, makinece okunabilir JSON ve anlamlı çıkış
+  kodları ayrı bir CLI sözleşmesi olarak tasarlanır; mevcut insan çıktısı ve
+  güvenlik/mahremiyet kuralları bozulmaz. v1.5.0 ana kapsamına eklenmez.
+- **MCP sunucusu.** CLI sözleşmesi ve gerçek kullanım ihtiyacı netleşmeden
+  başlanmaz; localhost güvenliği yeni transport'ta yeniden değerlendirilir.
+- **Toplu işleme kuyruğu.** Tek-video akışı, kalıcı proje modeli ve hata/iptal
+  davranışı oturmadan öncelik değildir.
+
+## Sürümden bağımsız
+
+- [ ] **SignPath kod imzası başvurusunu izle.**
+  - Başvuru sonuçlanıp kurucu imzalandığında SmartScreen davranışını yeniden
+    doğrula ve README'deki imzasızlık notunu güncelle. Başvuru yapılmış olması
+    imzalı dağıtım iddiası için yeterli değildir.
 
 ## Önerilen çalışma sırası
 
-1. “Video kesilmedi” ve açık transcribe raporu için yeniden üretim verisi topla.
-2. 0 kesim / analiz hatası / render hatası ayrımını ve eyleme dökülebilir
-   mesajları tamamla.
-3. Uzun aşamalarda ilerleme/ETA ve koşan işi iptal etmeyi ekle.
-4. Açılış ölçümü, WebView2 kilidi, Resolve doğrulaması ve kararlı kare
-   invariant'ı gibi ertelenmiş 1.4.x işlerini kapat.
-5. v1.5.0'a **yalnız dil + profil kapsamıyla** gir; AI/API işlerini ayrı
-   tasarla.
+1. v1.4.2'de cetvel = gezinme / dalga formu = kesim ayrımını gerçek tarayıcı ve
+   Windows exe testleriyle doğrula; WebView2 imza kilidini kapat.
+2. “Video kesilmedi” ve açık transcribe raporu için yeniden üretim verisi topla;
+   0 kesim / analiz hatası / render hatası ayrımını tamamla.
+3. KI-1 `initial_prompt` A/B deneyini mevcut filler_leak harness'inde koş.
+4. ETA ve koşan işi iptal etmeyi; ardından açılış ölçümü, Resolve doğrulaması ve
+   kararlı kare invariant'ını tamamla.
+5. v1.5.0'a dil + kullanıcı filler listeleri + profillerle gir; CLI/MCP/LLM
+   işlerini ayrı tasarla.
