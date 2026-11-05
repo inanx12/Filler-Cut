@@ -327,18 +327,17 @@ class TestMiknatis:
 
 
 class TestBosAlanSurukleme:
-    """Boş alanda Shift+sürükleyerek yeni kesim — bu dal kırmızıyken de
-    çalışıyordu (olay hep 'boş alan' sanılıyordu), ama sözleşmenin parçası:
-    kilitli kalır. v1.4.1'den beri Shift ister (düz sürükleme = gezinme)."""
+    """Dalga formunun boş alanında DÜZ sürükleyerek yeni kesim — bu dal
+    kırmızıyken de çalışıyordu (olay hep 'boş alan' sanılıyordu), ama
+    sözleşmenin parçası: kilitli kalır. v1.4.2: değiştirici tuş YOK (v1.4.1'in
+    Shift şartı kaldırıldı; gezinme artık üstteki cetveldedir)."""
 
     def test_bos_alanda_yeni_kesim_eklenir(self, sayfa: Any) -> None:
         track = sayfa.locator("#tl-track").bounding_box()
         assert track is not None
         y = track["y"] + track["height"] * 0.7
         x0 = track["x"] + track["width"] * 0.10
-        sayfa.keyboard.down("Shift")
         _surukle(sayfa, (x0, y), track["width"] * 0.08)
-        sayfa.keyboard.up("Shift")
         istekler = sayfa.evaluate("() => window.__istekler")
         assert istekler, "boş alan sürüklemesi istek üretmedi"
         eklemeler = istekler[-1]["govde"]["eklemeler"]
@@ -374,7 +373,12 @@ class TestGezinmeKesimUretmez:
     """v1.4.1 — kullanıcı bildirimi: "geri gitmek isterken istemediğim yerleri
     işaretliyorum". Eski eşik 40 MS idi; uzun videoda zoom'suz çizelgede bu
     bir pikselin altında kalır, tıklarken elin en küçük kayması kesim
-    üretiyordu. Artık karar PİKSELLE verilir ve düz sürükleme yalnız gezinir.
+    üretiyordu. Karar PİKSELLE verilir (5 px).
+
+    v1.4.2 — v1.4.1'in Shift+sürükle çözümü kullanıcı testinde kabul
+    edilmedi. Gezinme ve kesim alanları artık FİZİKSEL olarak ayrıdır:
+    üstteki cetvel tıkla/sürükle = gezin; dalga formunda tıklama = seek,
+    bilinçli sürükleme = yeni kesim. Değiştirici tuş YOK.
     """
 
     def _bos_nokta(self, sayfa: Any, oran: float) -> tuple[float, float, float]:
@@ -382,6 +386,17 @@ class TestGezinmeKesimUretmez:
         assert track is not None
         x = track["x"] + track["width"] * oran
         return x, track["y"] + track["height"] * 0.7, track["width"]
+
+    def _cetvel_noktasi(self, sayfa: Any, oran: float) -> tuple[float, float, float]:
+        cetvel = sayfa.locator("#cetvel").bounding_box()
+        assert cetvel is not None
+        x = cetvel["x"] + cetvel["width"] * oran
+        return x, cetvel["y"] + cetvel["height"] / 2, cetvel["width"]
+
+    def _ms(self, sayfa: Any, x: float) -> float:
+        track = sayfa.locator("#tl-track").bounding_box()
+        assert track is not None
+        return float((x - track["x"]) * _px_basina_ms(sayfa))
 
     def test_titrek_tiklama_kesim_eklemez(self, sayfa: Any) -> None:
         """3 px kayma (bu çizelgede ~60 ms > eski 40 ms eşiği): kesim YOK."""
@@ -391,24 +406,210 @@ class TestGezinmeKesimUretmez:
             "titrek tıklama yeni kesim ekledi"
         )
 
-    def test_duz_surukleme_gezinir_kesim_eklemez(self, sayfa: Any) -> None:
+    def test_dalga_formunda_tiklama_seek_yapar(self, sayfa: Any) -> None:
+        """Eşik altı hareket TIKLAMADIR: kesim yok, oynatma başlığı oraya gider."""
         sayfa.evaluate(SAHTE_ZAMAN)
-        x, y, genislik = self._bos_nokta(sayfa, 0.10)
+        x, y, _ = self._bos_nokta(sayfa, 0.30)
+        _surukle(sayfa, (x, y), 2.0)
+        assert sayfa.evaluate("() => window.__istekler.length") == 0
+        t_ms = sayfa.evaluate("() => window.__t") * 1000
+        assert abs(t_ms - self._ms(sayfa, x)) < 2 * _px_basina_ms(sayfa), (
+            f"tıklama seek yapmadı: {t_ms:.0f} ms"
+        )
+
+    def test_cetvel_surukleme_gezinir_kesim_eklemez(self, sayfa: Any) -> None:
+        sayfa.evaluate(SAHTE_ZAMAN)
+        x, y, genislik = self._cetvel_noktasi(sayfa, 0.10)
         _surukle(sayfa, (x, y), genislik * 0.08)
         assert sayfa.evaluate("() => window.__istekler.length") == 0, (
-            "Shift'siz sürükleme kesim ekledi"
+            "cetvel sürüklemesi kesim ekledi"
         )
-        beklenen_ms = (x + genislik * 0.08 - (x - genislik * 0.10)) * _px_basina_ms(sayfa)
+        beklenen_ms = self._ms(sayfa, x + genislik * 0.08)
         t_ms = sayfa.evaluate("() => window.__t") * 1000
         assert abs(t_ms - beklenen_ms) < 3 * _px_basina_ms(sayfa), (
             f"playhead imleci izlemedi: {t_ms:.0f} ms, beklenen ~{beklenen_ms:.0f} ms"
         )
         assert sayfa.evaluate("() => document.getElementById('yeni-secim')") is None
 
-    def test_shift_ile_esik_alti_kesim_eklemez(self, sayfa: Any) -> None:
-        """Shift basılıyken bile eşiğin altındaki hareket tıklamadır."""
-        x, y, _ = self._bos_nokta(sayfa, 0.30)
-        sayfa.keyboard.down("Shift")
-        _surukle(sayfa, (x, y), 3.0)
-        sayfa.keyboard.up("Shift")
+    def test_cetvel_surukleme_sirasinda_basligi_tasir(self, sayfa: Any) -> None:
+        """Scrub: başlık BIRAKMADAN önce, imleç hareket ederken izler."""
+        sayfa.evaluate(SAHTE_ZAMAN)
+        x, y, genislik = self._cetvel_noktasi(sayfa, 0.20)
+        sayfa.mouse.move(x, y)
+        sayfa.mouse.down()
+        bas_ms = sayfa.evaluate("() => window.__t") * 1000
+        sayfa.mouse.move(x + genislik * 0.10, y, steps=8)
+        ara_ms = sayfa.evaluate("() => window.__t") * 1000
+        tip = sayfa.evaluate("() => review.surukleme && review.surukleme.tip")
+        sayfa.mouse.up()
+        assert tip == "gezin"
+        assert abs(bas_ms - self._ms(sayfa, x)) < 2 * _px_basina_ms(sayfa), "basış seek yapmadı"
+        assert ara_ms > bas_ms, "sürüklerken başlık imleci izlemedi"
+
+    def test_cetvelde_tiklama_seek_yapar(self, sayfa: Any) -> None:
+        sayfa.evaluate(SAHTE_ZAMAN)
+        x, y, _ = self._cetvel_noktasi(sayfa, 0.55)
+        sayfa.mouse.click(x, y)
         assert sayfa.evaluate("() => window.__istekler.length") == 0
+        t_ms = sayfa.evaluate("() => window.__t") * 1000
+        assert abs(t_ms - self._ms(sayfa, x)) < 2 * _px_basina_ms(sayfa)
+
+    def test_cetvelden_baslayan_surukleme_dalgaya_inse_de_gezinir(self, sayfa: Any) -> None:
+        """Alan kararı BASIŞTA verilir: cetvelden başlayıp çapraz olarak dalga
+        formuna inen sürükleme kesim çizmez."""
+        x, y, genislik = self._cetvel_noktasi(sayfa, 0.10)
+        _, y_dalga, _ = self._bos_nokta(sayfa, 0.10)
+        sayfa.mouse.move(x, y)
+        sayfa.mouse.down()
+        sayfa.mouse.move(x + genislik * 0.10, y_dalga, steps=10)
+        sayfa.mouse.up()
+        assert sayfa.evaluate("() => window.__istekler.length") == 0
+
+    def test_shift_davranisi_degistirmez(self, sayfa: Any) -> None:
+        """Eski etkileşim BIRAKILMADI: Shift ne cetveli kesim alanına çevirir
+        ne de dalga formundaki sürüklemeyi gezinmeye — alan belirler."""
+        x, y, genislik = self._cetvel_noktasi(sayfa, 0.10)
+        sayfa.keyboard.down("Shift")
+        _surukle(sayfa, (x, y), genislik * 0.08)
+        sayfa.keyboard.up("Shift")
+        assert sayfa.evaluate("() => window.__istekler.length") == 0, (
+            "Shift+cetvel sürüklemesi kesim ekledi"
+        )
+        x, y, genislik = self._bos_nokta(sayfa, 0.10)
+        sayfa.keyboard.down("Shift")
+        _surukle(sayfa, (x, y), genislik * 0.08)
+        sayfa.keyboard.up("Shift")
+        istekler = sayfa.evaluate("() => window.__istekler")
+        assert len(istekler) == 1 and len(istekler[-1]["govde"]["eklemeler"]) == 1
+
+    def test_pointercancel_kesim_eklemez(self, sayfa: Any) -> None:
+        """Eşiği aşmış bir kesim sürüklemesi iptal edilirse (dokunmatik /
+        touchpad hareketi, pencere odağı) kesim EKLENMEZ ve önizleme kalkar."""
+        x, y, genislik = self._bos_nokta(sayfa, 0.10)
+        sayfa.mouse.move(x, y)
+        sayfa.mouse.down()
+        sayfa.mouse.move(x + genislik * 0.08, y, steps=10)
+        onizleme = sayfa.evaluate("() => !!document.getElementById('yeni-secim')")
+        sayfa.evaluate(
+            """() => document.getElementById("tl-track").dispatchEvent(
+                 new PointerEvent("pointercancel", { pointerId: 1, bubbles: true }))"""
+        )
+        sayfa.mouse.up()
+        assert onizleme, "eşik aşıldığı halde kesim önizlemesi açılmadı"
+        assert sayfa.evaluate("() => window.__istekler.length") == 0, (
+            "pointercancel kesim ekledi"
+        )
+        assert sayfa.evaluate("() => document.getElementById('yeni-secim')") is None
+        assert sayfa.evaluate("() => review.surukleme") is None
+
+
+#: 20 dakikalık video — kabul ölçütü "15+ dk videoda normal tıklama kesim
+#: üretmez". Zoom'suz çizelgede bir piksel burada ~1 sn'dir.
+UZUN_VIDEO = """
+() => {
+  const g = window.__gorunum;
+  g.total_ms = 1200000;
+  g.kalan_ms = g.total_ms - g.kesilen_ms;
+  zc.total_ms = g.total_ms;
+  zcCiz();
+  return document.getElementById("tl-track").clientWidth;
+}
+"""
+
+
+class TestUzunVideo:
+    """Kabul ölçütleri 15+ dakikalık videoda (v1.4.1 kusurunun görüldüğü yer)."""
+
+    def _hazir(self, sayfa: Any) -> float:
+        genislik = float(sayfa.evaluate(UZUN_VIDEO))
+        sayfa.evaluate(SAHTE_ZAMAN)
+        return 1_200_000 / genislik
+
+    def test_titrek_tiklama_kesim_eklemez(self, sayfa: Any) -> None:
+        px_ms = self._hazir(sayfa)
+        assert px_ms > 500, "kurulum uzun video ölçeğini vermedi"
+        track = sayfa.locator("#tl-track").bounding_box()
+        assert track is not None
+        y = track["y"] + track["height"] * 0.7
+        for oran in (0.2, 0.5, 0.8):
+            _surukle(sayfa, (track["x"] + track["width"] * oran, y), 4.0)
+        assert sayfa.evaluate("() => window.__istekler.length") == 0
+
+    def test_cetvel_surukleme_yalniz_gezinir(self, sayfa: Any) -> None:
+        self._hazir(sayfa)
+        cetvel = sayfa.locator("#cetvel").bounding_box()
+        assert cetvel is not None
+        x = cetvel["x"] + cetvel["width"] * 0.6
+        _surukle(sayfa, (x, cetvel["y"] + cetvel["height"] / 2), -cetvel["width"] * 0.3)
+        assert sayfa.evaluate("() => window.__istekler.length") == 0
+        t_ms = sayfa.evaluate("() => window.__t") * 1000
+        assert 300_000 < t_ms < 420_000, f"geri sarma hedefe varmadı: {t_ms:.0f} ms"
+
+    def test_dalga_formunda_surukleme_kesim_ekler(self, sayfa: Any) -> None:
+        self._hazir(sayfa)
+        track = sayfa.locator("#tl-track").bounding_box()
+        assert track is not None
+        _surukle(sayfa, (track["x"] + track["width"] * 0.3, track["y"] + track["height"] * 0.7),
+                 track["width"] * 0.05)
+        eklemeler = sayfa.evaluate("() => window.__istekler.at(-1).govde.eklemeler")
+        assert len(eklemeler) == 1 and eklemeler[0]["bit_ms"] - eklemeler[0]["bas_ms"] > 30_000
+
+
+class TestAlanAyrimi:
+    """Cetvel ve kesim alanı FİZİKSEL olarak ayrı ve görsel olarak ayırt edilir."""
+
+    def test_cetvel_isabet_testine_girer(self, sayfa: Any) -> None:
+        """v1.4.1'e kadar `pointer-events: none` idi — artık gezinme alanı."""
+        assert sayfa.evaluate(
+            """() => {
+              const c = document.getElementById("cetvel");
+              const r = c.getBoundingClientRect();
+              const ust = document.elementFromPoint(r.left + r.width * 0.4, r.top + r.height / 2);
+              return !!(ust && ust.closest("#cetvel"));
+            }"""
+        ), "cetvelin üstünde başka bir katman var ya da cetvel olay almıyor"
+
+    def test_cetvel_yeterince_yuksek(self, sayfa: Any) -> None:
+        h = sayfa.evaluate("() => document.getElementById('cetvel').getBoundingClientRect().height")
+        assert h >= 24, f"cetvel isabet şeridi çok ince: {h} px"
+
+    def test_alanlar_ust_uste_binmez(self, sayfa: Any) -> None:
+        """Kesim katmanı tam cetvelin altından başlar: bloklar/tutamaçlar cetvele
+        taşmaz, cetvel kesim alanından piksel çalmaz."""
+        r = sayfa.evaluate(
+            """() => {
+              const c = document.getElementById("cetvel").getBoundingClientRect();
+              const k = document.getElementById("kesim-katmani").getBoundingClientRect();
+              const p = document.getElementById("playhead").getBoundingClientRect();
+              return { cAlt: c.bottom, kUst: k.top, pUst: p.top };
+            }"""
+        )
+        assert r["cAlt"] == r["kUst"], r
+        assert r["pUst"] == r["kUst"], r
+
+    def test_imlecler_ayri(self, sayfa: Any) -> None:
+        imlec = sayfa.evaluate(
+            """() => ({
+              cetvel: getComputedStyle(document.getElementById("cetvel")).cursor,
+              kesim: getComputedStyle(document.getElementById("kesim-katmani")).cursor,
+            })"""
+        )
+        assert imlec == {"cetvel": "pointer", "kesim": "crosshair"}
+
+    def test_scrub_sirasinda_imlec_gezinme(self, sayfa: Any) -> None:
+        """Pointer capture track'te — scrub sürerken imleç crosshair'e dönmemeli."""
+        cetvel = sayfa.locator("#cetvel").bounding_box()
+        assert cetvel is not None
+        x, y = cetvel["x"] + cetvel["width"] * 0.3, cetvel["y"] + cetvel["height"] / 2
+        sayfa.mouse.move(x, y)
+        sayfa.mouse.down()
+        sayfa.mouse.move(x + 40, y + 40, steps=4)
+        sirasinda = sayfa.evaluate(
+            "() => getComputedStyle(document.getElementById('tl-track')).cursor"
+        )
+        sayfa.mouse.up()
+        sonra = sayfa.evaluate(
+            "() => document.getElementById('tl-track').classList.contains('gezinme')"
+        )
+        assert sirasinda == "pointer"
+        assert sonra is False
