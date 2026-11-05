@@ -7,6 +7,24 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
+## Yayımlanmamış — 1.4.2 hedefi
+
+### Değişti
+
+- **Zaman çizelgesinde gezinme ve kesim alanları artık ayrı; Shift gerekmiyor.**
+  v1.4.1'in "yeni kesim için Shift+sürükle" çözümü kullanıcı testinde kabul
+  edilmedi ve kaldırıldı. Yeni düzen:
+  - **Üstteki zaman cetveli** gezinme alanıdır: tıklamak oynatma başlığını
+    oraya taşır, sürüklemek videoda gezinir (scrub). Cetvel 18 px'ten 24 px'e
+    büyüdü, artık tıklanabilir ve el imleci gösterir.
+  - **Dalga formundaki boş alanda** düz sürükleme, hiçbir tuş basmadan yeni
+    kesim çizer (crosshair imleci). 5 px'ten az hareket hâlâ tıklamadır:
+    yalnız oynatma başlığını taşır, kesim üretmez — uzun videoda titrek
+    tıklama sorunu (v1.4.1) geri gelmez.
+  - Kesim blokları, kenar tutamaçları, mıknatıs, geri al / yinele ve A-B
+    döngüsü değişmedi. Shift artık zaman çizelgesinde hiçbir şeyi
+    değiştirmez. Çizelgenin altındaki ipucu ve README'ler güncellendi.
+
 ## [1.4.1] — 2026-11-03
 
 **Zaman çizelgesinde gezinme düzeltmesi**

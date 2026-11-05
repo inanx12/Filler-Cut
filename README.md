@@ -349,8 +349,10 @@ timeline, every cut drawn on it, and a cut list. There you can
 - **undo any cut with one click** — it stays in the list, greyed out, and one
   more click brings it back,
 - **drag a cut boundary**; it snaps to the nearest silence edge,
-- **click or drag on empty timeline** to scrub the playhead;
-  **Shift+drag** adds a cut of your own,
+- **click or drag on the time ruler** (the strip along the top of the
+  timeline) to move or scrub the playhead,
+- **drag across empty waveform** to add a cut of your own — no modifier key;
+  a plain click there (under 5 px of movement) only moves the playhead,
 - **snap a cut to silence with one click** (`Y`) — the "Sessizliğe yasla"
   button on every row pushes both boundaries outward to the first silence
   edge, at most 500 ms per direction; it stops early at a neighbouring cut,

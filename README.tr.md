@@ -350,8 +350,11 @@ PLAN'dan sonra koşu **gözden geçirme için durur**: video, dalga formlu zaman
 - **tek tıkla bir kesimi geri alırsınız** — listeden silinmez, soluklaşır ve
   bir tıkla geri gelir,
 - **kesim sınırını sürüklersiniz**; tutamaç en yakın sessizlik kenarına yapışır,
-- **boş alanda tıklayıp sürükleyerek videoda gezinirsiniz** (scrub);
-  **Shift basılıyken sürükleyerek kendi kesiminizi eklersiniz,**
+- **üstteki zaman cetvelinde tıklayıp sürükleyerek videoda gezinirsiniz**
+  (scrub),
+- **dalga formunun boş alanında sürükleyerek kendi kesiminizi eklersiniz** —
+  tuş basmanız gerekmez; orada düz tıklama (5 px'ten az hareket) yalnız
+  oynatma başlığını taşır,
 - **tek tıkla kesimi sessizliğe yaslarsınız** (`Y`) — her satırdaki
   "Sessizliğe yasla" düğmesi kesimin iki sınırını da dışa, ilk sessizlik
   kenarına taşır (yön başına en çok 500 ms); komşu kesime dayanınca durur,
