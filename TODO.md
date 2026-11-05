@@ -41,7 +41,7 @@ gerektirmeyecek şekilde yeniden tasarlanır.
 
 ### P0 — Release'den önce
 
-- [ ] **Shift+sürüklemeyi kaldır; gezinme ve kesim alanlarını fiziksel olarak ayır.**
+- [x] **Shift+sürüklemeyi kaldır; gezinme ve kesim alanlarını fiziksel olarak ayır.**
   - **Önerilen etkileşim:** Üstteki zaman cetveli tıklama/sürükleme ile seek ve
     scrub yapar. Dalga formundaki boş alanda sürükleme, hiçbir değiştirici tuş
     olmadan yeni kesim çizer. Mevcut kesim blokları ve kenar tutamaçlarının
@@ -62,6 +62,8 @@ gerektirmeyecek şekilde yeniden tasarlanır.
   - Gerçek fare olaylı tarayıcı testlerine ek olarak Windows'taki kurulu exe'de
     touchpad ve %100/%125/%150 ekran ölçekleriyle elle doğrula. Linux konteyner
     testi Windows onayı yerine geçmez.
+  - **Tamamlandı (2026-11-06):** `fix/1.4.2-cetvel-gezinme` dalında; Windows
+    kurulu exe elle doğrulaması İnan tarafından yapıldı, sorun bulunmadı.
 
 - [ ] **WebView2 stub hash kilidini imza tabanlı doğrulamaya geçir.**
   - Microsoft stub rotasyonu 13 Ekim'den beri kilidi dört kez kırdı; her release'i
