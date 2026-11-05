@@ -778,7 +778,20 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   --tl-kat-kesim: 1;
   --tl-kat-playhead: 2;
   --tl-kat-cetvel: 3;
+  /* Cetvel şeridinin yüksekliği — altındaki her katman (`top`) buradan
+     başlar. v1.4.2: 18 → 24 px; cetvel artık GEZİNME alanıdır ve parmak /
+     touchpad için yeterli isabet şeridi ister. */
+  --tl-cetvel-yukseklik: 24px;
 }
+
+/* İki etkileşim alanı FİZİKSEL olarak ayrıdır (v1.4.2):
+     · cetvel (üst şerit)        → tıkla / sürükle = gezin (seek + scrub)
+     · dalga formu (kesim alanı) → 5 px'ten az hareket = tıklama (seek);
+                                   bilinçli sürükleme = yeni kesim
+   Değiştirici tuş YOKTUR. Kesim alanının imleci crosshair, cetvelinki
+   pointer'dır; scrub sürerken imleç pointer kalır (`.gezinme` — pointer
+   capture track'te olduğu için imleci track belirler). */
+.tl-track.gezinme { cursor: pointer; }
 
 /* ── #tl-track KATMAN SIRASI — HEPSİ AÇIKÇA İLAN EDİLİR ────────────────
    ÖLÇÜLMÜŞ REGRESYON (v1.3.0 Dalga A → Dalga B'de bulundu): kesim kenarından
@@ -796,16 +809,24 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
    (kütüphane gölge DOM'u dahil) sıraya sessizce giremez. Kilidi
    `tests/test_web_editor.py::TestCizelgeKatmanlari` (statik) ve
    `tests/test_web_surukleme.py` (gerçek fare olayları). */
-/* cetvel: üst şerit, tik + etiket */
+/* cetvel: üst şerit, tik + etiket — ve GEZİNME alanı (v1.4.2).
+   v1.4.1'e kadar `pointer-events: none` bir süstü; artık isabet testine
+   girer ve `pointerdown`ı gezinme dalına yollar. Kesim katmanıyla ÜST ÜSTE
+   BİNMEZ (kesim katmanı tam cetvelin altından başlar), yani blok ve
+   tutamaçların isabet alanı değişmedi. */
 .cetvel {
   position: absolute;
   z-index: var(--tl-kat-cetvel);
   top: 0; left: 0; right: 0;
-  height: 18px;
+  height: var(--tl-cetvel-yukseklik);
+  box-sizing: border-box;
   border-bottom: 1px solid var(--cizgi);
-  pointer-events: none;
+  background: rgba(255, 255, 255, .03);
+  cursor: pointer;
   overflow: hidden;
 }
+
+.cetvel:hover { background: rgba(255, 255, 255, .07); }
 
 .tik {
   position: absolute;
@@ -817,7 +838,7 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 .tik-etiket {
   position: absolute;
   left: 4px;
-  top: 1px;
+  top: 5px;
   font-size: 10px;
   color: var(--soluk);
   font-variant-numeric: tabular-nums;
@@ -834,7 +855,7 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   position: absolute;
   z-index: var(--tl-kat-dalga);
   pointer-events: none;
-  top: 18px; left: 0; right: 0; bottom: 0;
+  top: var(--tl-cetvel-yukseklik); left: 0; right: 0; bottom: 0;
 }
 
 /* A-B aralık önizlemesi (I/O/X — v1.4.0 Dalga 1).
@@ -851,7 +872,7 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
   position: absolute;
   z-index: var(--tl-kat-dalga);
   pointer-events: none;
-  top: 18px; left: 0; right: 0; bottom: 0;
+  top: var(--tl-cetvel-yukseklik); left: 0; right: 0; bottom: 0;
 }
 
 .dongu-bant {
@@ -891,7 +912,7 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 .kesim-katmani {
   position: absolute;
   z-index: var(--tl-kat-kesim);
-  top: 18px; left: 0; right: 0; bottom: 0;
+  top: var(--tl-cetvel-yukseklik); left: 0; right: 0; bottom: 0;
 }
 
 .kesim-blok {
@@ -1006,7 +1027,7 @@ h2 { font-size: 14px; margin: 0 0 10px; color: var(--soluk); font-weight: 600; t
 .playhead {
   position: absolute;
   z-index: var(--tl-kat-playhead);
-  top: 18px; bottom: 0;
+  top: var(--tl-cetvel-yukseklik); bottom: 0;
   width: 2px;
   background: #fff;
   box-shadow: 0 0 6px rgba(255, 255, 255, .8);

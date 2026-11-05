@@ -1922,10 +1922,23 @@ el("tl-track").addEventListener("pointerdown", (ev) => {
   /* Düzenleme YALNIZ analiz_tamam'da: koşarken ya da sonuçta çizelge
      salt-okunurdur (sunucu da 409 verirdi, ama sessiz bir istek atmayalım). */
   if (!review.gorunum || durum.asama !== "analiz_tamam") return;
+  const cetvel = ev.target.closest("#cetvel");
   const tutamac = ev.target.closest(".tutamac");
   const blok = ev.target.closest(".kesim-blok");
   el("tl-track").setPointerCapture(ev.pointerId);
 
+  /* v1.4.2 — gezinme ve kesim alanları FİZİKSEL olarak ayrıdır; hiçbir
+     değiştirici tuş (Shift vb.) yoktur. Üstteki cetvel GEZİNME alanıdır:
+     basış oynatma başlığını taşır, sürükleme onu imleçle birlikte kaydırır
+     (scrub). Cetvel kesim katmanıyla üst üste binmez; blok/tutamaç dalları
+     aşağıda aynen. */
+  if (cetvel) {
+    const baslangic = olayMs(ev);
+    review.surukleme = { tip: "gezin", baslangic, bitis: baslangic, x0: ev.clientX };
+    el("tl-track").classList.add("gezinme");
+    el("oynatici").currentTime = baslangic / 1000;
+    return;
+  }
   if (tutamac && blok) {
     const kesim = review.gorunum.kesimler.find((k) => k.id === blok.dataset.id);
     review.surukleme = { tip: "sinir", id: kesim.id, yan: tutamac.dataset.yan,
@@ -1941,13 +1954,12 @@ el("tl-track").addEventListener("pointerdown", (ev) => {
     reviewCiz();
     return;
   }
-  /* Boş alan (v1.4.1): düz basış GEZİNMEDİR — tıklama oynatma başlığını
-     taşır, sürükleme onu imleçle birlikte kaydırır (scrub). Yeni kesim
-     çizmek yıkıcı bir eylem olduğu için Shift ister. */
+  /* Dalga formundaki boş alan = KESİM alanı (v1.4.2). Düz sürükleme yeni
+     kesim çizer; SURUKLEME_ESIK_PX'in altındaki hareket tıklama sayılır ve
+     yalnız oynatma başlığını taşır (bkz. surukleBitir) — uzun videoda
+     titrek tıklama kesim üretmez (v1.4.1 dersi). */
   const baslangic = olayMs(ev);
-  review.surukleme = { tip: ev.shiftKey ? "yeni" : "gezin", baslangic,
-                       bitis: baslangic, x0: ev.clientX };
-  if (!ev.shiftKey) el("oynatici").currentTime = baslangic / 1000;
+  review.surukleme = { tip: "yeni", baslangic, bitis: baslangic, x0: ev.clientX };
 });
 
 el("tl-track").addEventListener("pointermove", (ev) => {
@@ -1985,6 +1997,7 @@ el("tl-track").addEventListener("pointermove", (ev) => {
 function surukleBitir(ev) {
   const s = review.surukleme;
   review.surukleme = null;
+  el("tl-track").classList.remove("gezinme");
   const onizlemeBlok = el("yeni-secim");
   if (onizlemeBlok) onizlemeBlok.remove();
   if (!s) return;
@@ -1994,14 +2007,14 @@ function surukleBitir(ev) {
   }
   if (s.tip === "yeni" && ev.type === "pointercancel") return; // iptal kesim eklemez
   if (s.tip === "gezin") {
-    // tıklama ya da scrub: başlık son imleç konumunda kalır
+    // cetvelde tıklama ya da scrub: başlık son imleç konumunda kalır
     el("oynatici").currentTime = s.bitis / 1000;
     return;
   }
   const bas = yerelSnap(Math.min(s.baslangic, s.bitis));
   const bit = yerelSnap(Math.max(s.baslangic, s.bitis));
   if (!esikAsildiMi(s, ev) || bit - bas < ASGARI_KESIM_MS) {
-    // Shift'le de olsa sürükleme değil tıklama: oynatma konumunu taşı
+    // kesim alanında sürükleme değil tıklama: kesim yok, oynatma konumunu taşı
     el("oynatici").currentTime = s.baslangic / 1000;
     return;
   }
