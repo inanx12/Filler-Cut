@@ -1,7 +1,7 @@
 # Filler-Cut — Yapılacaklar
 
-> Son gözden geçirme: 2026-11-04  
-> Taban sürüm: **v1.4.1**  
+> Son gözden geçirme: 2026-11-06  
+> Taban sürüm: **v1.4.2**  
 > Bu dosya ürün ve mühendislik backlog'unu tutar. Bilinen davranış sınırları
 > `KNOWN_ISSUES.md`'de, tamamlanan sürüm ayrıntıları `CHANGELOG.md`'de kalır;
 > buraya taşınmaları o kayıtların yerine geçmez.
@@ -24,6 +24,8 @@ kusur bulunursa ayrı hata kaydı açılmalı:
 
 - Dalga formlu review, kesim listesi ve kesim nedenleri.
 - Atlamalı önizleme; kesimi geri alma; sınır sürükleme ve sessizliğe yaslama.
+- Cetvelde tıkla/sürükle ile gezinme (scrub); dalga formunda tuşsuz sürükleyerek
+  elle kesim (v1.4.2).
 - Elle kesim ekleme, blade/Delete, Ctrl+Z / Ctrl+Shift+Z ve otomatik plana dön.
 - Gezinme/düzenleme kısayolları ve yeniden tuş atama.
 - Altı aşamalı ilerleme ve aşama süreleri.

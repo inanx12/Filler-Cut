@@ -172,11 +172,17 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 "Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
 kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
-## Mevcut Durum (2026-11-05)
+## Mevcut Durum (2026-11-06)
+
+**v1.4.2 SÜRÜM KESİLDİ (2026-11-06).** PR #6 merge edildi (`bd75ee8`);
+İnan kurulu exe'de elle doğrulamayı YEŞİL verdi, TODO maddesi kapandı. Bump:
+`pyproject.toml` 1.4.2, CHANGELOG `## [1.4.2] — 2026-11-06`. WebView2 stub'ı
+Microsoft tarafından 1.3.315.17'ye tazelendi (beşinci rotasyon); imza elle
+doğrulanıp `packaging/webview2.json` güncellendi. İmza tabanlı doğrulama
+TODO maddesi AÇIK kalır.
 
 **v1.4.2 P0 — Shift+sürükle KALDIRILDI; gezinme ve kesim alanları fiziksel
-olarak ayrı (2026-11-05). KOD + OTOMATİK TESTLER TAMAM, WINDOWS ELLE
-DOĞRULAMASI BEKLİYOR — TODO maddesi bu yüzden AÇIK.** v1.4.1'in Shift
+olarak ayrı (2026-11-05).** v1.4.1'in Shift
 çözümü kullanıcı testinde kabul edilmedi. Yeni sözleşme: **cetvel**
 (`#cetvel`, üst şerit) = gezinme — basış seek, sürükleme scrub; **dalga
 formu boş alanı** (`#kesim-katmani`) = kesim — `SURUKLEME_ESIK_PX` (5) altı

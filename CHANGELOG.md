@@ -7,7 +7,9 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
 > v0.3.0) kapsamı geriye dönük yazılmamıştır — o dönemin kaydı `AGENTS.md`
 > içindeki modül/commit tabloları ve annotated git tag mesajlarıdır.
 
-## Yayımlanmamış — 1.4.2 hedefi
+## [1.4.2] — 2026-11-06
+
+**Gezinme cetvelde, kesim dalga formunda**
 
 ### Değişti
 
@@ -24,6 +26,10 @@ sürümleme [Semantic Versioning](https://semver.org/lang/tr/) izler.
   - Kesim blokları, kenar tutamaçları, mıknatıs, geri al / yinele ve A-B
     döngüsü değişmedi. Shift artık zaman çizelgesinde hiçbir şeyi
     değiştirmez. Çizelgenin altındaki ipucu ve README'ler güncellendi.
+- **Kurucuya gömülen WebView2 bootstrapper yenilendi.** Microsoft stub'ı
+  1.3.315.17'ye tazeledi; yeni dosyanın Microsoft Authenticode imzası
+  doğrulandı ve kayıt (`packaging/webview2.json`) güncellendi. Uygulama
+  davranışı değişmedi.
 
 ## [1.4.1] — 2026-11-03
 
@@ -843,6 +849,7 @@ sınırlar: `experiments/pywebview_spike/README.md`.
   doğrudan tarayıcı moduna düşer (dağıtım hedefi Windows).
 - Pencere ikonu bu fazın kapsamında değildir (PyInstaller/Inno fazı).
 
+[1.4.2]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.4.2
 [1.4.1]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.4.1
 [1.4.0]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.4.0
 [1.3.2]: https://github.com/inanx12/Filler-Cut/releases/tag/v1.3.2
