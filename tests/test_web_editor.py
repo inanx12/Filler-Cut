@@ -771,3 +771,52 @@ class TestCizelgeKatmanlari:
             bas = css.index(secici)
             kural = css[bas : css.index("}", bas)]
             assert f"z-index: var({degisken})" in kural, secici
+
+
+class TestAlanlarFizikselAyri:
+    """v1.4.2 — gezinme (cetvel) ve kesim (dalga formu) alanları ayrı; Shift yok.
+
+    v1.4.1'in Shift+sürükle çözümü kullanıcı testinde kabul edilmedi. Eski
+    ve yeni etkileşim BİRLİKTE bırakılmaz: kancada değiştirici tuş dalı
+    kalmamalı. Davranışın kendisi gerçek fare olaylarıyla
+    `tests/test_web_surukleme.py`de kilitli; bu sınıf ucuz statik ağdır.
+    """
+
+    def _pointerdown(self) -> str:
+        js = _oku("app.js")
+        bas = js.index('el("tl-track").addEventListener("pointerdown"')
+        return js[bas : js.index("\n});", bas)]
+
+    def test_pointerdown_degistirici_tusa_bakmaz(self) -> None:
+        govde = self._pointerdown()
+        for tus in ("shiftKey", "altKey", "ctrlKey", "metaKey"):
+            assert tus not in govde, f"zaman çizelgesi kancası {tus} okuyor"
+
+    def test_cetvel_gezinme_dalina_gider(self) -> None:
+        govde = self._pointerdown()
+        assert 'closest("#cetvel")' in govde
+        assert 'tip: "gezin"' in govde
+        assert 'tip: "yeni"' in govde
+
+    def test_cetvel_olay_alir(self) -> None:
+        css = _oku("style.css")
+        bas = css.index(".cetvel {")
+        kural = css[bas : css.index("}", bas)]
+        assert "pointer-events: none" not in kural
+        assert "cursor: pointer" in kural
+        assert "height: var(--tl-cetvel-yukseklik)" in kural
+
+    def test_alt_katmanlar_cetvel_yuksekliginden_baslar(self) -> None:
+        """Tek kaynak: cetvel yüksekliği değişirse katmanlar birlikte kayar."""
+        css = _oku("style.css")
+        for secici in (".dalga {", ".dongu-katmani {", ".kesim-katmani {", ".playhead {"):
+            bas = css.index(secici)
+            kural = css[bas : css.index("}", bas)]
+            assert "top: var(--tl-cetvel-yukseklik)" in kural, secici
+
+    def test_ipucu_shift_demez(self) -> None:
+        html = _oku("index.html")
+        bas = html.index('class="timeline-ipucu"')
+        ipucu = html[bas : html.index("</div>", bas)]
+        assert "Shift" not in ipucu
+        assert "cetvel" in ipucu

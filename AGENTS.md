@@ -157,8 +157,10 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
     hareket birden): **(a)** bir kesimin SOL ve SAĞ kenarından sürükleyip
     kapsamı değiştir, **(b)** mıknatıs AÇIK ve KAPALI iken tekrarla —
     açıkken sessizlik kenarına yapışmalı, kapalıyken serbest kalmalı,
-    **(c)** boş alanda sürükleyerek yeni kesim ekle ve var olan bir kesime
-    DEĞDİR (birleşmeli). Neden ayrı bir madde: v1.3.0 Dalga A'da kenar
+    **(c)** dalga formunun boş alanında (tuşsuz) sürükleyerek yeni kesim
+    ekle ve var olan bir kesime DEĞDİR (birleşmeli), **(d)** üstteki
+    cetvelde tıkla/sürükle → yalnız gezinir, kesim YOK; dalga formunda düz
+    tıklama → yalnız seek (v1.4.2). Neden ayrı bir madde: v1.3.0 Dalga A'da kenar
     sürükleme sessizce öldü ve 75 statik kilidin hiçbiri göremedi — kusur
     JS'te değil **CSS yığın sırasındaydı** (wavesurfer'ın gölge ağacındaki
     `z-index: 2` etkileşim katmanını örtüyordu). Otomatik kilit artık var
@@ -170,7 +172,43 @@ Sıra önemlidir; her madde **bir öncekini varsayar**. Hiçbiri "muhtemelen
 "Testler yeşildi" bir release doğrulaması DEĞİLDİR — KI-11'den KI-16'ya
 kadar altı kusurun **hiçbiri** yeşil bir test suitinde görünmedi.
 
-## Mevcut Durum (2026-11-02)
+## Mevcut Durum (2026-11-05)
+
+**v1.4.2 P0 — Shift+sürükle KALDIRILDI; gezinme ve kesim alanları fiziksel
+olarak ayrı (2026-11-05). KOD + OTOMATİK TESTLER TAMAM, WINDOWS ELLE
+DOĞRULAMASI BEKLİYOR — TODO maddesi bu yüzden AÇIK.** v1.4.1'in Shift
+çözümü kullanıcı testinde kabul edilmedi. Yeni sözleşme: **cetvel**
+(`#cetvel`, üst şerit) = gezinme — basış seek, sürükleme scrub; **dalga
+formu boş alanı** (`#kesim-katmani`) = kesim — `SURUKLEME_ESIK_PX` (5) altı
+hareket tıklamadır (yalnız seek), üstü yeni kesim. Alan kararı BASIŞTA
+verilir (cetvelden başlayıp dalgaya inen sürükleme gezinmede kalır).
+Değiştirici tuş YOK: `pointerdown`da `shiftKey` dalı silindi, statik kilit
+dört değiştiriciyi de yasaklar (`TestAlanlarFizikselAyri`). CSS: cetvel
+`pointer-events: none` → olay alır, `cursor: pointer`, 18 → 24 px; yükseklik
+tek kaynaktan (`--tl-cetvel-yukseklik`) ve dalga/A-B bandı/kesim
+katmanı/playhead `top`u ondan okur — cetvel kesim katmanıyla ÜST ÜSTE
+BİNMEZ, blok/tutamaç isabet alanı değişmedi; dört katmanlı z sırası aynen.
+Scrub sürerken `.tl-track.gezinme` imleci pointer tutar (capture track'te).
+Sürüm bump YOK (CHANGELOG `## Yayımlanmamış — 1.4.2 hedefi`), push/tag/
+release YOK. Sunucu/plan/render/dışa aktarım koduna dokunulmadı.
+**TEST DÖKÜMÜ.** Net +18 test (`test_web_surukleme.py`: `TestGezinmeKesimUretmez`
+yeniden yazıldı, `TestUzunVideo` 20 dk ölçekte, `TestAlanAyrimi`, pointercancel;
+`test_web_editor.py::TestAlanlarFizikselAyri` statik). Shift kullanan yardımcılar
+(`_bos_alanda_ciz`, boş alan testi) tuşsuza çevrildi. Red-first: eski koda karşı
+**15 kırmızı**. Tam koşu (Windows, 2026-11-05): **2839 passed / 7 skipped / 6
+failed** — 6'sı da ortam: `test_paketleme::test_version_surumu_basar` (bayat
+`dist/fillercut.exe` 1.4.0), `test_parite` ×2 + `test_wcpp::TestGercekModel` ×3
+(whisper-cli bu makinede `0xC0000409` ile çöküyor); eski kodda da aynı 6'sı
+aynen düşüyor. ruff + mypy temiz. **Tuzak:** repo Masaüstü'ne taşındıktan
+sonra venv'in editable bağı eski `C:\Users\inane\Desktop\Filler-Cut\src`
+yolunu gösteriyordu (`fillercut` import edilemiyordu) — `pip install -e .
+--no-deps` ile yenilendi.
+**İNAN'IN KURULU EXE'DE ELLE DOĞRULAYACAKLARI** (touchpad + fare, %100 /
+%125 / %150 ölçek): (1) 15+ dk videoda zoom'suz dalga formuna tıkla →
+kesim yok, başlık oraya gider; (2) cetvelde sürükle → yalnız gezinir;
+(3) dalga formunda tuşsuz sürükle → kesim eklenir, Ctrl+Z geri alır,
+Ctrl+Shift+Z yineler; (4) kenar sürükleme + mıknatıs açık/kapalı + I/O/X
+A-B döngüsü eskisi gibi; (5) imleç cetvelde el, dalga formunda crosshair.
 
 **v1.4.1 SÜRÜM KESİLDİ (2026-11-03) — zaman çizelgesi tıklama düzeltmesi.**
 PR #4 merge edildi (`62258db`); İnan Windows'ta tam suite (2821 passed) +

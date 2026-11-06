@@ -319,7 +319,9 @@
     </div>
     <div id="tl-viewport" class="tl-viewport">
       <div id="tl-track" class="tl-track">
-        <div id="cetvel" class="cetvel"></div>
+        <!-- Cetvel = GEZİNME alanı (v1.4.2): tıkla / sürükle → seek + scrub.
+             Altındaki dalga formu KESİM alanıdır. -->
+        <div id="cetvel" class="cetvel" title="Tıkla ya da sürükle: videoda gezin"></div>
         <!-- Dalga formu: wavesurfer.js (vendor, CDN yok) buraya çizer. -->
         <div id="dalga" class="dalga"></div>
         <!-- A-B aralık önizlemesi (I/O/X): SÜS katmanı — dalga katmanını
@@ -335,9 +337,9 @@
       </div>
     </div>
     <div class="timeline-ipucu">
-      Kesim kenarından sürükleyerek sınırı taşı · boş alanda sürükleyerek gezin
-      · Shift+sürükle: yeni kesim ekle
-      · mıknatıs kapalıyken sürükleme serbest
+      Üst cetvelde tıkla ya da sürükle: gezin · dalga formunda sürükle: yeni kesim
+      ekle (tıklama yalnız oynatma başlığını taşır) · kesim kenarından sürükleyerek
+      sınırı taşı · mıknatıs kapalıyken sürükleme serbest
     </div>
   </section>
 </main>
